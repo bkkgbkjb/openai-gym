@@ -75,8 +75,8 @@ class Agent(Generic[O, S, A]):
 
         return (obs, stop, None)
 
-    def render(self):
-        self.env.render()
+    def render(self, mode: str):
+        self.env.render(mode)
 
     def close(self):
         self.env.close()
