@@ -1,3 +1,4 @@
+from abc import abstractmethod
 import numpy as np
 import gym
 from typing import (
@@ -25,6 +26,12 @@ Step = Tuple[Observation, Optional[Action], Optional[Reward]]
 Episode = List[Step]
 
 # Episode = List
+
+
+class PreprocessInterface(Protocol):
+    @abstractmethod
+    def transform(o: Observation) -> State:
+        raise NotImplementedError()
 
 
 class Agent(Generic[Observation, Action]):
