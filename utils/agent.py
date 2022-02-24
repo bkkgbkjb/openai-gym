@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from optparse import Option
 import numpy as np
 import gym
 from typing import (
@@ -14,62 +15,61 @@ from typing import (
     Union,
     TypeVar,
 )
+from utils.algorithm import AlgorithmInterface
+from utils.preprocess import PreprocessInterface
 
 
-Action = TypeVar("Action")
-State = TypeVar("State")
-Observation = TypeVar("Observation")
+A = TypeVar("A")
+S = TypeVar("S")
+O = TypeVar("O")
 
-StateAction = Tuple[State, Action]
+
 Reward = float
-Step = Tuple[Observation, Optional[Action], Optional[Reward]]
-Episode = List[Step]
-
-# Episode = List
 
 
-class PreprocessInterface(Protocol):
-    @abstractmethod
-    def transform(o: Observation) -> State:
-        raise NotImplementedError()
+class Agent(Generic[O, S, A]):
 
-
-class Agent(Generic[Observation, Action]):
     def __init__(
         self,
         env: gym.Env,
-        algm: AlgorithmInterface,
+        algm: AlgorithmInterface[S, A],
+        preprocess: PreprocessInterface[O, A, S]
     ):
         self.env = env
         self.algm = algm
+        self.preprocess = preprocess
         self.reset()
 
     def reset(self):
-        self.cur_obs: Observation = self.env.reset()
-        self.ready_act: Optional[Action] = None
+        self.cur_obs: O = self.env.reset()
+        self.ready_act: Optional[A] = None
         self.end = False
-        self.episode: Episode = []
+        self.episode: List[Tuple[O, Optional[A], Optional[Reward]]] = []
 
-    def step(self) -> Tuple[Observation, bool, Optional[Episode]]:
+    def step(self) -> Tuple[O, bool, Optional[List[Tuple[O, Optional[A], Optional[Reward]]]]]:
         assert not self.end, "cannot step on a ended agent"
 
-        act = self.ready_act or self.algm.take_action(self.cur_obs, self.omega)
+        act = self.ready_act or self.algm.take_action(
+            self.preprocess.transform_one(self.episode))
         (obs, rwd, stop, _) = self.env.step(act)
-        obs = cast(Observation, obs)
+        obs = cast(O, obs)
 
         self.episode.append((self.cur_obs, act, rwd))
 
         self.cur_obs = obs
 
-        self.ready_act = self.algm.take_action(self.cur_obs)
+        self.ready_act = self.algm.take_action(
+            self.preprocess.transform_one(self.episode))
 
-        self.algm.after_step((self.cur_obs, self.ready_act), self.episode)
+        self.algm.after_step(
+            (self.preprocess.transform_one(self.episode), self.ready_act), self.preprocess.transform_many(self.episode))
 
         if stop:
             # self.episodes.append(self.episode)
             self.end = True
             self.episode.append((self.cur_obs, None, None))
-            self.algm.on_termination(self.episode)
+            self.algm.on_termination(
+                self.preprocess.transform_many(self.episode))
             # self.episode = []
             return (obs, stop, self.episode)
 
@@ -80,7 +80,4 @@ class Agent(Generic[Observation, Action]):
 
     def close(self):
         self.env.close()
-        self.clear()
-
-    def predict(self, s: Observation) -> float:
-        return np.max([self.algm.predict((s, a)) for a in self.algm.allowed_actions(s)])
+        self.reset()
