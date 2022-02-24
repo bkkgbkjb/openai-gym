@@ -35,18 +35,13 @@ class Agent(Generic[Observation, Action]):
     ):
         self.env = env
         self.algm = algm
-        self.clear()
+        self.reset()
 
     def reset(self):
         self.cur_obs: Observation = self.env.reset()
         self.ready_act: Optional[Action] = None
         self.end = False
         self.episode: Episode = []
-
-    def clear(self):
-        self.reset()
-
-        self.omega = np.asarray([0.0 for _ in range(self.algm.n_of_omega)])
 
     def step(self) -> Tuple[Observation, bool, Optional[Episode]]:
         assert not self.end, "cannot step on a ended agent"
@@ -59,15 +54,15 @@ class Agent(Generic[Observation, Action]):
 
         self.cur_obs = obs
 
-        self.ready_act = self.algm.take_action(self.cur_obs, self.omega)
+        self.ready_act = self.algm.take_action(self.cur_obs)
 
-        self.algm.after_step((self.cur_obs, self.ready_act), self.episode, self.omega)
+        self.algm.after_step((self.cur_obs, self.ready_act), self.episode)
 
         if stop:
             # self.episodes.append(self.episode)
             self.end = True
             self.episode.append((self.cur_obs, None, None))
-            self.algm.on_termination(self.episode, self.omega)
+            self.algm.on_termination(self.episode)
             # self.episode = []
             return (obs, stop, self.episode)
 
@@ -81,9 +76,4 @@ class Agent(Generic[Observation, Action]):
         self.clear()
 
     def predict(self, s: Observation) -> float:
-        return np.max(
-            [
-                self.algm.predict((s, a), self.omega)
-                for a in self.algm.allowed_actions(s)
-            ]
-        )
+        return np.max([self.algm.predict((s, a)) for a in self.algm.allowed_actions(s)])
