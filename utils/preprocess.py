@@ -1,18 +1,17 @@
 from abc import abstractmethod
 from typing import Optional, Protocol, TypeVar, List, Tuple
-
+from utils.common import Episode
 
 S = TypeVar('S')
 O = TypeVar('O')
 A = TypeVar('A')
-R = float
 
 
 class PreprocessInterface(Protocol[O, A, S]):
     @abstractmethod
-    def transform_one(self, h: List[Tuple[O, Optional[A], Optional[R]]]) -> S:
+    def transform_one(self, h: Episode[O, A]) -> S:
         raise NotImplementedError()
 
     @abstractmethod
-    def transform_many(self, h: List[Tuple[O, Optional[A], Optional[R]]]) -> List[Tuple[S, Optional[A], Optional[R]]]:
+    def transform_many(self, h: Episode[O, A]) -> Episode[S, A]:
         raise NotImplementedError()

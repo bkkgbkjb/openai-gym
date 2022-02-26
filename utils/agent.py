@@ -17,14 +17,12 @@ from typing import (
 )
 from utils.algorithm import AlgorithmInterface
 from utils.preprocess import PreprocessInterface
+from utils.common import Step, Episode
 
 
 A = TypeVar("A")
 S = TypeVar("S")
 O = TypeVar("O")
-
-
-Reward = float
 
 
 class Agent(Generic[O, S, A]):
@@ -44,12 +42,12 @@ class Agent(Generic[O, S, A]):
         # self.cur_obs: O = self.env.reset()
         self.ready_act: Optional[A] = None
         self.end = False
-        self.episode: List[Tuple[O, Optional[A], Optional[Reward]]] = []
+        self.episode: Episode[O, A] = []
 
         o: O = self.env.reset()
         self.episode.append((o, None, None))
 
-    def step(self) -> Tuple[O, bool, Optional[List[Tuple[O, Optional[A], Optional[Reward]]]]]:
+    def step(self) -> Tuple[O, bool, Optional[Episode[O, A]]]:
         assert not self.end, "cannot step on a ended agent"
 
         act = self.ready_act or self.algm.take_action(
