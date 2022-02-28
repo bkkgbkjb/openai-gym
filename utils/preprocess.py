@@ -9,9 +9,13 @@ A = TypeVar('A')
 
 class PreprocessInterface(Protocol[O, A, S]):
     @abstractmethod
-    def transform_one(self, h: Episode[O, A]) -> S:
+    def get_current_state(self, h: Episode[O, A]) -> S:
         raise NotImplementedError()
 
     @abstractmethod
-    def transform_many(self, h: Episode[O, A]) -> Episode[S, A]:
+    def transform_history(self, h: Episode[O, A]) -> Episode[S, A]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def reset(self):
         raise NotImplementedError()

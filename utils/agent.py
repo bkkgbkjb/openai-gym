@@ -46,12 +46,13 @@ class Agent(Generic[O, S, A]):
 
         o: O = self.env.reset()
         self.episode.append((o, None, None))
+        self.preprocess.reset()
 
     def step(self) -> Tuple[O, bool, Optional[Episode[O, A]]]:
         assert not self.end, "cannot step on a ended agent"
 
         act = self.ready_act or self.algm.take_action(
-            self.preprocess.transform_one(self.episode))
+            self.preprocess.get_current_state(self.episode))
         (obs, rwd, stop, _) = self.env.step(act)
         obs = cast(O, obs)
 
@@ -65,17 +66,17 @@ class Agent(Generic[O, S, A]):
         self.episode.append((obs, None, None))
 
         self.ready_act = self.algm.take_action(
-            self.preprocess.transform_one(self.episode))
+            self.preprocess.get_current_state(self.episode))
 
         self.algm.after_step(
-            (self.preprocess.transform_one(self.episode), self.ready_act), self.preprocess.transform_many(self.episode))
+            (self.preprocess.get_current_state(self.episode), self.ready_act), self.preprocess.transform_history(self.episode[:-1]))
 
         if stop:
             # self.episodes.append(self.episode)
             self.end = True
             # self.episode.append((self.cur_obs, None, None))
             self.algm.on_termination(
-                self.preprocess.transform_many(self.episode))
+                self.preprocess.transform_history(self.episode))
             # self.episode = []
             return (obs, stop, self.episode)
 
