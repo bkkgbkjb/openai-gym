@@ -147,8 +147,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
             ]
         )
         assert target.shape == (32,)
-        # x = torch.tensor([self.network(s)[a] for (s, a, r, _, _, _) in batch])
-        x = self.network(torch.cat([s for (s, _, _, _, _, _) in batch]))[:, 0]
+        x = torch.cat([self.network(s)[:, a] for (s, a, r, _, _, _) in batch])
+        # x = self.network(torch.cat([s for (s, _, _, _, _, _) in batch]))[:, 0]
         loss = self.loss_func(x, target)
         self.optimizer.zero_grad()
         loss.backward()
