@@ -142,7 +142,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         # batch = torch.tensor(_b)
         target = torch.tensor(
             [
-                r if an is None else r + self.gamma * torch.max(self.network(sn))
+                r if an is None else r + self.gamma *
+                torch.max(self.network(sn))
                 for (s, a, r, sn, an, _) in batch
             ]
         )
@@ -190,7 +191,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 class Preprocess(PreprocessInterface[Observation, Action, State]):
     def __init__(self):
         self.trfm: Callable[[Observation], State] = transforms.Compose(
-            [transforms.ToTensor(), transforms.Grayscale(), transforms.Resize((84, 84))]
+            [transforms.ToTensor(), transforms.Grayscale(),
+             transforms.Resize((84, 84))]
         )
         self.history: Episode[State, Action] = []
 
@@ -202,11 +204,12 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
 
         last_4_arr = self.stack_4(h, -1)
 
-        rlt = torch.stack([self.trfm(i) for i in last_4_arr]).squeeze(1).unsqueeze(0)
+        rlt = torch.stack([self.trfm(i)
+                          for i in last_4_arr]).squeeze(1).unsqueeze(0)
         assert rlt.shape == (1, 4, 84, 84)
         return rlt
 
-    def stack_4(self, h: Episode[Observation, Action], idx: int) -> npt.NDArray:
+    def stack_4(self, h: Episode[Observation, Action], idx: int) -> npt.NDArray[np.uint8]:
 
         assert idx < 0
         last_4_index = [-12 + idx, -8 + idx, -4 + idx, idx]
@@ -232,7 +235,8 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
         (o, a, r) = h[-1]
         last_4_arr = self.stack_4(h, -1)
         # s = torch.stack
-        s = torch.stack([self.trfm(i) for i in last_4_arr]).squeeze(1).unsqueeze(0)
+        s = torch.stack([self.trfm(i)
+                        for i in last_4_arr]).squeeze(1).unsqueeze(0)
         assert s.shape == (1, 4, 84, 84)
         self.history.append((s, a, r))
 
@@ -281,7 +285,8 @@ for _ in tqdm(range(EVALUATION_TIMES)):
         # if end:
         #     rwds.append(np.sum([r if r is not None else 0 for (_,
         #                                                        _, r) in cast(Episode, episode)]))
-    rwds.append(np.sum([r if r is not None else 0 for (_, _, r) in agent.episode]))
+    rwds.append(
+        np.sum([r if r is not None else 0 for (_, _, r) in agent.episode]))
 
 
 # %%
