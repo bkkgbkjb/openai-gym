@@ -26,16 +26,16 @@ O = TypeVar("O")
 
 
 class Agent(Generic[O, S, A]):
-
     def __init__(
         self,
         env: gym.Env,
         algm: AlgorithmInterface[S, A],
-        preprocess: PreprocessInterface[O, A, S]
+        preprocess: PreprocessInterface[O, A, S],
     ):
         self.env = env
         self.algm = algm
         self.preprocess = preprocess
+        self.improv = True
         self.reset()
 
     def reset(self):
@@ -48,11 +48,15 @@ class Agent(Generic[O, S, A]):
         self.episode.append((o, None, None))
         self.preprocess.reset()
 
+    def toggleImprove(self, newImprov: bool):
+        self.improv = newImprov
+
     def step(self) -> Tuple[O, bool, Optional[Episode[O, A]]]:
         assert not self.end, "cannot step on a ended agent"
 
         act = self.ready_act or self.algm.take_action(
-            self.preprocess.get_current_state(self.episode))
+            self.preprocess.get_current_state(self.episode)
+        )
         (obs, rwd, stop, _) = self.env.step(act)
         obs = cast(O, obs)
 
@@ -66,17 +70,21 @@ class Agent(Generic[O, S, A]):
         self.episode.append((obs, None, None))
 
         self.ready_act = self.algm.take_action(
-            self.preprocess.get_current_state(self.episode))
+            self.preprocess.get_current_state(self.episode)
+        )
 
-        self.algm.after_step(
-            (self.preprocess.get_current_state(self.episode), self.ready_act), self.preprocess.transform_history(self.episode[:-1]))
+        self.improv and self.algm.after_step(
+            (self.preprocess.get_current_state(self.episode), self.ready_act),
+            self.preprocess.transform_history(self.episode[:-1]),
+        )
 
         if stop:
             # self.episodes.append(self.episode)
             self.end = True
             # self.episode.append((self.cur_obs, None, None))
-            self.algm.on_termination(
-                self.preprocess.transform_history(self.episode))
+            self.improv and self.algm.on_termination(
+                self.preprocess.transform_history(self.episode)
+            )
             # self.episode = []
             return (obs, stop, self.episode)
 
