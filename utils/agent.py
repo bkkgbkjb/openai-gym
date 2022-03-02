@@ -66,29 +66,26 @@ class Agent(Generic[O, S, A]):
 
         self.episode[-1] = (self.episode[-1][0], act, rwd)
 
-
         self.episode.append((obs, None, None))
 
-        self.ready_act = self.algm.take_action(
-            self.preprocess.get_current_state(self.episode)
-        )
+        if not stop:
+            self.ready_act = self.algm.take_action(
+                self.preprocess.get_current_state(self.episode)
+            )
 
         self.improv and self.algm.after_step(
             (self.preprocess.get_current_state(self.episode), self.ready_act),
             self.preprocess.transform_history(self.episode[:-1]),
         )
 
-        if stop:
-            # self.episodes.append(self.episode)
-            self.end = True
-            # self.episode.append((self.cur_obs, None, None))
-            self.improv and self.algm.on_termination(
-                self.preprocess.transform_history(self.episode)
-            )
-            # self.episode = []
-            return (obs, stop, self.episode)
+        if not stop:
+            return (obs, stop, None)
 
-        return (obs, stop, None)
+        self.end = True
+        self.improv and self.algm.on_termination(
+            self.preprocess.transform_history(self.episode)
+        )
+        return (obs, stop, self.episode)
 
     def render(self, mode: str):
         self.env.render(mode)
