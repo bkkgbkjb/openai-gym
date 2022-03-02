@@ -1,7 +1,7 @@
 # %%
-import gym
 import numpy as np
 import numpy.typing as npt
+import gym
 
 from typing import List, Tuple, Literal, Any, Optional, cast, Callable
 import plotly.graph_objects as go
@@ -237,10 +237,11 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
             [transforms.ToTensor(), transforms.Grayscale(),
              transforms.Resize((84, 84))]
         )
-        self.history: Episode[State, Action] = []
+        self.reset()
+        # self.history: Episode[State, Action] = []
 
     def reset(self):
-        self.history = []
+        self.history: Episode[State, Action] = []
 
     def get_current_state(self, h: Episode[Observation, Action]) -> State:
         assert len(h) > 0
@@ -306,9 +307,6 @@ with tqdm(total=TRAINING_TIMES) as pbar:
         while not end and frames < TRAINING_TIMES:
             (o, end, episode) = agent.step()
 
-            # if frames > TRAINING_TIMES / 5 * 2:
-            #     agent.render('human')
-            assert len(agent.episode)  < 100_00
 
             frames += 1
             pbar.update(1)
