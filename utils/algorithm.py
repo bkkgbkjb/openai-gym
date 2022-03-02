@@ -27,3 +27,7 @@ class AlgorithmInterface(Protocol[S, A]):
     @abstractmethod
     def on_termination(self, episode: Episode[S, A]):
         raise NotImplementedError()
+    
+    @abstractmethod
+    def reset(self):
+        raise NotImplementedError()
