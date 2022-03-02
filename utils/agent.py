@@ -38,17 +38,16 @@ class Agent(Generic[O, S, A]):
         self.improv = True
         self.reset()
 
-    def reset(self, comps: List[Literal["base", "preprocess", "algorithm"]] = ["base"]):
-        # self.cur_obs: O = self.env.reset()
+    def reset(self, comps: Union[List[Literal["preprocess", "algorithm"]], Literal['all']] = []):
         self.ready_act: Optional[A] = None
         self.end = False
         self.episode: Episode[O, A] = []
 
         o: O = self.env.reset()
         self.episode.append((o, None, None))
-        if 'preprocess' in comps:
+        if comps == 'all' or 'preprocess' in comps:
             self.preprocess.reset()
-        if 'algorithm' in comps:
+        if comps == 'all' or 'algorithm' in comps:
             self.algm.reset()
 
     def toggleImprove(self, newImprov: bool):
@@ -63,12 +62,10 @@ class Agent(Generic[O, S, A]):
         (obs, rwd, stop, _) = self.env.step(act)
         obs = cast(O, obs)
 
-        # self.episode.append((self.cur_obs, act, rwd))
         assert len(self.episode) >= 1
 
         self.episode[-1] = (self.episode[-1][0], act, rwd)
 
-        # self.cur_obs = obs
 
         self.episode.append((obs, None, None))
 

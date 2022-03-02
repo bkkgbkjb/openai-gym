@@ -13,4 +13,4 @@ Episode = List[Step[OE, AE]]
 
 TS = TypeVar('TS')
 TA = TypeVar('TA')
-TransitionGeneric = Tuple[TS, TA, float, TS, Optional[TA], Optional[float]]
+TransitionGeneric = Tuple[TS, TA, float, TS, Optional[TA]]
