@@ -38,16 +38,20 @@ class Agent(Generic[O, S, A]):
         self.improv = True
         self.reset()
 
-    def reset(self, comps: Union[List[Literal["preprocess", "algorithm"]], Literal['all']] = []):
+    def reset(
+        self,
+        comps: Union[List[Literal["preprocess", "algorithm"]], Literal["all"]] = [],
+    ):
         self.ready_act: Optional[A] = None
         self.end = False
         self.episode: Episode[O, A] = []
 
         o: O = self.env.reset()
         self.episode.append((o, None, None))
-        if comps == 'all' or 'preprocess' in comps:
+
+        if comps == "all" or "preprocess" in comps:
             self.preprocess.reset()
-        if comps == 'all' or 'algorithm' in comps:
+        if comps == "all" or "algorithm" in comps:
             self.algm.reset()
 
     def toggleImprove(self, newImprov: bool):
@@ -59,19 +63,18 @@ class Agent(Generic[O, S, A]):
         act = self.ready_act or self.algm.take_action(
             self.preprocess.get_current_state(self.episode)
         )
+
         (obs, rwd, stop, _) = self.env.step(act)
-        obs = cast(O, obs)
-
-        assert len(self.episode) >= 1
-
         self.episode[-1] = (self.episode[-1][0], act, rwd)
 
+        obs = cast(O, obs)
         self.episode.append((obs, None, None))
 
-        if not stop:
-            self.ready_act = self.algm.take_action(
-                self.preprocess.get_current_state(self.episode)
-            )
+        self.ready_act = (
+            None
+            if stop
+            else self.algm.take_action(self.preprocess.get_current_state(self.episode))
+        )
 
         self.improv and self.algm.after_step(
             (self.preprocess.get_current_state(self.episode), self.ready_act),
