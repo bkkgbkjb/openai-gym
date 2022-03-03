@@ -51,6 +51,8 @@ Reward = int
 Transition = TransitionGeneric[State, Action]
 
 # %%
+
+
 class DQN(nn.Module):
     def __init__(self):
         super(DQN, self).__init__()
@@ -111,6 +113,8 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
         pass
 
 # %%
+
+
 class NNAlgorithm(AlgorithmInterface[State, Action]):
     def __init__(self, nn: DQN, training_times: int = 50_00_0000, gamma: float = 0.99):
         self.network = nn
@@ -132,7 +136,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         self.update_target = 100
 
         self.memory_replay: deque[Transition] = deque(
-            maxlen=math.ceil(100_0000 * self.shrink)
+            maxlen=math.ceil(100_0000 / 5 * self.shrink)
         )
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()
@@ -307,10 +311,8 @@ with tqdm(total=TRAINING_TIMES) as pbar:
         while not end and frames < TRAINING_TIMES:
             (o, end, episode) = agent.step()
 
-
             frames += 1
             pbar.update(1)
-
 
         training_rwds.append(
             np.sum([r if r is not None else 0 for (_, _, r) in agent.episode])
@@ -325,12 +327,11 @@ np.save("./training.arr", np.asarray(training_rwds))
 fig = go.Figure()
 fig.add_trace(
     go.Scatter(x=[i + 1 for i in range(len(training_rwds))],
-               y = [r for r in training_rwds])
+               y=[r for r in training_rwds])
 )
 # fig.update_yaxes(type="log")
 # fig.update_layout(yaxis_type="log")
 fig.show()
-
 
 
 # %%
@@ -363,12 +364,8 @@ np.save("./eval.arr", np.asarray(rwds))
 fig = go.Figure()
 fig.add_trace(
     go.Scatter(x=[i + 1 for i in range(len(rwds))],
-               y = [r for r in rwds])
+               y=[r for r in rwds])
 )
 # fig.update_yaxes(type="log")
 # fig.update_layout(yaxis_type="log")
 fig.show()
-
-
-
-
