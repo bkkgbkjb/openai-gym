@@ -23,7 +23,7 @@ class AlgorithmInterface(Protocol[S, A]):
         raise NotImplementedError()
 
     @abstractmethod
-    def after_step(self, sa: Tuple[S, Optional[A]], episode: Episode[S, A]):
+    def after_step(self, sa: Tuple[S, Optional[A]], sar: Tuple[S, A, float]):
         raise NotImplementedError()
 
     @abstractmethod
