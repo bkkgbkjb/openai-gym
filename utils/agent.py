@@ -24,6 +24,7 @@ from utils.common import Step, Episode
 A = TypeVar("A")
 S = TypeVar("S")
 O = TypeVar("O")
+R = float
 
 
 class Agent(Generic[O, S, A]):
@@ -41,15 +42,16 @@ class Agent(Generic[O, S, A]):
 
     def reset(
         self,
-        comps: Union[List[Literal["preprocess", "algorithm"]], Literal["all"]] = [],
+        comps: Union[List[Literal["preprocess", "algorithm"]],
+                     Literal["all"]] = [],
     ):
         self.ready_act: Optional[A] = None
         self.end = False
 
         self.episode_observation: List[O] = []
-        self.episode_action: List[A] = []
-        self.episode_reward: List[float] = []
         self.episode_state: List[S] = []
+        self.episode_action: List[A] = []
+        self.episode_reward: List[R] = []
 
         o: O = self.env.reset()
         self.episode_observation.append(o)
@@ -65,11 +67,11 @@ class Agent(Generic[O, S, A]):
     def toggleImprove(self, newImprov: bool):
         self.improv = newImprov
 
-    def step(self) -> Tuple[O, bool, Optional[Episode[O, A]]]:
+    def step(self) -> Tuple[O, bool]:
         assert not self.end, "cannot step on a ended agent"
 
         act = self.ready_act or self.algm.take_action(
-            self.preprocess.get_current_state(self.episode_observation)
+            self.episode_state[-1]
         )
 
         rwd: float = 0.0
@@ -84,12 +86,10 @@ class Agent(Generic[O, S, A]):
             if stop:
                 break
 
-        # self.episode[-1] = (self.episode[-1][0], act, rwd)
         self.episode_action.append(act)
         self.episode_reward.append(rwd)
 
         obs = cast(O, obs)
-        # self.episode.append((obs, None, None))
         self.episode_observation.append(obs)
         self.episode_state.append(
             self.preprocess.get_current_state(self.episode_observation)
@@ -98,25 +98,21 @@ class Agent(Generic[O, S, A]):
         self.ready_act = (
             None if stop else (self.algm.take_action(self.episode_state[-1]))
         )
+        # self.episode_action.append(self.ready_act)
 
         self.improv and self.algm.after_step(
+            (self.episode_state[-2], self.episode_action[-1],
+             self.episode_reward[-1]),
             (
                 self.episode_state[-1],
                 self.ready_act,
-            ),
-            # self.preprocess.transform_history(self.episode_observation[:-1]),
-            (self.episode_state[-2], self.episode_action[-2], self.episode_reward[-2]),
+            )
         )
 
-        if not stop:
-            return (obs, stop, None)
+        if stop:
+            self.end = True
 
-        self.end = True
-
-        self.improv and self.algm.on_termination(
-            self.preprocess.transform_history(self.episode_observation[:-1])
-        )
-        return (obs, stop, None)
+        return (obs, stop)
 
     def render(self, mode: str):
         self.env.render(mode)
