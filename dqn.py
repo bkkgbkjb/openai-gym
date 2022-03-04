@@ -338,7 +338,7 @@ fig.show()
 EVALUATION_TIMES = 30
 MAX_EPISODE_LENGTH = 18_000
 rwds: List[int] = []
-agent.toggleImprove(False)
+agent.toggleEval(False)
 
 for _ in tqdm(range(EVALUATION_TIMES)):
     agent.reset(['preprocess'])

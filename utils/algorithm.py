@@ -5,7 +5,7 @@ import numpy as np
 from utils.common import Episode
 
 
-S = TypeVar("S", contravariant=True)
+S = TypeVar("S")
 A = TypeVar("A")
 R = float
 
@@ -23,7 +23,11 @@ class AlgorithmInterface(Protocol[S, A]):
         raise NotImplementedError()
 
     @abstractmethod
-    def after_step(self,  sar: Tuple[S, A, R], sa: Tuple[S, Optional[A]]):
+    def after_step(self, sar: Tuple[S, A, R], sa: Tuple[S, Optional[A]]):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def on_termination(self, sar: Tuple[List[S], List[A], List[R]]):
         raise NotImplementedError()
 
     @abstractmethod

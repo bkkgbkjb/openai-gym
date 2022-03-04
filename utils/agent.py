@@ -37,13 +37,12 @@ class Agent(Generic[O, S, A]):
         self.env = env
         self.algm = algm
         self.preprocess = preprocess
-        self.improv = True
+        self.eval = False
         self.reset()
 
     def reset(
         self,
-        comps: Union[List[Literal["preprocess", "algorithm"]],
-                     Literal["all"]] = [],
+        comps: Union[List[Literal["preprocess", "algorithm"]], Literal["all"]] = [],
     ):
         self.ready_act: Optional[A] = None
         self.end = False
@@ -64,15 +63,13 @@ class Agent(Generic[O, S, A]):
         if comps == "all" or "algorithm" in comps:
             self.algm.reset()
 
-    def toggleImprove(self, newImprov: bool):
-        self.improv = newImprov
+    def toggleEval(self, newEval: bool):
+        self.eval = newEval
 
     def step(self) -> Tuple[O, bool]:
         assert not self.end, "cannot step on a ended agent"
 
-        act = self.ready_act or self.algm.take_action(
-            self.episode_state[-1]
-        )
+        act = self.ready_act or self.algm.take_action(self.episode_state[-1])
 
         rwd: float = 0.0
         obs: Optional[O] = None
@@ -98,19 +95,20 @@ class Agent(Generic[O, S, A]):
         self.ready_act = (
             None if stop else (self.algm.take_action(self.episode_state[-1]))
         )
-        # self.episode_action.append(self.ready_act)
 
-        self.improv and self.algm.after_step(
-            (self.episode_state[-2], self.episode_action[-1],
-             self.episode_reward[-1]),
+        self.eval and self.algm.after_step(
+            (self.episode_state[-2], self.episode_action[-1], self.episode_reward[-1]),
             (
                 self.episode_state[-1],
                 self.ready_act,
-            )
+            ),
         )
 
         if stop:
             self.end = True
+            self.eval and self.algm.on_termination(
+                (self.episode_state, self.episode_action, self.episode_reward)
+            )
 
         return (obs, stop)
 
