@@ -96,7 +96,7 @@ class Agent(Generic[O, S, A]):
             None if stop else (self.algm.take_action(self.episode_state[-1]))
         )
 
-        self.eval and self.algm.after_step(
+        self.eval or self.algm.after_step(
             (self.episode_state[-2], self.episode_action[-1], self.episode_reward[-1]),
             (
                 self.episode_state[-1],
@@ -106,7 +106,7 @@ class Agent(Generic[O, S, A]):
 
         if stop:
             self.end = True
-            self.eval and self.algm.on_termination(
+            self.eval or self.algm.on_termination(
                 (self.episode_state, self.episode_action, self.episode_reward)
             )
 
