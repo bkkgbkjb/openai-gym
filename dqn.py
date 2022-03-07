@@ -4,7 +4,6 @@ import numpy.typing as npt
 import gym
 
 from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable
-import plotly.graph_objects as go
 from gym.spaces import Box
 from utils.agent import Agent
 from torchvision import transforms as T
@@ -14,11 +13,8 @@ from utils.preprocess import PreprocessInterface
 import torch
 from gym.wrappers import FrameStack
 from collections import deque
-from torchvision import transforms
 import math
 from torch import nn
-import sys
-from copy import deepcopy
 from utils.common import Step, Episode, TransitionGeneric
 
 
@@ -32,7 +28,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 
 # %%
-env = gym.make("PongNoFrameskip-v4")
+env = gym.make("PongDeterministic-v4")
 env.seed(RANDOM_SEED)
 env.reset()
 TOTAL_ACTIONS = env.action_space.n
@@ -42,6 +38,8 @@ TOTAL_ACTIONS = env.action_space.n
 TOTAL_ACTIONS
 
 # %%
+
+
 class SkipFrame(gym.Wrapper):
     def __init__(self, env: gym.Env, skip: int):
         assert skip >= 0
@@ -74,7 +72,8 @@ class GrayScaleObservation(gym.ObservationWrapper):
 
         self.obs_shape = env.observation_space.shape[:2]
         self.observation_space = Box(
-            low=0, high=255, shape=(1,) + self.obs_shape, dtype=np.uint8)
+            low=0, high=255, shape=(1,) + self.obs_shape, dtype=np.uint8
+        )
 
         self.transform = T.Grayscale()
 
@@ -108,11 +107,10 @@ class ResizeObservation(gym.ObservationWrapper):
         # obs_high = self.observation_space.high
 
         self.observation_space = Box(
-            low=0, high=255, shape=self.obs_shape, dtype=np.uint8)
-
-        self.transforms = T.Compose(
-            [T.Resize(shape)]
+            low=0, high=255, shape=self.obs_shape, dtype=np.uint8
         )
+
+        self.transforms = T.Compose([T.Resize(shape)])
 
     def observation(self, observation):
         observation = self.transforms(observation)
@@ -121,7 +119,7 @@ class ResizeObservation(gym.ObservationWrapper):
 
 
 # %%
-env = SkipFrame(env, skip=4)
+# env = SkipFrame(env, skip=4)
 env = GrayScaleObservation(env)
 env = ResizeObservation(env, 84)
 env = FrameStack(env, num_stack=4)
@@ -142,6 +140,7 @@ Transition = TransitionGeneric[State, Action]
 
 # %%
 
+
 class DQN(nn.Module):
     def __init__(self):
         super(DQN, self).__init__()
@@ -154,6 +153,7 @@ class DQN(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(7 * 7 * 64, 512),
+            nn.ReLU(),
             nn.Linear(512, TOTAL_ACTIONS),
         )
 
@@ -213,29 +213,29 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.policy_network = DQN().to(device)
         self.optimizer = torch.optim.RMSprop(
-            self.policy_network.parameters(), 1e-3)
-
-        self.shrink = min(training_times / DEFAULT_TRAINING_TIMES, 1)
-        if self.shrink != 1:
-            print(f"training on shrinked mode: {self.shrink}")
+            self.policy_network.parameters(), lr=2.5e-5
+        )
 
         self.target_network = DQN().to(device)
         self.target_network.load_state_dict(self.policy_network.state_dict())
         for p in self.target_network.parameters():
             p.requires_grad = False
+
         self.target_network.eval()
 
         self.batch_size = 32
 
         self.update_target = 1000
 
-        self.memory_replay: deque[Transition] = deque(
-            maxlen=math.ceil(25_0000 * self.shrink)
-        )
-        self.gamma = gamma
-        self.loss_func = torch.nn.MSELoss().to(device)
+        self.memory_replay: deque[Transition] = deque(maxlen=math.ceil(25_0000))
+        # self.replay_start_frames = 25_000
 
-        self.loss: List[float] = []
+        self.gamma = gamma
+        self.loss_func = torch.nn.MSELoss()
+
+        self.update_times = 4
+
+        self.loss: float = -1.0
 
     def reset(self):
         pass
@@ -245,9 +245,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
     def take_action(self, state: State) -> Action:
         rand = np.random.random()
-        max_decry_times = 100_0000 * self.shrink
-        sigma = 1 - 0.9 / max_decry_times * \
-            np.min([self.times, max_decry_times])
+        max_decry_times = 100_0000
+        sigma = 1 - 0.95 / max_decry_times * np.min([self.times, max_decry_times])
         if rand < sigma:
             return np.random.choice(self.allowed_actions(state))
 
@@ -267,13 +266,15 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         (sn, an) = sa
         self.memory_replay.append((s, a, r, sn, an))
 
-        if len(self.memory_replay) >= 1.25 * self.batch_size:
+        if self.times != 0 and self.times % (self.update_times) == 0:
 
-            batch: List[Transition] = []
-            for i in np.random.choice(len(self.memory_replay), self.batch_size):
-                batch.append(self.memory_replay[i])
+            if len(self.memory_replay) >= self.batch_size:
 
-            self.train(batch)
+                batch: List[Transition] = []
+                for i in np.random.choice(len(self.memory_replay), self.batch_size):
+                    batch.append(self.memory_replay[i])
+
+                self.train(batch)
 
         if self.times != 0 and self.times % (self.update_target) == 0:
             self.update_target_network()
@@ -283,13 +284,13 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
     def update_target_network(self):
         self.target_network.load_state_dict(self.policy_network.state_dict())
 
-    def clip_reward(self, r: float) -> float:
-        if r > 0:
-            return 1.0
-        elif r < 0:
-            return -1.0
-        else:
-            return 0
+    # def clip_reward(self, r: float) -> float:
+    #     if r > 0:
+    #         return 1.0
+    #     elif r < 0:
+    #         return -1.0
+    #     else:
+    #         return 0
 
     def resolve_lazy_frames(self, s: State) -> torch.Tensor:
         return torch.cat([s[0], s[1], s[2], s[3]]).unsqueeze(0)
@@ -301,50 +302,56 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
             dtype=torch.float,
         )
 
+        target = torch.tensor(
+            [r for (_, _, r, _, _) in batch], dtype=torch.float
+        ) + torch.inner(
+            masks,
+            self.gamma
+            * torch.max(
+                self.target_network(
+                    torch.cat(
+                        [self.resolve_lazy_frames(sn) for (_, _, _, sn, _) in batch]
+                    )
+                ).detach(),
+                dim=1,
+            )[0],
+        )
+        # s_next = torch.cat([self.resolve_lazy_frames(sn)
+        #                     for (_, _, _, sn, _) in batch])
+        # assert s_next.shape == (32, 4, 84, 84)
+        # q_next = self.target_network(s_next).detach()
+
+        # assert q_next.shape == (32, TOTAL_ACTIONS)
+
         # target = torch.tensor(
         #     [self.clip_reward(r) for (_, _, r, _, _) in batch], dtype=torch.float
         # ) + torch.inner(
         #     masks,
         #     self.gamma
-        #     * torch.max(
-        #         self.target_network(
-        #             torch.cat([self.resolve_lazy_frames(sn)
-        #                       for (_, _, _, sn, _) in batch])),
-        #         dim=1,
-        #     )[0],
+        #     * q_next.gather(1, torch.argmax(self.policy_network(s_next), dim=1, keepdim=True)).squeeze(1)
         # )
-        s_next = torch.cat([self.resolve_lazy_frames(sn)
-                            for (_, _, _, sn, _) in batch])
-        assert s_next.shape == (32, 4, 84, 84)
-        q_next = self.target_network(s_next)
-
-        assert q_next.shape == (32, TOTAL_ACTIONS)
-
-        target = torch.tensor(
-            [self.clip_reward(r) for (_, _, r, _, _) in batch], dtype=torch.float
-        ) + torch.inner(
-            masks,
-            self.gamma
-            * q_next.gather(1, torch.argmax(self.policy_network(s_next), dim=1, keepdim=True)).squeeze(1)
-        )
 
         assert target.shape == (32,)
-        s_curr = torch.cat([self.resolve_lazy_frames(s)
-                            for (s, _, _, _, _) in batch])
+        s_curr = torch.cat([self.resolve_lazy_frames(s) for (s, _, _, _, _) in batch])
         assert s_curr.shape == (32, 4, 84, 84)
 
         x_vals = self.policy_network(s_curr)
 
-        x = x_vals.gather(1, torch.tensor(
-            [a for (_, a, _, _, _) in batch]).unsqueeze(1)).squeeze(1)
+        x = x_vals.gather(
+            1, torch.tensor([a for (_, a, _, _, _) in batch]).unsqueeze(1)
+        ).squeeze(1)
 
         assert x.shape == (32,)
 
         loss = self.loss_func(x, target)
-        self.loss.append(loss.item())
+        self.loss = loss.item()
 
         self.optimizer.zero_grad()
         loss.backward()
+        for param in self.policy_network.parameters():  # gradient clipping
+            param.grad.data.clamp_(-1, 1)
+        # for param in self.policy_network.parameters():
+        #     param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
     def on_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):
@@ -376,6 +383,7 @@ TRAINING_TIMES = DEFAULT_TRAINING_TIMES
 agent = Agent(env, NNAlgorithm(TRAINING_TIMES), Preprocess())
 training_rwds: List[int] = []
 
+max_decry_times = 100_0000
 with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
     # for _ in pbar:
     frames = 0
@@ -399,85 +407,30 @@ with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
 
             # frames += 1
             # pbar.update(1)
+        frames += i
         pbar.update(i)
+
+        sigma = 1 - 0.95 / max_decry_times * np.min([agent.algm.times, max_decry_times])
 
         training_rwds.append(np.sum([r for r in agent.episode_reward]))
         pbar.set_postfix(
             rwd=training_rwds[-1],
-            times=min(agent.algm.times / 100_0000, 1),
-            memory_ratio=len(agent.algm.memory_replay) / 5_0000,
-            loss=agent.algm.loss[-1]
+            sigma=sigma,
+            memory_ratio=len(agent.algm.memory_replay) / 25_0000,
+            loss=agent.algm.loss,
         )
 
-
-# %%
-agent.algm.times 
-
-# %%
-np.save("./training.arr", np.asarray(training_rwds))
+        if frames >= 25_00_0000:
+            print("reached 25_00_0000 frames, end!")
+            break
 
 
 # %%
-fig = go.Figure()
-fig.add_trace(
-    go.Scatter(x=[i + 1 for i in range(len(training_rwds))],
-               y = [r for r in training_rwds])
-)
-# fig.update_yaxes(type="log")
-# fig.update_layout(yaxis_type="log")
-fig.show()
-
+np.save("./training_rwds.arr", np.asarray(training_rwds))
+torch.save(agent.algm.policy_network.state_dict(), "./policy_network.params")
+torch.save(agent.algm.target_network.state_dict(), "./target_network.params")
+# np.save("./training_loss.arr", np.asarray(agent.algm.loss))
 
 
 # %%
-fig = go.Figure()
-fig.add_trace(
-    go.Scatter(x=[i + 1 for i in range(len(agent.algm.loss))],
-               y = [r for r in agent.algm.loss])
-)
-# fig.update_yaxes(type="log")
-# fig.update_layout(yaxis_type="log")
-fig.show()
-
-
-
-# %%
-EVALUATION_TIMES = 30
-MAX_EPISODE_LENGTH = 18_000
-rwds: List[int] = []
-agent.toggleEval(True)
-
-for _ in tqdm(range(EVALUATION_TIMES)):
-    agent.reset(['preprocess'])
-
-    end = False
-    i = 1
-
-    while not end and i < MAX_EPISODE_LENGTH:
-        (o, end) = agent.step()
-        i += 1
-        env.render()
-        # if end:
-        #     rwds.append(np.sum([r if r is not None else 0 for (_,
-        #                                                        _, r) in cast(Episode, episode)]))
-    rwds.append(
-        np.sum([r for r in agent.episode_reward])
-    )
-
-
-# %%
-np.save("./eval.arr", np.asarray(rwds))
-
-# %%
-fig = go.Figure()
-fig.add_trace(
-    go.Scatter(x=[i + 1 for i in range(len(rwds))],
-               y = [r for r in rwds])
-)
-# fig.update_yaxes(type="log")
-# fig.update_layout(yaxis_type="log")
-fig.show()
-
-
-
 
