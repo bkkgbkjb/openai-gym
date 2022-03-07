@@ -66,6 +66,27 @@ class SkipFrame(gym.Wrapper):
         return obs, total_reward, done, info
 
 
+class PreprocessObservation(gym.ObservationWrapper):
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+
+        self.observation_space = Box(
+            low=0,
+            high=1,
+            shape=(1, 84, 84),
+            dtype=np.float32,
+        )
+
+        self.transform = T.Compose(
+            [T.ToPILImage(), T.Resize((84, 84)), T.Grayscale(), T.ToTensor()]
+        )
+
+    def observation(self, observation):
+        observation = self.transform(observation)
+        assert observation.shape == self.observation_space.shape
+        return observation
+
+
 class ToTensorObservation(gym.ObservationWrapper):
     def __init__(self, env: gym.Env):
         super().__init__(env)
@@ -73,15 +94,13 @@ class ToTensorObservation(gym.ObservationWrapper):
         # self.obs_shape = env.observation_space.shape[:2]
         (h, w, c) = env.observation_space.shape
         self.observation_space = Box(
-            low=-float("inf"),
-            high=float("inf"),
+            low=0,
+            high=1,
             shape=(c, h, w),
             dtype=np.float32,
         )
 
-        self.transform = T.Compose(
-            [T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
-        )
+        self.transform = T.Compose([T.ToTensor()])
 
     def observation(self, observation):
         observation = self.transform(observation)
@@ -95,8 +114,8 @@ class GrayScaleObservation(gym.ObservationWrapper):
 
         (_, h, w) = env.observation_space.shape
         self.observation_space = Box(
-            low=-float("inf"),
-            high=float("inf"),
+            low=0,
+            high=1,
             shape=(1,) + (h, w),
             dtype=np.float32,
         )
@@ -125,7 +144,10 @@ class ResizeObservation(gym.ObservationWrapper):
         (c, _, _) = env.observation_space.shape
 
         self.observation_space = Box(
-            low=-float("inf"), high=float("inf"), shape=(c,) + shape, dtype=np.float32
+            low=0,
+            high=1,
+            shape=(c,) + shape,
+            dtype=np.float32,
         )
 
         self.transforms = T.Compose([T.Resize(shape)])
@@ -137,9 +159,9 @@ class ResizeObservation(gym.ObservationWrapper):
 
 
 # %%
-env = ToTensorObservation(env)
-env = GrayScaleObservation(env)
-env = ResizeObservation(env, 84)
+env = PreprocessObservation(env)
+# env = GrayScaleObservation(env)
+# env = ResizeObservation(env, 84)
 env = FrameStack(env, num_stack=4)
 env
 
@@ -246,7 +268,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.update_target = 1000
 
-        self.memory_replay: deque[Transition] = deque(maxlen=math.ceil(25_0000))
+        self.memory_replay: deque[Transition] = deque(
+            maxlen=math.ceil(25_0000))
 
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()
@@ -264,7 +287,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
     def take_action(self, state: State) -> Action:
         rand = np.random.random()
         max_decry_times = 100_0000
-        sigma = 1 - 0.95 / max_decry_times * np.min([self.times, max_decry_times])
+        sigma = 1 - 0.95 / max_decry_times * \
+            np.min([self.times, max_decry_times])
         if rand < sigma:
             return np.random.choice(self.allowed_actions(state))
 
@@ -303,7 +327,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         self.target_network.load_state_dict(self.policy_network.state_dict())
 
     def resolve_lazy_frames(self, s: State) -> torch.Tensor:
-        rlt =  torch.cat([s[0], s[1], s[2], s[3]]).unsqueeze(0)
+        rlt = torch.cat([s[0], s[1], s[2], s[3]]).unsqueeze(0)
         return rlt
 
     def train(self, batch: List[Transition]):
@@ -315,13 +339,14 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         target = torch.tensor(
             [r for (_, _, r, _, _) in batch], dtype=torch.float
-        ) + torch.inner(
-            masks,
+        ) + (
+            masks *
             self.gamma
             * torch.max(
                 self.target_network(
                     torch.cat(
-                        [self.resolve_lazy_frames(sn) for (_, _, _, sn, _) in batch]
+                        [self.resolve_lazy_frames(sn)
+                         for (_, _, _, sn, _) in batch]
                     )
                 ).detach(),
                 dim=1,
@@ -343,7 +368,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         # )
 
         assert target.shape == (32,)
-        s_curr = torch.cat([self.resolve_lazy_frames(s) for (s, _, _, _, _) in batch])
+        s_curr = torch.cat([self.resolve_lazy_frames(s)
+                           for (s, _, _, _, _) in batch])
         assert s_curr.shape == (32, 4, 84, 84)
 
         x_vals = self.policy_network(s_curr)
@@ -419,7 +445,8 @@ with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
         frames += i
         pbar.update(i)
 
-        sigma = 1 - 0.95 / max_decry_times * np.min([agent.algm.times, max_decry_times])
+        sigma = 1 - 0.95 / max_decry_times * \
+            np.min([agent.algm.times, max_decry_times])
 
         training_rwds.append(np.sum([r for r in agent.episode_reward]))
         pbar.set_postfix(
