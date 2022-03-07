@@ -66,25 +66,45 @@ class SkipFrame(gym.Wrapper):
         return obs, total_reward, done, info
 
 
+class ToTensorObservation(gym.ObservationWrapper):
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+
+        # self.obs_shape = env.observation_space.shape[:2]
+        (h, w, c) = env.observation_space.shape
+        self.observation_space = Box(
+            low=-float("inf"),
+            high=float("inf"),
+            shape=(c, h, w),
+            dtype=np.float32,
+        )
+
+        self.transform = T.Compose(
+            [T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+        )
+
+    def observation(self, observation):
+        observation = self.transform(observation)
+        assert observation.shape == self.observation_space.shape
+        return observation
+
+
 class GrayScaleObservation(gym.ObservationWrapper):
     def __init__(self, env: gym.Env):
         super().__init__(env)
 
-        self.obs_shape = env.observation_space.shape[:2]
+        (_, h, w) = env.observation_space.shape
         self.observation_space = Box(
-            low=0, high=255, shape=(1,) + self.obs_shape, dtype=np.uint8
+            low=-float("inf"),
+            high=float("inf"),
+            shape=(1,) + (h, w),
+            dtype=np.float32,
         )
 
-        self.transform = T.Grayscale()
-
-    def permute_orientation(self, observation):
-        # permute [H, W, C] array to [C, H, W] tensor
-        observation = np.transpose(observation, (2, 0, 1))
-        observation = torch.tensor(observation.copy(), dtype=torch.float)
-        return observation
+        self.transform = T.Compose([T.Grayscale()])
 
     def observation(self, observation):
-        observation = self.permute_orientation(observation)
+
         observation = self.transform(observation)
         assert observation.shape == self.observation_space.shape
         return observation
@@ -101,13 +121,11 @@ class ResizeObservation(gym.ObservationWrapper):
         else:
             shape = _shape
 
-        self.obs_shape = self.observation_space.shape[0:1] + shape
-
-        # obs_low = self.observation_space.low
-        # obs_high = self.observation_space.high
+        # self.obs_shape = self.observation_space.shape[0:1] + shape
+        (c, _, _) = env.observation_space.shape
 
         self.observation_space = Box(
-            low=0, high=255, shape=self.obs_shape, dtype=np.uint8
+            low=-float("inf"), high=float("inf"), shape=(c,) + shape, dtype=np.float32
         )
 
         self.transforms = T.Compose([T.Resize(shape)])
@@ -119,7 +137,7 @@ class ResizeObservation(gym.ObservationWrapper):
 
 
 # %%
-# env = SkipFrame(env, skip=4)
+env = ToTensorObservation(env)
 env = GrayScaleObservation(env)
 env = ResizeObservation(env, 84)
 env = FrameStack(env, num_stack=4)
@@ -218,6 +236,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.target_network = DQN().to(device)
         self.target_network.load_state_dict(self.policy_network.state_dict())
+
         for p in self.target_network.parameters():
             p.requires_grad = False
 
@@ -228,7 +247,6 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         self.update_target = 1000
 
         self.memory_replay: deque[Transition] = deque(maxlen=math.ceil(25_0000))
-        # self.replay_start_frames = 25_000
 
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()
@@ -268,7 +286,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         if self.times != 0 and self.times % (self.update_times) == 0:
 
-            if len(self.memory_replay) >= self.batch_size:
+            if len(self.memory_replay) >= 5 * self.batch_size:
 
                 batch: List[Transition] = []
                 for i in np.random.choice(len(self.memory_replay), self.batch_size):
@@ -284,16 +302,9 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
     def update_target_network(self):
         self.target_network.load_state_dict(self.policy_network.state_dict())
 
-    # def clip_reward(self, r: float) -> float:
-    #     if r > 0:
-    #         return 1.0
-    #     elif r < 0:
-    #         return -1.0
-    #     else:
-    #         return 0
-
     def resolve_lazy_frames(self, s: State) -> torch.Tensor:
-        return torch.cat([s[0], s[1], s[2], s[3]]).unsqueeze(0)
+        rlt =  torch.cat([s[0], s[1], s[2], s[3]]).unsqueeze(0)
+        return rlt
 
     def train(self, batch: List[Transition]):
 
@@ -350,8 +361,6 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         loss.backward()
         for param in self.policy_network.parameters():  # gradient clipping
             param.grad.data.clamp_(-1, 1)
-        # for param in self.policy_network.parameters():
-        #     param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
     def on_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):
@@ -433,4 +442,3 @@ torch.save(agent.algm.target_network.state_dict(), "./target_network.params")
 
 
 # %%
-
