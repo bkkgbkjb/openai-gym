@@ -339,19 +339,16 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         target = torch.tensor(
             [r for (_, _, r, _, _) in batch], dtype=torch.float
-        ) + (
-            masks *
-            self.gamma
-            * torch.max(
-                self.target_network(
-                    torch.cat(
-                        [self.resolve_lazy_frames(sn)
-                         for (_, _, _, sn, _) in batch]
-                    )
-                ).detach(),
-                dim=1,
-            )[0],
-        )
+        ) + masks * self.gamma * (torch.max(
+            self.target_network(
+                torch.cat(
+                    [self.resolve_lazy_frames(sn)
+                     for (_, _, _, sn, _) in batch]
+                )
+            ).detach(),
+            dim=1,
+        )[0])
+
         # s_next = torch.cat([self.resolve_lazy_frames(sn)
         #                     for (_, _, _, sn, _) in batch])
         # assert s_next.shape == (32, 4, 84, 84)
