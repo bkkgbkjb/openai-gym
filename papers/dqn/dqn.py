@@ -1,8 +1,12 @@
 # %%
+from sys import path as spath
+from os import path as opath
+
+spath.append(opath.dirname(opath.abspath(__file__)) + "/../..")
+
 import numpy as np
 import numpy.typing as npt
 import gym
-
 from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable
 from gym.spaces import Box
 from utils.agent import Agent
@@ -487,4 +491,3 @@ for _ in tqdm(range(EVALUATION_TIMES)):
     rwds.append(
         np.sum([r for r in agent.episode_reward])
     )
-
