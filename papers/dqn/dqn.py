@@ -267,7 +267,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.batch_size = 32
 
-        self.update_target = 250
+        self.update_target = 1250
 
         self.replay_memory: deque[Transition] = deque(
             maxlen=math.ceil(25_0000))
@@ -311,7 +311,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         if self.times != 0 and self.times % (self.update_times) == 0:
 
-            if len(self.replay_memory) >= 5 * self.batch_size:
+            if len(self.replay_memory) >= 0.25 * cast(int, self.replay_memory.maxlen):
 
                 batch: List[Transition] = []
                 for i in np.random.choice(len(self.replay_memory), self.batch_size):
@@ -459,7 +459,7 @@ TRAINING_TIMES = DEFAULT_TRAINING_TIMES
 # TRAINING_TIMES = 2_0000
 # env._max_episode_steps = 1_000
 
-agent = Agent(env, NNAlgorithm(TRAINING_TIMES), Preprocess())
+agent = Agent(env, DDQNAlgorithm(TRAINING_TIMES), Preprocess())
 training_rwds: List[int] = []
 
 max_decry_times = 100_0000
@@ -515,12 +515,11 @@ torch.save(agent.algm.target_network.state_dict(), "./target_network.params")
 fig = go.Figure()
 fig.add_trace(
     go.Scatter(x=[i + 1 for i in range(len(training_rwds))],
-               y = [r for r in training_rwds])
+               y=[r for r in training_rwds])
 )
 # fig.update_yaxes(type="log")
 # fig.update_layout(yaxis_type="log")
 fig.show()
-
 
 
 # %%
