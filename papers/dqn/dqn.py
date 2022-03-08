@@ -1,25 +1,24 @@
 # %%
+from utils.common import Step, Episode, TransitionGeneric
+from torch import nn
+import math
+from collections import deque
+from gym.wrappers import FrameStack
+import torch
+from utils.preprocess import PreprocessInterface
+from utils.algorithm import AlgorithmInterface
+from tqdm.autonotebook import tqdm
+from torchvision import transforms as T
+from utils.agent import Agent
+from gym.spaces import Box
+from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable
+import gym
+import numpy.typing as npt
+import numpy as np
 from sys import path as spath
 from os import path as opath
 
 spath.append(opath.dirname(opath.abspath(__file__)) + "/../..")
-
-import numpy as np
-import numpy.typing as npt
-import gym
-from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable
-from gym.spaces import Box
-from utils.agent import Agent
-from torchvision import transforms as T
-from tqdm.autonotebook import tqdm
-from utils.algorithm import AlgorithmInterface
-from utils.preprocess import PreprocessInterface
-import torch
-from gym.wrappers import FrameStack
-from collections import deque
-import math
-from torch import nn
-from utils.common import Step, Episode, TransitionGeneric
 
 
 # %%
@@ -272,7 +271,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.update_target = 1000
 
-        self.memory_replay: deque[Transition] = deque(
+        self.replay_memory: deque[Transition] = deque(
             maxlen=math.ceil(25_0000))
 
         self.gamma = gamma
@@ -310,15 +309,15 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
     ):
         (s, a, r) = sar
         (sn, an) = sa
-        self.memory_replay.append((s, a, r, sn, an))
+        self.replay_memory.append((s, a, r, sn, an))
 
         if self.times != 0 and self.times % (self.update_times) == 0:
 
-            if len(self.memory_replay) >= 5 * self.batch_size:
+            if len(self.replay_memory) >= 5 * self.batch_size:
 
                 batch: List[Transition] = []
-                for i in np.random.choice(len(self.memory_replay), self.batch_size):
-                    batch.append(self.memory_replay[i])
+                for i in np.random.choice(len(self.replay_memory), self.batch_size):
+                    batch.append(self.replay_memory[i])
 
                 self.train(batch)
 
@@ -453,12 +452,12 @@ with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
         pbar.set_postfix(
             rwd=training_rwds[-1],
             sigma=sigma,
-            memory_ratio=len(agent.algm.memory_replay) / 25_0000,
+            memory_ratio=len(agent.algm.replay_memory) / 25_0000,
             loss=agent.algm.loss,
         )
 
-        if frames >= 25_00_0000:
-            print("reached 25_00_0000 frames, end!")
+        if frames >= 3_00_0000:
+            print("reached 3_00_0000 frames, end!")
             break
 
 
