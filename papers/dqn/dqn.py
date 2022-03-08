@@ -18,7 +18,6 @@ import numpy.typing as npt
 import numpy as np
 
 
-
 # %%
 RANDOM_SEED = 0
 np.random.seed(RANDOM_SEED)
@@ -488,3 +487,5 @@ for _ in tqdm(range(EVALUATION_TIMES)):
     rwds.append(
         np.sum([r for r in agent.episode_reward])
     )
+
+np.save("./eval_rwds.arr", np.asarray(rwds))
