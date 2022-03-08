@@ -266,7 +266,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.batch_size = 32
 
-        self.update_target = 1000
+        self.update_target = 10000
 
         self.replay_memory: deque[Transition] = deque(
             maxlen=math.ceil(25_0000))
@@ -318,7 +318,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
                 self.train(batch)
 
-        if self.times != 0 and self.times % (self.update_target) == 0:
+        if self.times != 0 and self.times % (self.update_target * self.update_times) == 0:
             self.update_target_network()
 
         self.times += 1
@@ -393,6 +393,52 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         pass
 
 
+class DDQNAlgorithm(NNAlgorithm, AlgorithmInterface[State, Action]):
+    def __init__(self, training_times: int = 50_00_0000, gamma: float = 0.99):
+        super().__init__(training_times, gamma)
+
+    def train(self, batch: List[Transition]):
+
+        s_next = torch.cat([self.resolve_lazy_frames(sn)
+                            for (_, _, _, sn, _) in batch])
+        assert s_next.shape == (32, 4, 84, 84)
+
+        q_next = self.target_network(s_next).detach()
+
+        assert q_next.shape == (32, TOTAL_ACTIONS)
+
+        masks = torch.tensor(
+            [0 if an is None else 1 for (_, _, _, _, an) in batch],
+            dtype=torch.float,
+        )
+
+        target = torch.tensor(
+            [r for (_, _, r, _, _) in batch], dtype=torch.float
+        ) + masks * self.gamma * q_next.gather(1, torch.argmax(self.policy_network(s_next), dim=1, keepdim=True)).squeeze(1)
+
+        assert target.shape == (32,)
+        s_curr = torch.cat([self.resolve_lazy_frames(s)
+                           for (s, _, _, _, _) in batch])
+        assert s_curr.shape == (32, 4, 84, 84)
+
+        x_vals = self.policy_network(s_curr)
+
+        x = x_vals.gather(
+            1, torch.tensor([a for (_, a, _, _, _) in batch]).unsqueeze(1)
+        ).squeeze(1)
+
+        assert x.shape == (32,)
+
+        loss = self.loss_func(x, target)
+        self.loss = loss.item()
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        for param in self.policy_network.parameters():  # gradient clipping
+            param.grad.data.clamp_(-1, 1)
+        self.optimizer.step()
+
+
 class Preprocess(PreprocessInterface[Observation, Action, State]):
     def __init__(self):
         self.reset()
@@ -412,7 +458,7 @@ TRAINING_TIMES = DEFAULT_TRAINING_TIMES
 # TRAINING_TIMES = 2_0000
 # env._max_episode_steps = 1_000
 
-agent = Agent(env, NNAlgorithm(TRAINING_TIMES), Preprocess())
+agent = Agent(env, DDQNAlgorithm(TRAINING_TIMES), Preprocess())
 training_rwds: List[int] = []
 
 max_decry_times = 100_0000
