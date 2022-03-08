@@ -1,4 +1,5 @@
 # %%
+import setup
 from utils.common import Step, Episode, TransitionGeneric
 from torch import nn
 import math
@@ -15,10 +16,7 @@ from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, I
 import gym
 import numpy.typing as npt
 import numpy as np
-from sys import path as spath
-from os import path as opath
 
-spath.append(opath.dirname(opath.abspath(__file__)) + "/../..")
 
 
 # %%
