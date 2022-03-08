@@ -8,6 +8,7 @@ from gym.wrappers import FrameStack
 import torch
 from utils.preprocess import PreprocessInterface
 from utils.algorithm import AlgorithmInterface
+import plotly.graph_objects as go
 from tqdm.autonotebook import tqdm
 from torchvision import transforms as T
 from utils.agent import Agent
@@ -266,7 +267,7 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.batch_size = 32
 
-        self.update_target = 10000
+        self.update_target = 250
 
         self.replay_memory: deque[Transition] = deque(
             maxlen=math.ceil(25_0000))
@@ -458,7 +459,7 @@ TRAINING_TIMES = DEFAULT_TRAINING_TIMES
 # TRAINING_TIMES = 2_0000
 # env._max_episode_steps = 1_000
 
-agent = Agent(env, DDQNAlgorithm(TRAINING_TIMES), Preprocess())
+agent = Agent(env, NNAlgorithm(TRAINING_TIMES), Preprocess())
 training_rwds: List[int] = []
 
 max_decry_times = 100_0000
@@ -510,6 +511,17 @@ torch.save(agent.algm.policy_network.state_dict(), "./policy_network.params")
 torch.save(agent.algm.target_network.state_dict(), "./target_network.params")
 # np.save("./training_loss.arr", np.asarray(agent.algm.loss))
 
+# %%
+fig = go.Figure()
+fig.add_trace(
+    go.Scatter(x=[i + 1 for i in range(len(training_rwds))],
+               y = [r for r in training_rwds])
+)
+# fig.update_yaxes(type="log")
+# fig.update_layout(yaxis_type="log")
+fig.show()
+
+
 
 # %%
 EVALUATION_TIMES = 30
@@ -535,3 +547,5 @@ for _ in tqdm(range(EVALUATION_TIMES)):
     )
 
 np.save("./eval_rwds.arr", np.asarray(rwds))
+
+# %%
