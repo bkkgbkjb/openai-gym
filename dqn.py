@@ -252,8 +252,8 @@ class NNAlgorithm(AlgorithmInterface[State, Action]):
         self.times = 0
 
         self.policy_network = DQN().to(device)
-        self.optimizer = torch.optim.RMSprop(
-            self.policy_network.parameters(), lr=2.5e-5
+        self.optimizer = torch.optim.Adam(
+            self.policy_network.parameters(), lr=1e-4
         )
 
         self.target_network = DQN().to(device)
@@ -466,3 +466,25 @@ torch.save(agent.algm.target_network.state_dict(), "./target_network.params")
 
 
 # %%
+EVALUATION_TIMES = 30
+MAX_EPISODE_LENGTH = 18_000
+rwds: List[int] = []
+agent.toggleEval(True)
+
+for _ in tqdm(range(EVALUATION_TIMES)):
+    agent.reset(['preprocess'])
+
+    end = False
+    i = 1
+
+    while not end and i < MAX_EPISODE_LENGTH:
+        (o, end) = agent.step()
+        i += 1
+        env.render()
+        # if end:
+        #     rwds.append(np.sum([r if r is not None else 0 for (_,
+        #                                                        _, r) in cast(Episode, episode)]))
+    rwds.append(
+        np.sum([r for r in agent.episode_reward])
+    )
+
