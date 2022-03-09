@@ -60,7 +60,8 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
         self.times = 0
 
         self.policy_network = DQN(n_actions).to(DEVICE)
-        self.optimizer = torch.optim.Adam(self.policy_network.parameters(), lr=1e-4)
+        self.optimizer = torch.optim.Adam(
+            self.policy_network.parameters(), lr=1e-4)
 
         self.target_network = DQN(n_actions).to(DEVICE)
         self.target_network.load_state_dict(self.policy_network.state_dict())
@@ -74,7 +75,8 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.update_target = 250
 
-        self.replay_memory: deque[Transition] = deque(maxlen=math.ceil(25_0000))
+        self.replay_memory: deque[Transition] = deque(
+            maxlen=math.ceil(25_0000))
 
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()
@@ -92,7 +94,8 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
     def take_action(self, state: State) -> Action:
         rand = np.random.random()
         max_decry_times = 100_0000
-        sigma = 1 - 0.95 / max_decry_times * np.min([self.times, max_decry_times])
+        sigma = 1 - 0.95 / max_decry_times * \
+            np.min([self.times, max_decry_times])
         if rand < sigma:
             return np.random.choice(self.allowed_actions(state))
 
@@ -114,7 +117,7 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
 
         if self.times != 0 and self.times % (self.update_times) == 0:
 
-            if len(self.replay_memory) >= 0.25 * cast(int, self.replay_memory.maxlen):
+            if len(self.replay_memory) >= 5 * self.batch_size:
 
                 batch: List[Transition] = []
                 for i in np.random.choice(len(self.replay_memory), self.batch_size):
@@ -150,7 +153,8 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
             torch.max(
                 self.target_network(
                     torch.cat(
-                        [self.resolve_lazy_frames(sn) for (_, _, _, sn, _) in batch]
+                        [self.resolve_lazy_frames(sn)
+                         for (_, _, _, sn, _) in batch]
                     )
                 ).detach(),
                 dim=1,
@@ -158,7 +162,8 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
         )
 
         assert target.shape == (32,)
-        s_curr = torch.cat([self.resolve_lazy_frames(s) for (s, _, _, _, _) in batch])
+        s_curr = torch.cat([self.resolve_lazy_frames(s)
+                           for (s, _, _, _, _) in batch])
         assert s_curr.shape == (32, 4, 84, 84)
 
         x_vals = self.policy_network(s_curr)
@@ -193,7 +198,8 @@ class DDQNAlgorithm(DQNAlgorithm, AlgorithmInterface[State, Action]):
 
     def train(self, batch: List[Transition]):
 
-        s_next = torch.cat([self.resolve_lazy_frames(sn) for (_, _, _, sn, _) in batch])
+        s_next = torch.cat([self.resolve_lazy_frames(sn)
+                           for (_, _, _, sn, _) in batch])
         assert s_next.shape == (32, 4, 84, 84)
 
         q_next = self.target_network(s_next).detach()
@@ -214,7 +220,8 @@ class DDQNAlgorithm(DQNAlgorithm, AlgorithmInterface[State, Action]):
         )
 
         assert target.shape == (32,)
-        s_curr = torch.cat([self.resolve_lazy_frames(s) for (s, _, _, _, _) in batch])
+        s_curr = torch.cat([self.resolve_lazy_frames(s)
+                           for (s, _, _, _, _) in batch])
         assert s_curr.shape == (32, 4, 84, 84)
 
         x_vals = self.policy_network(s_curr)

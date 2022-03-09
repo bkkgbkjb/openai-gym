@@ -1,21 +1,12 @@
 # %%
-from algorithm import DQNAlgorithm, Preprocess
 import setup
-from utils.common import Step, Episode, TransitionGeneric
-from torch import nn
-import math
-from collections import deque
+from algorithm import DQNAlgorithm, Preprocess
 import torch
-from utils.preprocess import PreprocessInterface
-from utils.algorithm import AlgorithmInterface
 import plotly.graph_objects as go
 from tqdm.autonotebook import tqdm
-from torchvision import transforms as T
 from utils.agent import Agent
-from gym.spaces import Box
-from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable
+from typing import List
 import gym
-import numpy.typing as npt
 from utils.env import PreprocessObservation, FrameStack
 import numpy as np
 
@@ -31,7 +22,7 @@ print(f"Using {device} device")
 
 # %%
 env = gym.make("PongDeterministic-v4")
-env.seed(RANDOM_SEED)
+env.seed()
 env.reset()
 TOTAL_ACTIONS = env.action_space.n
 
@@ -75,7 +66,8 @@ with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
         frames += i
         pbar.update(i)
 
-        sigma = 1 - 0.95 / max_decry_times * np.min([agent.algm.times, max_decry_times])
+        sigma = 1 - 0.95 / max_decry_times * \
+            np.min([agent.algm.times, max_decry_times])
 
         training_rwds.append(np.sum([r for r in agent.episode_reward]))
         pbar.set_postfix(
@@ -93,10 +85,12 @@ with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
 # %%
 np.save(f"./training_rwds_{agent.name}.arr", np.asarray(training_rwds))
 torch.save(
-    agent.algm.policy_network.state_dict(), f"./policy_network_{agent.name}.params"
+    agent.algm.policy_network.state_dict(
+    ), f"./policy_network_{agent.name}.params"
 )
 torch.save(
-    agent.algm.target_network.state_dict(), f"./target_network_{agent.name}.params"
+    agent.algm.target_network.state_dict(
+    ), f"./target_network_{agent.name}.params"
 )
 # np.save("./training_loss.arr", np.asarray(agent.algm.loss))
 
