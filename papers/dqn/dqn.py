@@ -58,7 +58,7 @@ TRAINING_TIMES = DEFAULT_TRAINING_TIMES
 agent = Agent(env, DQNAlgorithm(TOTAL_ACTIONS), Preprocess())
 training_rwds: List[int] = []
 print(f"agent name: {agent.name}")
-print(f"agent update_times: {agent.algm.update_times}")
+print(f"agent update_target: {agent.algm.update_target}")
 
 max_decry_times = 100_0000
 with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
