@@ -38,6 +38,7 @@ class Agent(Generic[O, S, A]):
         self.algm = algm
         self.preprocess = preprocess
         self.eval = False
+        self.name: str = algm.name
         self.reset()
 
     def reset(

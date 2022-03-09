@@ -13,6 +13,7 @@ R = float
 class AlgorithmInterface(Protocol[S, A]):
 
     frame_skip: int
+    name: str
 
     @abstractmethod
     def allowed_actions(self, state: S) -> List[A]:
