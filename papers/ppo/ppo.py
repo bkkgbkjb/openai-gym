@@ -7,7 +7,8 @@ from tqdm.autonotebook import tqdm
 from utils.agent import Agent
 from typing import List
 import gym
-from utils.env import PreprocessObservation, FrameStack
+from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
+from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv
 import numpy as np
 
 
@@ -35,7 +36,10 @@ TOTAL_ACTIONS
 
 
 # %%
-env = PreprocessObservation(env)
+# env = PreprocessObservation(env)
+env = WarpFrame(env)
+env = NoopResetEnv(env, 20)
+env = ToTensorEnv(env)
 env = FrameStack(env, num_stack=4)
 env
 
@@ -57,8 +61,7 @@ with tqdm(total=TRAINING_TIMES) as pbar:
 
             (_, end) = agent.step()
             i += 1
-            agent.render('human')
-
+            # agent.render('human')
 
         frames += i
         pbar.update(i)

@@ -1,3 +1,9 @@
 [submodule "papers/dqn/example"]
 	path = papers/dqn/example
 	url = https://github.com/jacobaustin123/pytorch-dqn.git
+[submodule "papers/ppo/example"]
+	path = papers/ppo/example
+	url = https://github.com/XinJingHao/PPO-Discrete-Pytorch.git
+[submodule "papers/ppo/example2"]
+	path = papers/ppo/example2
+	url = https://github.com/bkkgbkjb/pytorch-a2c-ppo-acktr-gail.git
