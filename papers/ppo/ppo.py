@@ -8,7 +8,7 @@ from utils.agent import Agent
 from typing import List
 import gym
 from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
-from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv
+from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
 
 
@@ -25,7 +25,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 
 # %%
-env = gym.make("PongDeterministic-v4")
+env = gym.make("Breakout-v0")
 env.seed()
 env.reset()
 TOTAL_ACTIONS = env.action_space.n
@@ -38,7 +38,8 @@ TOTAL_ACTIONS
 # %%
 # env = PreprocessObservation(env)
 env = WarpFrame(env)
-env = NoopResetEnv(env, 20)
+# env = EpisodicLifeEnv(env)
+# env = NoopResetEnv(env, 20)
 env = ToTensorEnv(env)
 env = FrameStack(env, num_stack=4)
 env
