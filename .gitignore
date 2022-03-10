@@ -1,2 +1,8 @@
 .vscode
 __pycache__
+include
+lib
+share
+lib64
+bin
+etc
