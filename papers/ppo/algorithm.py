@@ -9,6 +9,7 @@ from utils.algorithm import AlgorithmInterface
 import plotly.graph_objects as go
 from torch.distributions import Categorical
 from tqdm.autonotebook import tqdm
+
 from torchvision import transforms as T
 from utils.agent import Agent
 from gym.spaces import Box
@@ -77,13 +78,16 @@ class Critic(nn.Module):
 
 
 class PPO(AlgorithmInterface[State, Action]):
-    def __init__(self, n_actions: int):
+    def __init__(self, n_actions: int, gamma: float = 0.99):
         self.frame_skip = 0
         self.name = "ppo"
         self.n_actions = n_actions
         self.actor = Actor(n_actions).to(DEVICE)
         self.critic = Critic().to(DEVICE)
         self.times = -1
+
+        self.gamma = gamma
+        self.update_freq = 250
 
     def allowed_actions(self, state: State) -> List[Action]:
         return list(range(self.n_actions))
@@ -94,26 +98,70 @@ class PPO(AlgorithmInterface[State, Action]):
 
     def take_action(self, state: State) -> ActionInfo[Action]:
         with torch.no_grad():
+
             act_probs = self.actor(self.resolve_lazy_frames(state))
-            act = Categorical(act_probs).sample()
-            return (cast(int, act.item()), {})
+            dist = Categorical(act_probs)
+            act = dist.sample()
+
+            return (cast(int, act.item()), {"log_prob": dist.log_prob(act)})
 
     def after_step(
         self,
-        sar: Tuple[State, Action, Reward],
-        sa: Tuple[State, Optional[Action]],
+        sar: Tuple[State, ActionInfo[Action], Reward],
+        sa: Tuple[State, Optional[ActionInfo[Action]]],
     ):
         self.times += 1
+        (s, a, r) = sar
+        (sn, an) = sa
+
+        self.memory.append((s, a, r, sn, an))
+
+        if self.times != 0 and self.times % self.update_freq == 0:
+            self.train()
+
         pass
 
-    def on_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):
+    def train(self):
+        advs: List[float] = []
+
+        T = len(self.memory)
+        (_, _, _, st, at) = self.memory[-1]
+        assert at is not None
+
+        for t, (s, _, _, _, _) in enumerate(self.memory):
+            _adv = -self.critic(s)
+
+            for j in range(t, T):
+                (_, _, r, _, _) = self.memory[j]
+                _adv += self.gamma ** (j - t) * r
+
+            _adv += self.gamma ** (T - t) * self.critic(st)
+
+            advs.append(_adv)
+
+        assert len(advs) == len(self.memory)
+
+        ratios = [
+            math.exp(Categorical(self.actor(s)).log_prob(a) - info["log_prob"])
+            for (s, (a, info), _, _, _) in self.memory
+        ]
+        assert len(ratios) == len(self.memory)
+
+        # (_, _, _, sl, (al, infol)) = self.memory[-1]
+        # ratios.append(
+        #     math.exp(Categorical(self.actor(sl)).log_prob(al) - infol["log_prob"])
+        # )
+
+    def on_termination(
+        self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
+    ):
         (s, a, r) = sar
         assert len(s) == len(a) + 1
         assert len(s) == len(r) + 1
         pass
 
     def reset(self):
-        pass
+        self.memory: List[Transition] = []
 
 
 class RandomAlgorithm(AlgorithmInterface[State, Action]):
