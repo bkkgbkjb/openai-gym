@@ -7,3 +7,6 @@
 [submodule "papers/ppo/example2"]
 	path = papers/ppo/example2
 	url = https://github.com/XinJingHao/PPO-Discrete-Pytorch.git
+[submodule "papers/ppo/example3"]
+	path = papers/ppo/example3
+	url = https://github.com/nikhilbarhate99/PPO-PyTorch.git

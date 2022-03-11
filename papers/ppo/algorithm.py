@@ -28,6 +28,52 @@ Transition = TransitionGeneric[State, Action]
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
+class Actor(nn.Module):
+    def __init__(self, n_actions: int):
+        super().__init__()
+
+        self.n_actions = n_actions
+
+        self.network = nn.Sequential(
+            nn.Linear(state_dim, n_latent_var),
+            nn.Tanh(),
+            nn.Linear(n_latent_var, n_latent_var),
+            nn.Tanh(),
+            nn.Linear(n_latent_var, action_dim),
+            nn.Softmax(dim=-1),
+        )
+
+    def forward(self, s: State) -> torch.Tensor:
+        rlt = cast(torch.Tensor, self.network(s.to(DEVICE)))
+        assert rlt.shape == (s.size(0), self.n_actions)
+        return rlt
+
+
+class Critic(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.network = nn.Sequential(
+            nn.Linear(state_dim, n_latent_var),
+            nn.Tanh(),
+            nn.Linear(n_latent_var, n_latent_var),
+            nn.Tanh(),
+            nn.Linear(n_latent_var, 1),
+        )
+
+    def forward(self, s: State) -> torch.Tensor:
+        rlt = cast(torch.Tensor, self.network(s.to(DEVICE)))
+        assert rlt.shape == (s.size(0), self.n_actions)
+        return rlt
+
+
+class PPO:
+    def __init__(self):
+
+        self.optimizer = torch.optim.Adam()
+        pass
+
+
 class RandomAlgorithm(AlgorithmInterface[State, Action]):
     def __init__(self, n_actions: int):
         self.name = "random"
@@ -54,7 +100,6 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
         assert self.last_action is not None
         return self.last_action
 
-
     def after_step(
         self,
         sar: Tuple[State, Action, Reward],
@@ -67,6 +112,7 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
         assert len(s) == len(a) + 1
         assert len(s) == len(r) + 1
         pass
+
 
 class Preprocess(PreprocessInterface[Observation, Action, State]):
     def __init__(self):
