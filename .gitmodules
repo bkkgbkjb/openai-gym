@@ -6,4 +6,4 @@
 	url = https://github.com/XinJingHao/PPO-Discrete-Pytorch.git
 [submodule "papers/ppo/example2"]
 	path = papers/ppo/example2
-	url = https://github.com/bkkgbkjb/pytorch-a2c-ppo-acktr-gail.git
+	url = https://github.com/XinJingHao/PPO-Discrete-Pytorch.git
