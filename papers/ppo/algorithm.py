@@ -35,12 +35,16 @@ class Actor(nn.Module):
         self.n_actions = n_actions
 
         self.network = nn.Sequential(
-            nn.Linear(state_dim, n_latent_var),
-            nn.Tanh(),
-            nn.Linear(n_latent_var, n_latent_var),
-            nn.Tanh(),
-            nn.Linear(n_latent_var, action_dim),
-            nn.Softmax(dim=-1),
+            nn.Conv2d(4, 32, (8, 8), 4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, (4, 4), 2),
+            nn.ReLU(),
+            nn.Conv2d(64, 32, (3, 3), 1),
+            nn.Flatten(),
+            nn.Linear(7 * 7 * 32, 256),
+            nn.ReLU(),
+            nn.Linear(256, n_actions),
+            nn.Softmax(dim=0),
         )
 
     def forward(self, s: State) -> torch.Tensor:
@@ -54,16 +58,20 @@ class Critic(nn.Module):
         super().__init__()
 
         self.network = nn.Sequential(
-            nn.Linear(state_dim, n_latent_var),
-            nn.Tanh(),
-            nn.Linear(n_latent_var, n_latent_var),
-            nn.Tanh(),
-            nn.Linear(n_latent_var, 1),
+            nn.Conv2d(4, 32, (8, 8), 4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, (4, 4), 2),
+            nn.ReLU(),
+            nn.Conv2d(64, 32, (3, 3), 1),
+            nn.Flatten(),
+            nn.Linear(7 * 7 * 32, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
         )
 
     def forward(self, s: State) -> torch.Tensor:
         rlt = cast(torch.Tensor, self.network(s.to(DEVICE)))
-        assert rlt.shape == (s.size(0), self.n_actions)
+        assert rlt.shape == (s.size(0), 1)
         return rlt
 
 
