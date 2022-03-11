@@ -1,15 +1,18 @@
-from typing import Tuple, TypeVar, Optional, List
+from typing import Dict, Tuple, TypeVar, Optional, List
 
 
-OS = TypeVar('OS')
-AS = TypeVar('AS')
+OS = TypeVar("OS")
+AS = TypeVar("AS")
 Step = Tuple[OS, Optional[AS], Optional[float]]
 
 
-OE = TypeVar('OE')
-AE = TypeVar('AE')
+OE = TypeVar("OE")
+AE = TypeVar("AE")
 Episode = List[Step[OE, AE]]
 
-TS = TypeVar('TS')
-TA = TypeVar('TA')
-TransitionGeneric = Tuple[TS, TA, float, TS, Optional[TA]]
+AA = TypeVar("AA")
+ActionInfo = Tuple[AA, Dict]
+
+TS = TypeVar("TS")
+TA = TypeVar("TA")
+TransitionGeneric = Tuple[TS, ActionInfo[TA], float, TS, Optional[ActionInfo[TA]]]

@@ -1,8 +1,9 @@
 from abc import abstractmethod
 from optparse import Option
-from typing import Optional, Protocol, Tuple, TypeVar, List, Union
+from typing import Optional, Protocol, Tuple, TypeVar, List, Union, Any
 import numpy as np
-from utils.common import Episode
+
+from utils.common import ActionInfo
 
 
 S = TypeVar("S")
@@ -20,15 +21,17 @@ class AlgorithmInterface(Protocol[S, A]):
         raise NotImplementedError()
 
     @abstractmethod
-    def take_action(self, state: S) -> A:
+    def take_action(self, state: S) -> Union[ActionInfo[A], A]:
         raise NotImplementedError()
 
     @abstractmethod
-    def after_step(self, sar: Tuple[S, A, R], sa: Tuple[S, Optional[A]]):
+    def after_step(
+        self, sar: Tuple[S, ActionInfo[A], R], sa: Tuple[S, Optional[ActionInfo[A]]]
+    ):
         raise NotImplementedError()
 
     @abstractmethod
-    def on_termination(self, sar: Tuple[List[S], List[A], List[R]]):
+    def on_termination(self, sar: Tuple[List[S], List[ActionInfo[A]], List[R]]):
         raise NotImplementedError()
 
     @abstractmethod

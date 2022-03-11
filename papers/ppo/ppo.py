@@ -26,7 +26,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 
 # %%
-env = gym.make("PongDeterministic-v4", render_mode="human")
+env = gym.make("PongDeterministic-v4")
 env.seed()
 env.reset()
 TOTAL_ACTIONS = env.action_space.n

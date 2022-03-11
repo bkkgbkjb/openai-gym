@@ -1,5 +1,5 @@
 import setup
-from utils.common import Step, Episode, TransitionGeneric
+from utils.common import ActionInfo, Step, Episode, TransitionGeneric
 from torch import nn
 import math
 from collections import deque
@@ -83,6 +83,7 @@ class PPO(AlgorithmInterface[State, Action]):
         self.n_actions = n_actions
         self.actor = Actor(n_actions).to(DEVICE)
         self.critic = Critic().to(DEVICE)
+        self.times = -1
 
     def allowed_actions(self, state: State) -> List[Action]:
         return list(range(self.n_actions))
@@ -91,17 +92,18 @@ class PPO(AlgorithmInterface[State, Action]):
         rlt = torch.cat([s[0], s[1], s[2], s[3]]).unsqueeze(0)
         return rlt
 
-    def take_action(self, state: State) -> Action:
+    def take_action(self, state: State) -> ActionInfo[Action]:
         with torch.no_grad():
             act_probs = self.actor(self.resolve_lazy_frames(state))
             act = Categorical(act_probs).sample()
-            return cast(int, act.item())
+            return (cast(int, act.item()), {})
 
     def after_step(
         self,
         sar: Tuple[State, Action, Reward],
         sa: Tuple[State, Optional[Action]],
     ):
+        self.times += 1
         pass
 
     def on_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):

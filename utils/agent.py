@@ -4,6 +4,7 @@ from optparse import Option
 import numpy as np
 import gym
 from typing import (
+    Any,
     Generic,
     Literal,
     List,
@@ -18,7 +19,7 @@ from typing import (
 )
 from utils.algorithm import AlgorithmInterface
 from utils.preprocess import PreprocessInterface
-from utils.common import Step, Episode
+from utils.common import ActionInfo, Step, Episode
 
 
 A = TypeVar("A")
@@ -45,12 +46,12 @@ class Agent(Generic[O, S, A]):
         self,
         comps: Union[List[Literal["preprocess", "algorithm"]], Literal["all"]] = [],
     ):
-        self.ready_act: Optional[A] = None
+        self.ready_act: Optional[Tuple[A, Any]] = None
         self.end = False
 
         self.episode_observation: List[O] = []
         self.episode_state: List[S] = []
-        self.episode_action: List[A] = []
+        self.episode_action: List[Tuple[A, Any]] = []
         self.episode_reward: List[R] = []
 
         o: O = self.env.reset()
@@ -67,17 +68,24 @@ class Agent(Generic[O, S, A]):
     def toggleEval(self, newEval: bool):
         self.eval = newEval
 
+    def format_action(self, a: Union[A, ActionInfo[A]]) -> Tuple[A, Any]:
+        if isinstance(a, tuple):
+            return a
+        return (a, dict())
+
     def step(self) -> Tuple[O, bool]:
         assert not self.end, "cannot step on a ended agent"
 
-        act = self.ready_act or self.algm.take_action(self.episode_state[-1])
+        act = self.ready_act or self.format_action(
+            self.algm.take_action(self.episode_state[-1])
+        )
 
         rwd: float = 0.0
         obs: Optional[O] = None
         stop: bool = False
 
         for _ in range(self.algm.frame_skip + 1):
-            (o, r, s, _) = self.env.step(act)
+            (o, r, s, _) = self.env.step(act[0])
             rwd += r
             obs = o
             stop = s
@@ -94,7 +102,9 @@ class Agent(Generic[O, S, A]):
         )
 
         self.ready_act = (
-            None if stop else (self.algm.take_action(self.episode_state[-1]))
+            None
+            if stop
+            else self.format_action(self.algm.take_action(self.episode_state[-1]))
         )
 
         self.eval or self.algm.after_step(
