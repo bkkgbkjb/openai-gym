@@ -7,6 +7,7 @@ import torch
 from utils.preprocess import PreprocessInterface
 from utils.algorithm import AlgorithmInterface
 import plotly.graph_objects as go
+from torch.distributions import Categorical
 from tqdm.autonotebook import tqdm
 from torchvision import transforms as T
 from utils.agent import Agent
@@ -75,10 +76,41 @@ class Critic(nn.Module):
         return rlt
 
 
-class PPO:
-    def __init__(self):
+class PPO(AlgorithmInterface[State, Action]):
+    def __init__(self, n_actions: int):
+        self.frame_skip = 0
+        self.name = "ppo"
+        self.n_actions = n_actions
+        self.actor = Actor(n_actions).to(DEVICE)
+        self.critic = Critic().to(DEVICE)
 
-        self.optimizer = torch.optim.Adam()
+    def allowed_actions(self, state: State) -> List[Action]:
+        return list(range(self.n_actions))
+
+    def resolve_lazy_frames(self, s: State) -> torch.Tensor:
+        rlt = torch.cat([s[0], s[1], s[2], s[3]]).unsqueeze(0)
+        return rlt
+
+    def take_action(self, state: State) -> Action:
+        with torch.no_grad():
+            act_probs = self.actor(self.resolve_lazy_frames(state))
+            act = Categorical(act_probs).sample()
+            return cast(int, act.item())
+
+    def after_step(
+        self,
+        sar: Tuple[State, Action, Reward],
+        sa: Tuple[State, Optional[Action]],
+    ):
+        pass
+
+    def on_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):
+        (s, a, r) = sar
+        assert len(s) == len(a) + 1
+        assert len(s) == len(r) + 1
+        pass
+
+    def reset(self):
         pass
 
 

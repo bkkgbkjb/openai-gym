@@ -1,4 +1,5 @@
 # %%
+from algorithm import PPO
 import setup
 from algorithm import RandomAlgorithm, Preprocess
 import torch
@@ -25,7 +26,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 
 # %%
-env = gym.make("Breakout-v0")
+env = gym.make("PongDeterministic-v4", render_mode="human")
 env.seed()
 env.reset()
 TOTAL_ACTIONS = env.action_space.n
@@ -48,7 +49,7 @@ env
 # %%
 TRAINING_TIMES = 1000
 
-agent = Agent(env, RandomAlgorithm(TOTAL_ACTIONS), Preprocess())
+agent = Agent(env, PPO(TOTAL_ACTIONS), Preprocess())
 training_rwds: List[int] = []
 print(f"agent name: {agent.name}")
 
