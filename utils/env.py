@@ -1,9 +1,18 @@
 import gym
 from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable
-from gym.wrappers import FrameStack
+from gym.wrappers import FrameStack, LazyFrames
 from gym.spaces import Box
 import numpy as np
 from torchvision import transforms as T
+import torch
+
+
+def resolve_lazy_frames(lazy_frames: Any) -> torch.Tensor:
+    assert len(lazy_frames) == 4
+    rlt = torch.cat(cast(List[torch.Tensor], [lazy_frames[0], lazy_frames[1],
+                    lazy_frames[2], lazy_frames[3]])).unsqueeze(0)
+    assert rlt.shape == (1, 4, 84, 84)
+    return rlt
 
 
 class PreprocessObservation(gym.ObservationWrapper):

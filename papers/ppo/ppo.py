@@ -18,8 +18,8 @@ RANDOM_SEED = 0
 np.random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
 torch.cuda.manual_seed_all(RANDOM_SEED)
-torch.backends.cudnn.deterministic = True
-torch.use_deterministic_algorithms(True)
+# # torch.backends.cudnn.deterministic = True
+# torch.use_deterministic_algorithms(True)
 
 # %%
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -27,7 +27,7 @@ print(f"Using {device} device")
 
 # %%
 env = gym.make("PongDeterministic-v4")
-env.seed()
+env.seed(RANDOM_SEED)
 env.reset()
 TOTAL_ACTIONS = env.action_space.n
 
@@ -39,15 +39,13 @@ TOTAL_ACTIONS
 # %%
 # env = PreprocessObservation(env)
 env = WarpFrame(env)
-# env = EpisodicLifeEnv(env)
-# env = NoopResetEnv(env, 20)
 env = ToTensorEnv(env)
 env = FrameStack(env, num_stack=4)
 env
 
 
 # %%
-TRAINING_TIMES = 1000
+TRAINING_TIMES = 1_00_0000
 
 agent = Agent(env, PPO(TOTAL_ACTIONS), Preprocess())
 training_rwds: List[int] = []
@@ -56,7 +54,7 @@ print(f"agent name: {agent.name}")
 with tqdm(total=TRAINING_TIMES) as pbar:
     frames = 0
     while frames < TRAINING_TIMES:
-        agent.reset()
+        agent.reset(['algorithm'])
         i = 0
         end = False
         while not end and frames < TRAINING_TIMES:
@@ -67,6 +65,16 @@ with tqdm(total=TRAINING_TIMES) as pbar:
 
         frames += i
         pbar.update(i)
+
+        training_rwds.append(np.sum([r for r in agent.episode_reward]))
+
+        pbar.set_postfix(
+            rwd=training_rwds[-1],
+            # sigma=sigma,
+            # memory_ratio=len(agent.algm.replay_memory) / 25_0000,
+            target=agent.algm.target,
+            loss=agent.algm.loss
+        )
 
         if frames >= 3_00_0000:
             print("reached 3_00_0000 frames, end!")
@@ -93,8 +101,17 @@ MAX_EPISODE_LENGTH = 18_000
 rwds: List[int] = []
 agent.toggleEval(True)
 
+eval_env = gym.make("PongDeterministic-v4", render_mode = 'human')
+eval_env.seed(RANDOM_SEED)
+eval_env.reset()
+eval_env = WarpFrame(env)
+eval_env = ToTensorEnv(env)
+eval_env = FrameStack(env, num_stack=4)
+
+agent.env = eval_env
+
 for _ in tqdm(range(EVALUATION_TIMES)):
-    agent.reset()
+    agent.reset(['algorithm'])
 
     end = False
     i = 0
@@ -102,7 +119,9 @@ for _ in tqdm(range(EVALUATION_TIMES)):
     while not end and i < MAX_EPISODE_LENGTH:
         (o, end) = agent.step()
         i += 1
-        env.render()
+        # env.render()
     rwds.append(np.sum([r for r in agent.episode_reward]))
 
 np.save(f"./eval_rwds_{agent.name}.arr", np.asarray(rwds))
+
+# %%
