@@ -28,6 +28,8 @@ print(f"Using {device} device")
 # %%
 env = gym.make("PongDeterministic-v4")
 env.seed(RANDOM_SEED)
+env.action_space.seed(RANDOM_SEED)
+env.observation_space.seed(RANDOM_SEED)
 env.reset()
 TOTAL_ACTIONS = env.action_space.n
 
@@ -103,10 +105,10 @@ agent.toggleEval(True)
 
 eval_env = gym.make("PongDeterministic-v4", render_mode = 'human')
 eval_env.seed(RANDOM_SEED)
+eval_env = WarpFrame(eval_env)
+eval_env = ToTensorEnv(eval_env)
+eval_env = FrameStack(eval_env, num_stack=4)
 eval_env.reset()
-eval_env = WarpFrame(env)
-eval_env = ToTensorEnv(env)
-eval_env = FrameStack(env, num_stack=4)
 
 agent.env = eval_env
 

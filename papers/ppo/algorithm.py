@@ -42,9 +42,10 @@ class Actor(nn.Module):
             nn.ReLU(),
             nn.Conv2d(32, 64, (4, 4), 2),
             nn.ReLU(),
-            nn.Conv2d(64, 32, (3, 3), 1),
+            nn.Conv2d(64, 64, (3, 3), 1),
+            nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(7 * 7 * 32, 256),
+            nn.Linear(7 * 7 * 64, 256),
             nn.ReLU(),
             nn.Linear(256, n_actions),
             nn.Softmax(dim=1),
@@ -88,6 +89,8 @@ class PPO(AlgorithmInterface[State, Action]):
         self.actor = Actor(n_actions).to(DEVICE)
         self.critic = Critic().to(DEVICE)
         self.times = -1
+
+        self.epoch = 10
 
         self.gamma = gamma
         self.update_freq = 250
@@ -157,76 +160,78 @@ class PPO(AlgorithmInterface[State, Action]):
 
         assert log_probs.shape == (len(self.memory) + 1, 1)
 
-        predict_values = self.critic(all_states)
+        for _ in range(self.epoch):
 
-        assert predict_values.shape == (len(self.memory) + 1, 1)
+            predict_values = self.critic(all_states)
 
-        rets = cast(List[float], [])
+            assert predict_values.shape == (len(self.memory) + 1, 1)
 
-        T = len(self.memory)
+            rets = cast(List[float], [])
 
-        v_st = self.critic(resolve_lazy_frames(st))
-        for t, (_, _, _, _, _) in enumerate(self.memory):
-            _ret = 0.0
+            T = len(self.memory)
 
-            for j in range(t, T):
-                (_, _, r, _, _) = self.memory[j]
-                _ret += self.gamma ** (j - t) * r
+            v_st = self.critic(resolve_lazy_frames(st))
+            for t, (_, _, _, _, _) in enumerate(self.memory):
+                _ret = 0.0
 
-            _ret += self.gamma ** (T - t) * v_st
+                for j in range(t, T):
+                    (_, _, r, _, _) = self.memory[j]
+                    _ret += self.gamma ** (j - t) * r
 
-            rets.append(_ret)
+                _ret += self.gamma ** (T - t) * v_st
 
-        rets.append(v_st)
+                rets.append(_ret)
 
-        rets = torch.cat(cast(List[torch.Tensor], rets))
-        assert rets.shape == (len(self.memory) + 1, 1)
+            rets.append(v_st)
 
-        advs = (rets - predict_values).detach()
+            rets = torch.cat(cast(List[torch.Tensor], rets))
+            assert rets.shape == (len(self.memory) + 1, 1)
 
-        assert advs.shape == (len(self.memory) + 1, 1)
+            advs = (rets - predict_values).detach()
 
-        ratios = torch.exp(Categorical(
-            self.actor(all_states)).log_prob(actions.squeeze(1)).unsqueeze(1) - log_probs)
-        # ratios = [
-        #     torch.exp(Categorical(self.actor(resolve_lazy_frames(s))).log_prob(
-        #         torch.tensor(a)) - info["log_prob"])
-        #     for (s, (a, info), _, _, _) in self.memory
-        # ]
+            assert advs.shape == (len(self.memory) + 1, 1)
 
-        # ratios.append(torch.exp(Categorical(self.actor(
-        #     resolve_lazy_frames(st))).log_prob(torch.tensor(at[0])) - at[1]['log_prob']))
+            ratios = torch.exp(Categorical(
+                self.actor(all_states)).log_prob(actions.squeeze(1)).unsqueeze(1) - log_probs)
+            # ratios = [
+            #     torch.exp(Categorical(self.actor(resolve_lazy_frames(s))).log_prob(
+            #         torch.tensor(a)) - info["log_prob"])
+            #     for (s, (a, info), _, _, _) in self.memory
+            # ]
 
-        # ratios = torch.stack(ratios)
-        assert ratios.shape == (len(self.memory) + 1, 1)
+            # ratios.append(torch.exp(Categorical(self.actor(
+            #     resolve_lazy_frames(st))).log_prob(torch.tensor(at[0])) - at[1]['log_prob']))
 
-        loss_clip = torch.min(
-            ratios * advs, torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs)
+            # ratios = torch.stack(ratios)
+            assert ratios.shape == (len(self.memory) + 1, 1)
 
-        assert loss_clip.shape == (len(self.memory) + 1, 1)
+            loss_clip = torch.min(
+                ratios * advs, torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs)
 
-        loss_entropy = [Categorical(self.actor(resolve_lazy_frames(s))).entropy()
-                        for (s, _, _, _, _) in self.memory]
-        loss_entropy.append(Categorical(
-            self.actor(resolve_lazy_frames(st))).entropy())
+            assert loss_clip.shape == (len(self.memory) + 1, 1)
 
-        loss_entropy = torch.stack(loss_entropy)
-        assert loss_entropy.shape == (len(self.memory) + 1, 1)
+            loss_entropy = [Categorical(self.actor(resolve_lazy_frames(s))).entropy()
+                            for (s, _, _, _, _) in self.memory]
+            loss_entropy.append(Categorical(
+                self.actor(resolve_lazy_frames(st))).entropy())
 
-        target = -loss_clip - self.c2 * loss_entropy
-        assert target.shape == (len(self.memory) + 1, 1)
+            loss_entropy = torch.stack(loss_entropy)
+            assert loss_entropy.shape == (len(self.memory) + 1, 1)
 
-        self.actor_optimizer.zero_grad()
-        self.target = target.mean()
-        self.target.backward()
-        self.actor_optimizer.step()
+            target = -loss_clip - self.c2 * loss_entropy
+            assert target.shape == (len(self.memory) + 1, 1)
 
-        loss_values = self.loss_func(predict_values, rets)
+            self.actor_optimizer.zero_grad()
+            self.target = target.mean()
+            self.target.backward()
+            self.actor_optimizer.step()
 
-        self.critic_optimizer.zero_grad()
-        self.loss = loss_values
-        loss_values.backward()
-        self.critic_optimizer.step()
+            loss_values = self.loss_func(predict_values, rets)
+
+            self.critic_optimizer.zero_grad()
+            self.loss = loss_values
+            loss_values.backward()
+            self.critic_optimizer.step()
 
         self.reset()
 
