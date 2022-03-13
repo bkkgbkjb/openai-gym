@@ -119,7 +119,7 @@ class PPO(AlgorithmInterface[State, Action]):
     def take_action(self, state: State) -> ActionInfo[Action]:
 
         (act_probs, value) = self.network(
-            resolve_lazy_frames(state))
+            resolve_lazy_frames(state).to(DEVICE))
         dist = Categorical(act_probs)
         act = dist.sample()
 
@@ -167,8 +167,10 @@ class PPO(AlgorithmInterface[State, Action]):
     @torch.no_grad()
     def compute_advantages_and_returns(self) -> Tuple[torch.Tensor, torch.Tensor]:
 
-        returns = torch.zeros(
-            len(self.memory) - len(list(self.no_stop_step)))
+        values = torch.tensor([info['value'] for (
+            _, (_, info), _) in self.no_stop_step], dtype=torch.float32)
+
+        returns = torch.zeros_like(values)
 
         (_, la, _) = self.memory[-1]
 
@@ -188,9 +190,6 @@ class PPO(AlgorithmInterface[State, Action]):
                 next_is_stop = False
                 next_value = returns[-(i+1)]
                 i += 1
-
-        values = torch.tensor([info['value'] for (
-            _, (_, info), _) in self.no_stop_step], dtype=torch.float32)
 
         return returns - values, returns
 
@@ -212,7 +211,7 @@ class PPO(AlgorithmInterface[State, Action]):
                 L = len(batch)
 
                 states = torch.cat([resolve_lazy_frames(s)
-                                    for (s, _, _) in batch])
+                                    for (s, _, _) in batch]).to(DEVICE)
 
                 states.shape == (L, 4, 84, 84)
 
