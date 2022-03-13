@@ -83,7 +83,7 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.loss: float = -1.0
 
-    def reset(self):
+    def on_reset(self):
         pass
 
     def allowed_actions(self, _: State) -> List[Action]:
@@ -239,9 +239,9 @@ class DDQNAlgorithm(DQNAlgorithm, AlgorithmInterface[State, Action]):
 
 class Preprocess(PreprocessInterface[Observation, Action, State]):
     def __init__(self):
-        self.reset()
+        pass
 
-    def reset(self):
+    def on_reset(self):
         pass
 
     def get_current_state(self, h: List[Observation]) -> State:

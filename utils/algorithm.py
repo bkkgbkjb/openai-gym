@@ -35,5 +35,5 @@ class AlgorithmInterface(Protocol[S, A]):
         raise NotImplementedError()
 
     @abstractmethod
-    def reset(self):
+    def on_reset(self):
         raise NotImplementedError()

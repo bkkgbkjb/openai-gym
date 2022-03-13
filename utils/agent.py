@@ -44,7 +44,6 @@ class Agent(Generic[O, S, A]):
 
     def reset(
         self,
-        comps: Union[List[Literal["preprocess", "algorithm"]], Literal["all"]] = [],
     ):
         self.ready_act: Optional[Tuple[A, Any]] = None
         self.end = False
@@ -60,10 +59,8 @@ class Agent(Generic[O, S, A]):
             self.preprocess.get_current_state(self.episode_observation)
         )
 
-        if comps == "all" or "preprocess" in comps:
-            self.preprocess.reset()
-        if comps == "all" or "algorithm" in comps:
-            self.algm.reset()
+        self.preprocess.on_reset()
+        self.algm.on_reset()
 
     def toggleEval(self, newEval: bool):
         self.eval = newEval

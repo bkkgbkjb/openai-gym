@@ -55,7 +55,7 @@ max_decry_times = 100_0000
 with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
     frames = 0
     while frames < TRAINING_TIMES:
-        agent.reset(["preprocess"])
+        agent.reset()
         i = 0
         end = False
         while not end and frames < TRAINING_TIMES:
@@ -112,7 +112,7 @@ rwds: List[int] = []
 agent.toggleEval(True)
 
 for _ in tqdm(range(EVALUATION_TIMES)):
-    agent.reset(["preprocess"])
+    agent.reset()
 
     end = False
     i = 1
