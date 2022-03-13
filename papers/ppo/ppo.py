@@ -56,7 +56,7 @@ print(f"agent name: {agent.name}")
 with tqdm(total=TRAINING_TIMES) as pbar:
     frames = 0
     while frames < TRAINING_TIMES:
-        agent.reset(['algorithm'])
+        agent.reset()
         i = 0
         end = False
         while not end and frames < TRAINING_TIMES:
@@ -113,7 +113,7 @@ eval_env.reset()
 agent.env = eval_env
 
 for _ in tqdm(range(EVALUATION_TIMES)):
-    agent.reset(['algorithm'])
+    agent.reset()
 
     end = False
     i = 0

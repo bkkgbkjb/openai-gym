@@ -1,6 +1,6 @@
 from importlib_metadata import requires
 import setup
-from utils.common import ActionInfo, StepGeneric, Episode, TransitionGeneric
+from utils.common import ActionInfo, StepGeneric, Episode, TransitionGeneric, NotNoneStepGeneric
 from torch import nn
 import math
 from collections import deque
@@ -28,6 +28,7 @@ Reward = int
 
 Transition = TransitionGeneric[State, Action]
 Step = StepGeneric[State, ActionInfo[Action]]
+NotNoneStep = NotNoneStepGeneric[State, ActionInfo[Action]]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -116,14 +117,13 @@ class PPO(AlgorithmInterface[State, Action]):
         return list(range(self.n_actions))
 
     def take_action(self, state: State) -> ActionInfo[Action]:
-        with torch.no_grad():
 
-            (act_probs, value) = self.network(
-                resolve_lazy_frames(state))
-            dist = Categorical(act_probs)
-            act = dist.sample()
+        (act_probs, value) = self.network(
+            resolve_lazy_frames(state))
+        dist = Categorical(act_probs)
+        act = dist.sample()
 
-            return (cast(int, act.item()), {"log_prob": dist.log_prob(act), 'entropy': dist.entropy(), 'value': value})
+        return (cast(int, act.item()), {"log_prob": dist.log_prob(act), 'entropy': dist.entropy(), 'value': value})
 
     def append_step(self, s: State, a: ActionInfo[Action], r: Reward, sn: State, an: Optional[ActionInfo[Action]]):
         if len(self.memory) == 0:
@@ -132,6 +132,7 @@ class PPO(AlgorithmInterface[State, Action]):
 
         (ls, la, lr) = self.memory[-1]
         if la is not None:
+            assert lr is None
             self.memory[-1] = (ls, la, r)
             self.memory.append((sn, an, None))
             return
@@ -158,114 +159,103 @@ class PPO(AlgorithmInterface[State, Action]):
             # self.reset()
             self.memory: List[Step] = []
 
+    @property
+    def no_stop_step(self) -> Iterable[NotNoneStep]:
+
+        return ((s, a, cast(Reward, r)) for (s, a, r) in self.memory[:-1] if a is not None)
+
+    @torch.no_grad()
+    def compute_advantages_and_returns(self) -> Tuple[torch.Tensor, torch.Tensor]:
+
+        returns = torch.zeros(
+            len(self.memory) - len(list(self.no_stop_step)))
+
+        (_, la, _) = self.memory[-1]
+
+        next_is_stop = la is None
+        next_value = 0 if next_is_stop else la[1]['value']
+
+        i = 0
+        for (_, a, _) in reversed(self.memory[:-1]):
+            if a is None:
+                assert not next_is_stop
+                next_is_stop = True
+                next_value = 0
+            else:
+                (_, info) = a
+                returns[-(i+1)] = info['value'] + \
+                    0 if next_is_stop else self.gamma * next_value
+                next_is_stop = False
+                next_value = returns[-(i+1)]
+                i += 1
+
+        values = torch.tensor([info['value'] for (
+            _, (_, info), _) in self.no_stop_step], dtype=torch.float32)
+
+        return returns - values, returns
+
     def train(self):
-        L = len(self.memory)
-        states = torch.cat([resolve_lazy_frames(s)
-                            for (s, _, _, _, _) in self.memory])
-
-        states.shape == (L, 4,  84, 84)
-
-        next_states = torch.cat(
-            [resolve_lazy_frames(sn) for (_, _, _, sn, _) in self.memory])
-
-        next_states.shape == (L, 4, 84, 84)
-
-        rets = torch.tensor(
-            [r for (_, _, r, _, _) in self.memory]).unsqueeze(1)
-
-        assert rets.shape == (L, 1)
-
-        actions = torch.tensor(
-            [a for (_, (a, _), _, _, _) in self.memory]).unsqueeze(1)
-
-        assert actions.shape == (L, 1)
-
-        log_probs = torch.tensor(
-            [i['log_prob'] for (_, (_, i), _, _, _) in self.memory]).unsqueeze(1)
-
-        assert log_probs.shape == (L, 1)
-
-        # dones = [an for (_, _, _, _ an) in self.memory]
-        dones = torch.tensor(
-            [0.0 if an is None else 1.0 for (_, _, _, _, an) in self.memory]).unsqueeze(1)
-        # dones = torch.tensor([an for ])
-        assert dones.shape == (L, 1)
+        (advantages, returns) = self.compute_advantages_and_returns()
+        memory = list(self.no_stop_step)
 
         for _ in range(self.epoch):
-            batch = np.random.choice(self.memory, self.batch_size)
+            for _ in range(math.ceil(1024 / self.batch_size)):
+                batch_index = np.random.choice(len(memory), self.batch_size)
 
-            for _ in range(self.epoch):
+                batch: List[NotNoneStep] = []
+                for i in batch_index:
+                    batch.append(memory[i])
 
-                predict_values = self.network.get_value(states)
+                advs = advantages[batch_index]
+                rets = returns[batch_index]
 
-                assert predict_values.shape == (len(self.memory) + 1, 1)
+                L = len(batch)
 
-                rets = cast(List[float], [])
+                states = torch.cat([resolve_lazy_frames(s)
+                                    for (s, _, _) in batch])
 
-                T = len(self.memory)
+                states.shape == (L, 4, 84, 84)
 
-                v_st = self.network.get_value(resolve_lazy_frames(st))
-                for t, (_, _, _, _, _) in enumerate(self.memory):
-                    _ret = 0.0
+                old_acts = torch.tensor(
+                    [a for (_, (a, _), _) in batch]).unsqueeze(1)
 
-                    for j in range(t, T):
-                        (_, _, r, _, _) = self.memory[j]
-                        _ret += self.gamma ** (j - t) * r
+                assert old_acts.shape == (L, 1)
 
-                    _ret += self.gamma ** (T - t) * v_st
+                (act_probs, new_vals) = self.network(states)
+                dists = Categorical(act_probs)
 
-                    rets.append(_ret)
+                entropy: torch.Tensor = dists.entropy()
+                assert entropy.shape == (L, 1)
+                assert entropy.requires_grad
 
-                rets.append(v_st)
+                new_log_prob = dists.log_prob(old_acts)
+                assert new_log_prob.shape == (L, 1)
 
-                rets = torch.cat(cast(List[torch.Tensor], rets))
-                assert rets.shape == (len(self.memory) + 1, 1)
+                old_log_probs = torch.cat(
+                    [i['log_prob'] for (_, (_, i), _) in memory]).unsqueeze(1)
 
-                advs = (rets - predict_values).detach()
+                assert old_log_probs.shape == (L, 1)
+                assert old_log_probs.requires_grad
 
-                assert advs.shape == (len(self.memory) + 1, 1)
+                ratios: torch.Tensor = (new_log_prob - old_log_probs).exp()
 
-                ratios = torch.exp(Categorical(
-                    self.actor(states)).log_prob(actions.squeeze(1)).unsqueeze(1) - log_probs)
-                # ratios = [
-                #     torch.exp(Categorical(self.actor(resolve_lazy_frames(s))).log_prob(
-                #         torch.tensor(a)) - info["log_prob"])
-                #     for (s, (a, info), _, _, _) in self.memory
-                # ]
-
-                # ratios.append(torch.exp(Categorical(self.actor(
-                #     resolve_lazy_frames(st))).log_prob(torch.tensor(at[0])) - at[1]['log_prob']))
-
-                # ratios = torch.stack(ratios)
-                assert ratios.shape == (len(self.memory) + 1, 1)
+                assert ratios.requires_grad
 
                 loss_clip = torch.min(
                     ratios * advs, torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs)
 
-                assert loss_clip.shape == (len(self.memory) + 1, 1)
+                assert loss_clip.shape == (L, 1)
+                assert loss_clip.requires_grad
 
-                loss_entropy = [Categorical(self.actor(resolve_lazy_frames(s))).entropy()
-                                for (s, _, _, _, _) in self.memory]
-                loss_entropy.append(Categorical(
-                    self.actor(resolve_lazy_frames(st))).entropy())
+                loss_values = new_vals - rets
 
-                loss_entropy = torch.stack(loss_entropy)
-                assert loss_entropy.shape == (len(self.memory) + 1, 1)
+                target = -loss_clip - self.c2 * entropy + self.c1 * loss_values
+                assert target.shape == (L, 1)
 
-                target = -loss_clip - self.c2 * loss_entropy
-                assert target.shape == (len(self.memory) + 1, 1)
-
-                self.actor_optimizer.zero_grad()
+                self.optimzer.zero_grad()
                 self.target = target.mean()
                 self.target.backward()
-                self.actor_optimizer.step()
-
-                loss_values = self.loss_func(predict_values, rets)
-
-                self.critic_optimizer.zero_grad()
-                self.loss = loss_values
-                loss_values.backward()
-                self.critic_optimizer.step()
+                self.optimzer.step()
 
     def on_termination(
         self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
@@ -287,6 +277,9 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
 
     def reset(self):
         self.last_action = None
+
+    def on_reset(self):
+        self.reset()
 
     def allowed_actions(self, state: State) -> List[Action]:
         return list(range(self.n_actions))
@@ -318,9 +311,9 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
 
 class Preprocess(PreprocessInterface[Observation, Action, State]):
     def __init__(self):
-        self.reset()
+        pass
 
-    def reset(self):
+    def on_reset(self):
         pass
 
     def get_current_state(self, h: List[Observation]) -> State:
