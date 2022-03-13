@@ -31,13 +31,13 @@ Transition = TransitionGeneric[State, Action]
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Actor(nn.Module):
+class ActorCritic(nn.Module):
     def __init__(self, n_actions: int):
         super().__init__()
 
         self.n_actions = n_actions
 
-        self.network = nn.Sequential(
+        self.base = nn.Sequential(
             nn.Conv2d(4, 32, (8, 8), 4),
             nn.ReLU(),
             nn.Conv2d(32, 64, (4, 4), 2),
@@ -45,64 +45,62 @@ class Actor(nn.Module):
             nn.Conv2d(64, 64, (3, 3), 1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(7 * 7 * 64, 256),
+            nn.Linear(7 * 7 * 64, 512),
             nn.ReLU(),
-            nn.Linear(256, n_actions),
-            nn.Softmax(dim=1),
+            # nn.Linear(256, n_actions),
+            # nn.Softmax(dim=1),
         )
 
-    def forward(self, s: State) -> torch.Tensor:
-        rlt = cast(torch.Tensor, self.network(
-            s.to(DEVICE)))
-        assert rlt.shape == (s.size(0), self.n_actions)
-        return rlt.cpu()
+        self.actor = nn.Sequential(
+            nn.Linear(512, n_actions), nn.Softmax(dim=1))
+        self.critic = nn.Linear(512, 1)
 
+    def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
+        base = self.base(s)
+        action = self.actor(base)
+        value = self.critic(base)
 
-class Critic(nn.Module):
-    def __init__(self):
-        super().__init__()
+        assert action.shape == (s.size(0), self.n_actions)
+        assert value.shape == (s.size(0), 1)
 
-        self.network = nn.Sequential(
-            nn.Conv2d(4, 32, (8, 8), 4),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, (4, 4), 2),
-            nn.ReLU(),
-            nn.Conv2d(64, 32, (3, 3), 1),
-            nn.Flatten(),
-            nn.Linear(7 * 7 * 32, 256),
-            nn.ReLU(),
-            nn.Linear(256, 1),
-        )
+        return (action, value)
 
-    def forward(self, s: State) -> torch.Tensor:
-        rlt = cast(torch.Tensor, self.network(
-            s.to(DEVICE)))
-        assert rlt.shape == (s.size(0), 1)
-        return rlt.cpu()
+    def get_value(self, s: State) -> torch.Tensor:
+        base = self.base(s)
+        value = self.critic(base)
+        assert value.shape == (s.size(0), 1)
+
+        return value
+
+    def get_action_probs(self, s: State) -> torch.Tensor:
+        base = self.base(s)
+        action_probs = self.actor(base)
+        assert action_probs.shape == (s.size(0), self.n_actions)
+
+        return action_probs
 
 
 class PPO(AlgorithmInterface[State, Action]):
-    def __init__(self, n_actions: int, sigma: float = 0.2, c2: float = 0.01, gamma: float = 0.99):
+    def __init__(self, n_actions: int, sigma: float = 0.2, c1: float = 0.25, c2: float = 0.01, gamma: float = 0.99):
         self.frame_skip = 0
         self.name = "ppo"
         self.n_actions = n_actions
-        self.actor = Actor(n_actions).to(DEVICE)
-        self.critic = Critic().to(DEVICE)
+        # self.actor = Actor(n_actions).to(DEVICE)
+        # self.critic = Critic().to(DEVICE)
+        self.network = ActorCritic(n_actions).to(DEVICE)
         self.times = -1
 
         self.epoch = 10
 
         self.gamma = gamma
         self.update_freq = 250
-        self.actor_optimizer = torch.optim.Adam(
-            self.actor.parameters(), 1e-4)
-
-        self.critic_optimizer = torch.optim.Adam(
-            self.critic.parameters(), 2.5e-4)
+        self.optimzer = torch.optim.Adam(
+            self.network.parameters(), 1e-4, eps=1e-5)
 
         self.sigma = sigma
+        self.c1 = c1
         self.c2 = c2
-        self.loss_func = torch.nn.MSELoss()
+        self.loss_func = torch.nn.MSELoss().to(DEVICE)
 
         self.loss = -1
         self.target = -1
@@ -113,11 +111,12 @@ class PPO(AlgorithmInterface[State, Action]):
     def take_action(self, state: State) -> ActionInfo[Action]:
         with torch.no_grad():
 
-            act_probs = self.actor(resolve_lazy_frames(state))
+            act_probs = self.network.get_action_probs(
+                resolve_lazy_frames(state))
             dist = Categorical(act_probs)
             act = dist.sample()
 
-            return (cast(int, act.item()), {"log_prob": dist.log_prob(act)})
+            return (cast(int, act.item()), {"log_prob": dist.log_prob(act), 'entropy': dist.entropy()})
 
     def after_step(
         self,
@@ -132,8 +131,8 @@ class PPO(AlgorithmInterface[State, Action]):
 
         if self.times != 0 and self.times % self.update_freq == 0:
             self.train()
+            self.reset()
 
-        pass
 
     def train(self):
         (_, _, _, st, at) = self.memory[-1]
