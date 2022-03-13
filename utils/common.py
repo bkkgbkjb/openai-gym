@@ -3,12 +3,12 @@ from typing import Dict, Tuple, TypeVar, Optional, List
 
 OS = TypeVar("OS")
 AS = TypeVar("AS")
-Step = Tuple[OS, Optional[AS], Optional[float]]
+StepGeneric = Tuple[OS, Optional[AS], Optional[float]]
 
 
 OE = TypeVar("OE")
 AE = TypeVar("AE")
-Episode = List[Step[OE, AE]]
+Episode = List[StepGeneric[OE, AE]]
 
 AA = TypeVar("AA")
 ActionInfo = Tuple[AA, Dict]

@@ -19,7 +19,7 @@ from typing import (
 )
 from utils.algorithm import AlgorithmInterface
 from utils.preprocess import PreprocessInterface
-from utils.common import ActionInfo, Step, Episode
+from utils.common import ActionInfo, StepGeneric, Episode
 
 
 A = TypeVar("A")

@@ -1,5 +1,5 @@
 import setup
-from utils.common import ActionInfo, Step, Episode, TransitionGeneric
+from utils.common import ActionInfo, StepGeneric, Episode, TransitionGeneric
 from torch import nn
 import math
 from collections import deque
