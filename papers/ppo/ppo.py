@@ -17,6 +17,7 @@ import numpy as np
 RANDOM_SEED = 0
 np.random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
+torch.autograd.set_detect_anomaly(True)
 torch.cuda.manual_seed_all(RANDOM_SEED)
 # # torch.backends.cudnn.deterministic = True
 # torch.use_deterministic_algorithms(True)

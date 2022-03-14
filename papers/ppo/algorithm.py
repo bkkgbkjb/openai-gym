@@ -1,6 +1,12 @@
 from importlib_metadata import requires
 import setup
-from utils.common import ActionInfo, StepGeneric, Episode, TransitionGeneric, NotNoneStepGeneric
+from utils.common import (
+    ActionInfo,
+    StepGeneric,
+    Episode,
+    TransitionGeneric,
+    NotNoneStepGeneric,
+)
 from torch import nn
 import math
 from collections import deque
@@ -53,8 +59,7 @@ class ActorCritic(nn.Module):
             # nn.Softmax(dim=1),
         )
 
-        self.actor = nn.Sequential(
-            nn.Linear(512, n_actions), nn.Softmax(dim=1))
+        self.actor = nn.Sequential(nn.Linear(512, n_actions), nn.Softmax(dim=1))
         self.critic = nn.Linear(512, 1)
 
     def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -83,7 +88,14 @@ class ActorCritic(nn.Module):
 
 
 class PPO(AlgorithmInterface[State, Action]):
-    def __init__(self, n_actions: int, sigma: float = 0.2, c1: float = 0.25, c2: float = 0.01, gamma: float = 0.99):
+    def __init__(
+        self,
+        n_actions: int,
+        sigma: float = 0.2,
+        c1: float = 0.25,
+        c2: float = 0.01,
+        gamma: float = 0.99,
+    ):
         self.frame_skip = 0
         self.name = "ppo"
         self.n_actions = n_actions
@@ -96,8 +108,7 @@ class PPO(AlgorithmInterface[State, Action]):
 
         self.gamma = gamma
         self.update_freq = 250
-        self.optimzer = torch.optim.Adam(
-            self.network.parameters(), 1e-4, eps=1e-5)
+        self.optimzer = torch.optim.Adam(self.network.parameters(), 1e-4, eps=1e-5)
 
         self.sigma = sigma
         self.c1 = c1
@@ -118,14 +129,23 @@ class PPO(AlgorithmInterface[State, Action]):
 
     def take_action(self, state: State) -> ActionInfo[Action]:
 
-        (act_probs, value) = self.network(
-            resolve_lazy_frames(state).to(DEVICE))
+        (act_probs, value) = self.network(resolve_lazy_frames(state).to(DEVICE))
         dist = Categorical(act_probs)
         act = dist.sample()
 
-        return (cast(int, act.item()), {"log_prob": dist.log_prob(act), 'entropy': dist.entropy(), 'value': value})
+        return (
+            cast(int, act.item()),
+            {"log_prob": dist.log_prob(act), "entropy": dist.entropy(), "value": value},
+        )
 
-    def append_step(self, s: State, a: ActionInfo[Action], r: Reward, sn: State, an: Optional[ActionInfo[Action]]):
+    def append_step(
+        self,
+        s: State,
+        a: ActionInfo[Action],
+        r: Reward,
+        sn: State,
+        an: Optional[ActionInfo[Action]],
+    ):
         if len(self.memory) == 0:
             self.memory.extend([(s, a, r), (sn, an, None)])
             return
@@ -162,20 +182,21 @@ class PPO(AlgorithmInterface[State, Action]):
     @property
     def no_stop_step(self) -> Iterable[NotNoneStep]:
 
-        return ((s, a, cast(Reward, r)) for (s, a, r) in self.memory[:-1] if a is not None)
+        return (
+            (s, a, cast(Reward, r)) for (s, a, r) in self.memory[:-1] if a is not None
+        )
 
     @torch.no_grad()
     def compute_advantages_and_returns(self) -> Tuple[torch.Tensor, torch.Tensor]:
 
-        values = torch.tensor([info['value'] for (
-            _, (_, info), _) in self.no_stop_step], dtype=torch.float32)
+        values = [i["value"].item() for (_, (_, i), _) in self.no_stop_step]
 
-        returns = torch.zeros_like(values)
+        returns = [0.0 for _ in range(len(values))]
 
         (_, la, _) = self.memory[-1]
 
         next_is_stop = la is None
-        next_value = 0 if next_is_stop else la[1]['value']
+        next_value = 0 if next_is_stop else la[1]["value"].item()
 
         i = 0
         for (_, a, _) in reversed(self.memory[:-1]):
@@ -185,11 +206,18 @@ class PPO(AlgorithmInterface[State, Action]):
                 next_value = 0
             else:
                 (_, info) = a
-                returns[-(i+1)] = info['value'] + \
-                    0 if next_is_stop else self.gamma * next_value
+                returns[-(i + 1)] = (
+                    info["value"].item() + 0
+                    if next_is_stop
+                    else self.gamma * next_value
+                )
+
                 next_is_stop = False
-                next_value = returns[-(i+1)]
+                next_value = returns[-(i + 1)]
                 i += 1
+
+        values = torch.tensor(values, dtype=torch.float32)
+        returns = torch.tensor(returns, dtype=torch.float32)
 
         return returns - values, returns
 
@@ -210,30 +238,29 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 L = len(batch)
 
-                states = torch.cat([resolve_lazy_frames(s)
-                                    for (s, _, _) in batch]).to(DEVICE)
+                states = torch.cat([resolve_lazy_frames(s) for (s, _, _) in batch]).to(
+                    DEVICE
+                )
 
                 states.shape == (L, 4, 84, 84)
 
-                old_acts = torch.tensor(
-                    [a for (_, (a, _), _) in batch]).unsqueeze(1)
+                old_acts = torch.tensor([a for (_, (a, _), _) in batch])
 
-                assert old_acts.shape == (L, 1)
+                assert old_acts.shape == (L,)
 
                 (act_probs, new_vals) = self.network(states)
                 dists = Categorical(act_probs)
 
                 entropy: torch.Tensor = dists.entropy()
-                assert entropy.shape == (L, 1)
+                assert entropy.shape == (L,)
                 assert entropy.requires_grad
 
                 new_log_prob = dists.log_prob(old_acts)
-                assert new_log_prob.shape == (L, 1)
+                assert new_log_prob.shape == (L,)
 
-                old_log_probs = torch.cat(
-                    [i['log_prob'] for (_, (_, i), _) in memory]).unsqueeze(1)
+                old_log_probs = torch.cat([i["log_prob"] for (_, (_, i), _) in batch])
 
-                assert old_log_probs.shape == (L, 1)
+                assert old_log_probs.shape == (L,)
                 assert old_log_probs.requires_grad
 
                 ratios: torch.Tensor = (new_log_prob - old_log_probs).exp()
@@ -241,15 +268,17 @@ class PPO(AlgorithmInterface[State, Action]):
                 assert ratios.requires_grad
 
                 loss_clip = torch.min(
-                    ratios * advs, torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs)
+                    ratios * advs,
+                    torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs,
+                )
 
-                assert loss_clip.shape == (L, 1)
+                assert loss_clip.shape == (L,)
                 assert loss_clip.requires_grad
 
-                loss_values = new_vals - rets
+                loss_values = new_vals.squeeze(1) - rets
 
                 target = -loss_clip - self.c2 * entropy + self.c1 * loss_values
-                assert target.shape == (L, 1)
+                assert target.shape == (L,)
 
                 self.optimzer.zero_grad()
                 self.target = target.mean()
