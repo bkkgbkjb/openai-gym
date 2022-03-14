@@ -57,23 +57,24 @@ class ActorCritic(nn.Module):
             nn.ReLU(),
             # nn.Linear(256, n_actions),
             # nn.Softmax(dim=1),
-        )
+        ).to(DEVICE)
 
-        self.actor = nn.Sequential(nn.Linear(512, n_actions), nn.Softmax(dim=1))
-        self.critic = nn.Linear(512, 1)
+        self.actor = nn.Sequential(
+            nn.Linear(512, n_actions), nn.Softmax(dim=1)).to(DEVICE)
+        self.critic = nn.Linear(512, 1).to(DEVICE)
 
     def forward(self):
         raise NotImplementedError()
 
     def get_action_probs_and_value(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
-        base = self.base(s)
+        base = self.base(s.to(DEVICE))
         action_probs = self.actor(base)
         value = self.critic(base)
 
         assert action_probs.shape == (s.size(0), self.n_actions)
         assert value.shape == (s.size(0), 1)
 
-        return (action_probs, value)
+        return (action_probs.cpu(), value.cpu())
 
     # def get_value(self, s: State) -> torch.Tensor:
     #     base = self.base(s)
@@ -111,7 +112,8 @@ class PPO(AlgorithmInterface[State, Action]):
 
         self.gamma = gamma
         self.update_freq = 250
-        self.optimzer = torch.optim.Adam(self.network.parameters(), 1e-4, eps=1e-5)
+        self.optimzer = torch.optim.Adam(
+            self.network.parameters(), 1e-4, eps=1e-5)
 
         self.sigma = sigma
         self.c1 = c1
@@ -132,13 +134,15 @@ class PPO(AlgorithmInterface[State, Action]):
 
     def take_action(self, state: State) -> ActionInfo[Action]:
 
-        (act_probs, value) = self.network.get_action_probs_and_value(resolve_lazy_frames(state).to(DEVICE))
+        (act_probs, value) = self.network.get_action_probs_and_value(
+            resolve_lazy_frames(state).to(DEVICE))
         dist = Categorical(act_probs)
         act = dist.sample()
 
         return (
             cast(int, act),
-            {"log_prob": dist.log_prob(act), "entropy": dist.entropy(), "value": value},
+            {"log_prob": dist.log_prob(
+                act), "entropy": dist.entropy(), "value": value},
         )
 
     def append_step(
@@ -261,7 +265,8 @@ class PPO(AlgorithmInterface[State, Action]):
                 new_log_prob = dists.log_prob(old_acts)
                 assert new_log_prob.shape == (L,)
 
-                old_log_probs = torch.cat([i["log_prob"] for (_, (_, i), _) in batch])
+                old_log_probs = torch.cat([i["log_prob"]
+                                          for (_, (_, i), _) in batch])
 
                 assert old_log_probs.shape == (L,)
                 assert old_log_probs.requires_grad
