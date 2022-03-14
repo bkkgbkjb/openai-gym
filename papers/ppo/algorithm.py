@@ -62,29 +62,32 @@ class ActorCritic(nn.Module):
         self.actor = nn.Sequential(nn.Linear(512, n_actions), nn.Softmax(dim=1))
         self.critic = nn.Linear(512, 1)
 
-    def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
-        base = self.base(s)
-        action = self.actor(base)
-        value = self.critic(base)
+    def forward(self):
+        raise NotImplementedError()
 
-        assert action.shape == (s.size(0), self.n_actions)
-        assert value.shape == (s.size(0), 1)
-
-        return (action, value)
-
-    def get_value(self, s: State) -> torch.Tensor:
-        base = self.base(s)
-        value = self.critic(base)
-        assert value.shape == (s.size(0), 1)
-
-        return value
-
-    def get_action(self, s: State) -> torch.Tensor:
+    def get_action_probs_and_value(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
         base = self.base(s)
         action_probs = self.actor(base)
-        assert action_probs.shape == (s.size(0), self.n_actions)
+        value = self.critic(base)
 
-        return action_probs
+        assert action_probs.shape == (s.size(0), self.n_actions)
+        assert value.shape == (s.size(0), 1)
+
+        return (action_probs, value)
+
+    # def get_value(self, s: State) -> torch.Tensor:
+    #     base = self.base(s)
+    #     value = self.critic(base)
+    #     assert value.shape == (s.size(0), 1)
+
+    #     return value
+
+    # def get_action(self, s: State) -> torch.Tensor:
+    #     base = self.base(s)
+    #     action_probs = self.actor(base)
+    #     assert action_probs.shape == (s.size(0), self.n_actions)
+
+    #     return action_probs
 
 
 class PPO(AlgorithmInterface[State, Action]):
@@ -129,12 +132,12 @@ class PPO(AlgorithmInterface[State, Action]):
 
     def take_action(self, state: State) -> ActionInfo[Action]:
 
-        (act_probs, value) = self.network(resolve_lazy_frames(state).to(DEVICE))
+        (act_probs, value) = self.network.get_action_probs_and_value(resolve_lazy_frames(state).to(DEVICE))
         dist = Categorical(act_probs)
         act = dist.sample()
 
         return (
-            cast(int, act.item()),
+            cast(int, act),
             {"log_prob": dist.log_prob(act), "entropy": dist.entropy(), "value": value},
         )
 
@@ -248,7 +251,7 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 assert old_acts.shape == (L,)
 
-                (act_probs, new_vals) = self.network(states)
+                (act_probs, new_vals) = self.network.get_action_probs_and_value(states)
                 dists = Categorical(act_probs)
 
                 entropy: torch.Tensor = dists.entropy()
@@ -281,8 +284,8 @@ class PPO(AlgorithmInterface[State, Action]):
                 assert target.shape == (L,)
 
                 self.optimzer.zero_grad()
-                self.target = target.mean()
-                self.target.backward()
+                target.mean().backward()
+                # self.target.backward()
                 self.optimzer.step()
 
     def on_termination(
