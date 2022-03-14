@@ -163,11 +163,8 @@ class PPO(AlgorithmInterface[State, Action]):
             self.memory[-1] = (ls, la, r)
             self.memory.append((sn, an, None))
             return
-        else:
-            # assert a is None and r is None
-            self.memory.extend([(s, a, r), (sn, an, None)])
 
-        # self.memory.append((sn, an, None))
+        self.memory.extend([(s, a, r), (sn, an, None)])
 
     def after_step(
         self,
@@ -179,11 +176,8 @@ class PPO(AlgorithmInterface[State, Action]):
         (sn, an) = sa
         self.append_step(s, a, r, sn, an)
 
-        # self.memory.append((s, a, r, sn, an))
-
         if self.times != 0 and len(self.memory) == 1024:
             self.train()
-            # self.reset()
             self.memory: List[Step] = []
 
     @property
@@ -198,14 +192,14 @@ class PPO(AlgorithmInterface[State, Action]):
 
         values = [i["value"].item() for (_, (_, i), _) in self.no_stop_step]
 
-        returns = [0.0 for _ in range(len(values))]
+        # returns = [0.0 for _ in range(len(values))]
+        returns = cast(List[float], [])
 
         (_, la, _) = self.memory[-1]
 
         next_is_stop = la is None
         next_value = 0 if next_is_stop else la[1]["value"].item()
 
-        i = 0
         for (_, a, _) in reversed(self.memory[:-1]):
             if a is None:
                 assert not next_is_stop
@@ -213,18 +207,20 @@ class PPO(AlgorithmInterface[State, Action]):
                 next_value = 0
             else:
                 (_, info) = a
-                returns[-(i + 1)] = (
-                    info["value"].item() + 0
-                    if next_is_stop
-                    else self.gamma * next_value
-                )
+                # returns[-(i + 1)] = (
+                #     info["value"].item() + 0
+                #     if next_is_stop
+                #     else self.gamma * next_value
+                # )
+                _ret = info["value"].item() + \
+                    0 if next_is_stop else self.gamma * next_value
+                returns.append(_ret)
 
                 next_is_stop = False
-                next_value = returns[-(i + 1)]
-                i += 1
+                next_value = _ret
 
         values = torch.tensor(values, dtype=torch.float32)
-        returns = torch.tensor(returns, dtype=torch.float32)
+        returns = torch.tensor(list(reversed(returns)), dtype=torch.float32)
 
         return returns - values, returns
 
@@ -243,11 +239,10 @@ class PPO(AlgorithmInterface[State, Action]):
                 advs = advantages[batch_index]
                 rets = returns[batch_index]
 
-                L = len(batch)
+                L = self.batch_size
 
-                states = torch.cat([resolve_lazy_frames(s) for (s, _, _) in batch]).to(
-                    DEVICE
-                )
+                states = torch.cat([resolve_lazy_frames(s)
+                                   for (s, _, _) in batch])
 
                 states.shape == (L, 4, 84, 84)
 
@@ -285,7 +280,7 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 loss_values = new_vals.squeeze(1) - rets
 
-                target = -loss_clip - self.c2 * entropy + self.c1 * loss_values
+                target = -self.c2 * entropy + self.c1 * loss_values
                 assert target.shape == (L,)
 
                 self.optimzer.zero_grad()
