@@ -91,7 +91,7 @@ class PPO(AlgorithmInterface[State, Action]):
         self.network = ActorCritic(n_actions).to(DEVICE)
         self.times = -1
 
-        self.epoch = 10
+        self.epoch = 4
 
         self.gamma = gamma
         self.update_freq = 250
@@ -275,7 +275,7 @@ class PPO(AlgorithmInterface[State, Action]):
                 self.optimzer.zero_grad()
                 self.target = target
                 self.target.backward()
-                nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
+                nn.utils.clip_grad_norm_(self.network.parameters(), 1)
                 self.optimzer.step()
 
     def on_termination(

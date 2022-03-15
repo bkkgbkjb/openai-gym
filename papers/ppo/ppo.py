@@ -93,14 +93,14 @@ MAX_EPISODE_LENGTH = 18_000
 rwds: List[int] = []
 agent.toggleEval(True)
 
-eval_env = gym.make("PongDeterministic-v4", render_mode="human")
-eval_env.seed(RANDOM_SEED)
-eval_env = WarpFrame(eval_env)
-eval_env = ToTensorEnv(eval_env)
-eval_env = FrameStack(eval_env, num_stack=4)
-eval_env.reset()
+# eval_env = gym.make("PongDeterministic-v4")
+# eval_env.seed(RANDOM_SEED)
+# eval_env = WarpFrame(eval_env)
+# eval_env = ToTensorEnv(eval_env)
+# eval_env = FrameStack(eval_env, num_stack=4)
+# eval_env.reset()
 
-agent.env = eval_env
+# agent.env = eval_env
 
 for _ in tqdm(range(EVALUATION_TIMES)):
     agent.reset()
@@ -111,7 +111,7 @@ for _ in tqdm(range(EVALUATION_TIMES)):
     while not end and i < MAX_EPISODE_LENGTH:
         (o, end) = agent.step()
         i += 1
-        # env.render()
+        agent.render('human')
     rwds.append(np.sum([r for r in agent.episode_reward]))
 
 np.save(f"./eval_rwds_{agent.name}.arr", np.asarray(rwds))
