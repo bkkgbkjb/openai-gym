@@ -78,8 +78,8 @@ class PPO(AlgorithmInterface[State, Action]):
     def __init__(
         self,
         n_actions: int,
-        sigma: float = 0.2,
-        c1: float = 0.25,
+        sigma: float = 0.1,
+        c1: float = 0.5,
         c2: float = 0.01,
         gamma: float = 0.99,
     ):
@@ -95,7 +95,8 @@ class PPO(AlgorithmInterface[State, Action]):
 
         self.gamma = gamma
         self.update_freq = 250
-        self.optimzer = torch.optim.Adam(self.network.parameters(), 1e-4, eps=1e-5)
+        self.optimzer = torch.optim.Adam(
+            self.network.parameters(), 1e-4, eps=1e-5)
 
         self.sigma = sigma
         self.c1 = c1
@@ -218,7 +219,8 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 L = self.batch_size
 
-                states = torch.cat([resolve_lazy_frames(s) for (s, _, _) in batch])
+                states = torch.cat([resolve_lazy_frames(s)
+                                   for (s, _, _) in batch])
 
                 states.shape == (L, 4, 84, 84)
 
@@ -236,7 +238,8 @@ class PPO(AlgorithmInterface[State, Action]):
                 new_log_prob = dists.log_prob(old_acts)
                 assert new_log_prob.shape == (L,)
 
-                old_log_probs = torch.cat([i["log_prob"] for (_, (_, i), _) in batch])
+                old_log_probs = torch.cat([i["log_prob"]
+                                          for (_, (_, i), _) in batch])
 
                 assert old_log_probs.shape == (L,)
                 assert not old_log_probs.requires_grad
@@ -259,8 +262,12 @@ class PPO(AlgorithmInterface[State, Action]):
                 assert target.shape == (L,)
 
                 self.optimzer.zero_grad()
-                target.mean().backward()
+                # target.mean().backward()
                 # self.target.backward()
+                nn.utils.clip_grad_norm_(
+                    self.network.parameters(), 0.5)
+                self.target = target.mean()
+                self.target.backward()
                 self.optimzer.step()
 
     def on_termination(
