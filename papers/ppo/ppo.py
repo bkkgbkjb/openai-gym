@@ -11,7 +11,7 @@ import gym
 from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
-from torch.utils.tensorboard.writer import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 
 # %%

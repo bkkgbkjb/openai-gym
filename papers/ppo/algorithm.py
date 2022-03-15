@@ -106,6 +106,9 @@ class PPO(AlgorithmInterface[State, Action]):
         self.target = -1
         self.memory: List[Step] = []
         self.batch_size = 32
+        self.policy_loss = -1
+        self.entropy_loss = -1
+        self.value_loss = -1
 
     def on_reset(self):
         pass
@@ -267,7 +270,7 @@ class PPO(AlgorithmInterface[State, Action]):
                 self.value_loss = loss_values
 
                 target = -loss_clip - self.c2 * entropy + self.c1 * loss_values
-                assert target.shape == (L,)
+                # assert target.shape == (L,)
 
                 self.optimzer.zero_grad()
                 self.target = target
