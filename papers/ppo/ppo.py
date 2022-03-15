@@ -11,13 +11,13 @@ import gym
 from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
+from torch.utils.tensorboard.writer import SummaryWriter
 
 
 # %%
 RANDOM_SEED = 0
 np.random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
-torch.autograd.set_detect_anomaly(True)
 torch.cuda.manual_seed_all(RANDOM_SEED)
 # # torch.backends.cudnn.deterministic = True
 # torch.use_deterministic_algorithms(True)
@@ -33,6 +33,7 @@ env.action_space.seed(RANDOM_SEED)
 env.observation_space.seed(RANDOM_SEED)
 env.reset()
 TOTAL_ACTIONS = env.action_space.n
+writer = SummaryWriter()
 
 
 # %%
@@ -51,11 +52,12 @@ env
 TRAINING_TIMES = 1_00_0000
 
 agent = Agent(env, PPO(TOTAL_ACTIONS), Preprocess())
-training_rwds: List[int] = []
+# training_rwds: List[int] = []
 print(f"agent name: {agent.name}")
 
 with tqdm(total=TRAINING_TIMES) as pbar:
     frames = 0
+    j = 0
     while frames < TRAINING_TIMES:
         agent.reset()
         i = 0
@@ -65,19 +67,18 @@ with tqdm(total=TRAINING_TIMES) as pbar:
             (_, end) = agent.step()
             i += 1
             # agent.render('human')
+        j += 1
 
         frames += i
         pbar.update(i)
 
-        training_rwds.append(np.sum([r for r in agent.episode_reward]))
-
-        pbar.set_postfix(
-            rwd=training_rwds[-1],
-            # sigma=sigma,
-            # memory_ratio=len(agent.algm.replay_memory) / 25_0000,
-            target=agent.algm.target,
-            loss=agent.algm.loss
-        )
+        # training_rwds.append(np.sum([r for r in agent.episode_reward]))
+        rwd = np.sum([r for r in agent.episode_reward])
+        writer.add_scalar("episode/reward", rwd, j)
+        writer.add_scalar("episode/target", agent.algm.target, j)
+        writer.add_scalar("episode/policy_loss", agent.algm.policy_loss, j)
+        writer.add_scalar("episode/entropy_loss", agent.algm.entropy_loss, j)
+        writer.add_scalar("episode/value_loss", agent.algm.value_loss, j)
 
         if frames >= 3_00_0000:
             print("reached 3_00_0000 frames, end!")
@@ -104,7 +105,7 @@ MAX_EPISODE_LENGTH = 18_000
 rwds: List[int] = []
 agent.toggleEval(True)
 
-eval_env = gym.make("PongDeterministic-v4", render_mode = 'human')
+eval_env = gym.make("PongDeterministic-v4", render_mode="human")
 eval_env.seed(RANDOM_SEED)
 eval_env = WarpFrame(eval_env)
 eval_env = ToTensorEnv(eval_env)

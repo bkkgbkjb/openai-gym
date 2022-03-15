@@ -95,8 +95,7 @@ class PPO(AlgorithmInterface[State, Action]):
 
         self.gamma = gamma
         self.update_freq = 250
-        self.optimzer = torch.optim.Adam(
-            self.network.parameters(), 1e-4, eps=1e-5)
+        self.optimzer = torch.optim.Adam(self.network.parameters(), 1e-4, eps=1e-5)
 
         self.sigma = sigma
         self.c1 = c1
@@ -219,8 +218,7 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 L = self.batch_size
 
-                states = torch.cat([resolve_lazy_frames(s)
-                                   for (s, _, _) in batch])
+                states = torch.cat([resolve_lazy_frames(s) for (s, _, _) in batch])
 
                 states.shape == (L, 4, 84, 84)
 
@@ -235,11 +233,13 @@ class PPO(AlgorithmInterface[State, Action]):
                 assert entropy.shape == (L,)
                 assert entropy.requires_grad
 
+                entropy = entropy.mean()
+                self.entropy_loss = entropy
+
                 new_log_prob = dists.log_prob(old_acts)
                 assert new_log_prob.shape == (L,)
 
-                old_log_probs = torch.cat([i["log_prob"]
-                                          for (_, (_, i), _) in batch])
+                old_log_probs = torch.cat([i["log_prob"] for (_, (_, i), _) in batch])
 
                 assert old_log_probs.shape == (L,)
                 assert not old_log_probs.requires_grad
@@ -256,18 +256,23 @@ class PPO(AlgorithmInterface[State, Action]):
                 assert loss_clip.shape == (L,)
                 assert loss_clip.requires_grad
 
-                loss_values = new_vals.squeeze(1) - rets
+                loss_clip = loss_clip.mean()
+                self.policy_loss = loss_clip
+
+                loss_values = ((new_vals.squeeze(1) - rets) ** 2) / 2
+
+                assert loss_values.shape == (L,)
+
+                loss_values = loss_values.mean()
+                self.value_loss = loss_values
 
                 target = -loss_clip - self.c2 * entropy + self.c1 * loss_values
                 assert target.shape == (L,)
 
                 self.optimzer.zero_grad()
-                # target.mean().backward()
-                # self.target.backward()
-                nn.utils.clip_grad_norm_(
-                    self.network.parameters(), 0.5)
-                self.target = target.mean()
+                self.target = target
                 self.target.backward()
+                nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
                 self.optimzer.step()
 
     def on_termination(
