@@ -19,7 +19,7 @@ from tqdm.autonotebook import tqdm
 from torchvision import transforms as T
 from utils.agent import Agent
 from gym.spaces import Box
-from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable
+from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable, Dict
 import gym
 import numpy.typing as npt
 from utils.env import PreprocessObservation, FrameStack, resolve_lazy_frames
@@ -95,20 +95,19 @@ class PPO(AlgorithmInterface[State, Action]):
 
         self.gamma = gamma
         self.update_freq = 250
-        self.optimzer = torch.optim.Adam(self.network.parameters(), 1e-4, eps=1e-5)
+        self.optimzer = torch.optim.Adam(
+            self.network.parameters(), 1e-4, eps=1e-5)
 
         self.sigma = sigma
         self.c1 = c1
         self.c2 = c2
-        self.loss_func = torch.nn.MSELoss().to(DEVICE)
 
-        self.loss = -1
-        self.target = -1
         self.memory: List[Step] = []
         self.batch_size = 32
-        self.policy_loss = -1
-        self.entropy_loss = -1
-        self.value_loss = -1
+        self.reporter = None
+
+    def set_reporter(self, reporter: Callable[[Dict[Any, Any]], None]):
+        self.reporter = reporter
 
     def on_reset(self):
         pass
@@ -221,7 +220,8 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 L = self.batch_size
 
-                states = torch.cat([resolve_lazy_frames(s) for (s, _, _) in batch])
+                states = torch.cat([resolve_lazy_frames(s)
+                                   for (s, _, _) in batch])
 
                 states.shape == (L, 4, 84, 84)
 
@@ -237,12 +237,12 @@ class PPO(AlgorithmInterface[State, Action]):
                 assert entropy.requires_grad
 
                 entropy = entropy.mean()
-                self.entropy_loss = entropy
 
                 new_log_prob = dists.log_prob(old_acts)
                 assert new_log_prob.shape == (L,)
 
-                old_log_probs = torch.cat([i["log_prob"] for (_, (_, i), _) in batch])
+                old_log_probs = torch.cat([i["log_prob"]
+                                          for (_, (_, i), _) in batch])
 
                 assert old_log_probs.shape == (L,)
                 assert not old_log_probs.requires_grad
@@ -251,32 +251,36 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 assert ratios.requires_grad
 
-                loss_clip = torch.min(
+                policy_loss = torch.min(
                     ratios * advs,
                     torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs,
                 )
 
-                assert loss_clip.shape == (L,)
-                assert loss_clip.requires_grad
+                assert policy_loss.shape == (L,)
+                assert policy_loss.requires_grad
 
-                loss_clip = loss_clip.mean()
-                self.policy_loss = loss_clip
+                policy_loss = policy_loss.mean()
 
-                loss_values = ((new_vals.squeeze(1) - rets) ** 2) / 2
+                value_loss = ((new_vals.squeeze(1) - rets) ** 2) / 2
 
-                assert loss_values.shape == (L,)
+                assert value_loss.shape == (L,)
 
-                loss_values = loss_values.mean()
-                self.value_loss = loss_values
+                value_loss = value_loss.mean()
 
-                target = -loss_clip - self.c2 * entropy + self.c1 * loss_values
+                target = -policy_loss - self.c2 * entropy + self.c1 * value_loss
                 # assert target.shape == (L,)
 
                 self.optimzer.zero_grad()
-                self.target = target
-                self.target.backward()
+                target.mean().backward()
                 nn.utils.clip_grad_norm_(self.network.parameters(), 1)
                 self.optimzer.step()
+
+                self.reporter and self.reporter({
+                    'target': target,
+                    'value_loss': value_loss,
+                    'policy_loss': policy_loss,
+                    'entropy': entropy
+                })
 
     def on_termination(
         self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]

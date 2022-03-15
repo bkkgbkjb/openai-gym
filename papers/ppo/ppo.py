@@ -6,7 +6,7 @@ import torch
 import plotly.graph_objects as go
 from tqdm.autonotebook import tqdm
 from utils.agent import Agent
-from typing import List
+from typing import Dict, List, Any
 import gym
 from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
@@ -51,13 +51,26 @@ env
 # %%
 TRAINING_TIMES = 1_00_0000
 
+j = 0
+
+
+def report(info: Dict[Any, Any]):
+    global j
+    writer.add_scalar("target", info['target'], j)
+    writer.add_scalar("policy_loss", info['policy_loss'], j)
+    writer.add_scalar("entropy", info['entropy'], j)
+    writer.add_scalar("value_loss", info['value_loss'], j)
+    j += 1
+
+
 agent = Agent(env, PPO(TOTAL_ACTIONS), Preprocess())
+agent.set_algm_reporter(report)
 # training_rwds: List[int] = []
 print(f"agent name: {agent.name}")
 
 with tqdm(total=TRAINING_TIMES) as pbar:
     frames = 0
-    j = 0
+    epi = 0
     while frames < TRAINING_TIMES:
         agent.reset()
         i = 0
@@ -67,18 +80,13 @@ with tqdm(total=TRAINING_TIMES) as pbar:
             (_, end) = agent.step()
             i += 1
             # agent.render('human')
-        j += 1
+        epi += 1
 
         frames += i
         pbar.update(i)
 
-        # training_rwds.append(np.sum([r for r in agent.episode_reward]))
         rwd = np.sum([r for r in agent.episode_reward])
-        writer.add_scalar("episode/reward", rwd, j)
-        writer.add_scalar("episode/target", agent.algm.target, j)
-        writer.add_scalar("episode/policy_loss", agent.algm.policy_loss, j)
-        writer.add_scalar("episode/entropy_loss", agent.algm.entropy_loss, j)
-        writer.add_scalar("episode/value_loss", agent.algm.value_loss, j)
+        writer.add_scalar("reward", rwd, epi)
 
         if frames >= 3_00_0000:
             print("reached 3_00_0000 frames, end!")

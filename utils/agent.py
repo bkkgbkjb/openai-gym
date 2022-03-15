@@ -62,6 +62,9 @@ class Agent(Generic[O, S, A]):
         self.preprocess.on_reset()
         self.algm.on_reset()
 
+    def set_algm_reporter(self, reporter: Callable[[Dict[Any, Any]], None]):
+        self.algm.set_reporter(reporter)
+
     def toggleEval(self, newEval: bool):
         self.eval = newEval
 
@@ -105,7 +108,8 @@ class Agent(Generic[O, S, A]):
         )
 
         self.eval or self.algm.after_step(
-            (self.episode_state[-2], self.episode_action[-1], self.episode_reward[-1]),
+            (self.episode_state[-2], self.episode_action[-1],
+             self.episode_reward[-1]),
             (
                 self.episode_state[-1],
                 self.ready_act,

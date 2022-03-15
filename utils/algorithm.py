@@ -39,6 +39,5 @@ class AlgorithmInterface(Protocol[S, A]):
     def on_reset(self):
         raise NotImplementedError()
 
-    @abstractmethod
     def set_reporter(self, reporter: Callable[[Dict[Any, Any]], None]):
         raise NotImplementedError()

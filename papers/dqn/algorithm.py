@@ -86,8 +86,6 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
     def on_reset(self):
         pass
     
-    def set_reporter(self, _: Callable[[Dict[Any, Any]], None]):
-        raise NotImplementedError()
 
     def allowed_actions(self, _: State) -> List[Action]:
         return list(range(self.n_actions))
