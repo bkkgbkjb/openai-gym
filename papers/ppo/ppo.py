@@ -84,19 +84,7 @@ with tqdm(total=TRAINING_TIMES) as pbar:
             print("reached 3_00_0000 frames, end!")
             break
 
-
-# %%
-np.save(f"./training_rwds_{agent.name}.arr", np.asarray(training_rwds))
-
-# %%
-fig = go.Figure()
-fig.add_trace(
-    go.Scatter(
-        x=[i + 1 for i in range(len(training_rwds))], y=[r for r in training_rwds]
-    )
-)
-fig.write_image(f"./rwd_img_{agent.name}.png")
-fig.show()
+torch.save(agent.algm.network.state_dict(), f"./{agent.name}_network.params")
 
 
 # %%
