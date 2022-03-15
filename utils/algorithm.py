@@ -1,7 +1,8 @@
 from abc import abstractmethod
 from optparse import Option
-from typing import Optional, Protocol, Tuple, TypeVar, List, Union, Any
+from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any
 import numpy as np
+from pytz import NonExistentTimeError
 
 from utils.common import ActionInfo
 
@@ -36,4 +37,8 @@ class AlgorithmInterface(Protocol[S, A]):
 
     @abstractmethod
     def on_reset(self):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def set_reporter(self, reporter: Callable[[Dict[Any, Any]], None]):
         raise NotImplementedError()
