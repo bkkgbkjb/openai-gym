@@ -182,15 +182,15 @@ class PPO(AlgorithmInterface[State, Action]):
         next_value = 0 if next_is_stop else la[1]["value"].item()
 
         i = 0
-        for (_, a, _) in reversed(self.memory[:-1]):
+        for (_, a, r) in reversed(self.memory[:-1]):
             if a is None:
                 assert not next_is_stop
                 next_is_stop = True
                 next_value = 0
             else:
-                (_, info) = a
+                assert r is not None
                 returns[-(i + 1)] = (
-                    info["value"].item() + 0
+                    r + 0
                     if next_is_stop
                     else self.gamma * next_value
                 )
@@ -270,17 +270,17 @@ class PPO(AlgorithmInterface[State, Action]):
                 target = -policy_loss - self.c2 * entropy + self.c1 * value_loss
                 # assert target.shape == (L,)
 
-                self.optimzer.zero_grad()
-                target.mean().backward()
-                nn.utils.clip_grad_norm_(self.network.parameters(), 1)
-                self.optimzer.step()
-
                 self.reporter and self.reporter({
                     'target': target,
                     'value_loss': value_loss,
                     'policy_loss': policy_loss,
                     'entropy': entropy
                 })
+
+                self.optimzer.zero_grad()
+                target.backward()
+                nn.utils.clip_grad_norm_(self.network.parameters(), 1)
+                self.optimzer.step()
 
     def on_termination(
         self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]

@@ -49,7 +49,7 @@ env
 
 
 # %%
-TRAINING_TIMES = 1_00_0000
+TRAINING_TIMES = 10_00_0000
 
 j = 0
 
