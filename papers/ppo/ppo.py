@@ -4,7 +4,7 @@ import setup
 from algorithm import RandomAlgorithm, Preprocess
 import torch
 import plotly.graph_objects as go
-from tqdm.autonotebook import tqdm
+from tqdm import tqdm
 from utils.agent import Agent
 from typing import Dict, List, Any
 import gym
@@ -88,9 +88,9 @@ with tqdm(total=TRAINING_TIMES) as pbar:
         rwd = np.sum([r for r in agent.episode_reward])
         writer.add_scalar("reward", rwd, epi)
 
-        if frames >= 3_00_0000:
-            print("reached 3_00_0000 frames, end!")
-            break
+        # if frames >= 3_00_0000:
+        #     print("reached 3_00_0000 frames, end!")
+        #     break
 
 torch.save(agent.algm.network.state_dict(), f"./{agent.name}_network.params")
 

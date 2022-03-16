@@ -158,7 +158,7 @@ class PPO(AlgorithmInterface[State, Action]):
         (sn, an) = sa
         self.append_step(s, a, r, sn, an)
 
-        if self.times != 0 and len(self.memory) == 1024:
+        if self.times != 0 and len(self.memory) >= 1024:
             self.train()
             self.memory: List[Step] = []
 
@@ -208,7 +208,7 @@ class PPO(AlgorithmInterface[State, Action]):
         memory = list(self.no_stop_step)
 
         for _ in range(self.epoch):
-            for _ in range(math.ceil(1024 / self.batch_size)):
+            for _ in range(math.ceil(len(self.memory) / self.batch_size)):
                 batch_index = np.random.choice(len(memory), self.batch_size)
 
                 batch: List[NotNoneStep] = []
