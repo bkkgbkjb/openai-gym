@@ -1,3 +1,4 @@
+from cv2 import log
 import setup
 from utils.common import (
     ActionInfo,
@@ -58,20 +59,20 @@ class ActorCritic(nn.Module):
             # nn.Softmax(dim=1),
         ).to(DEVICE)
 
-        self.actor = nn.Sequential(nn.Linear(512, n_actions), nn.Softmax(dim=1)).to(
+        self.actor = nn.Sequential(nn.Linear(512, n_actions)).to(
             DEVICE
         )
         self.critic = nn.Linear(512, 1).to(DEVICE)
 
     def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
         base = self.base(s.to(DEVICE))
-        action_probs = self.actor(base)
+        log_action_probs = self.actor(base)
         value = self.critic(base)
 
-        assert action_probs.shape == (s.size(0), self.n_actions)
+        assert log_action_probs.shape == (s.size(0), self.n_actions)
         assert value.shape == (s.size(0), 1)
 
-        return (action_probs.cpu(), value.cpu())
+        return (log_action_probs.cpu(), value.cpu())
 
 
 class PPO(AlgorithmInterface[State, Action]):
@@ -93,10 +94,11 @@ class PPO(AlgorithmInterface[State, Action]):
 
         self.epoch = 4
 
+        self.gae_lambda = .95
+
         self.gamma = gamma
-        self.update_freq = 250
         self.optimzer = torch.optim.Adam(
-            self.network.parameters(), 1e-4, eps=1e-5)
+            self.network.parameters(), 2.5e-4, eps=1e-5)
 
         self.sigma = sigma
         self.c1 = c1
@@ -118,8 +120,8 @@ class PPO(AlgorithmInterface[State, Action]):
     @torch.no_grad()
     def take_action(self, state: State) -> ActionInfo[Action]:
 
-        (act_probs, value) = self.network(resolve_lazy_frames(state))
-        dist = Categorical(act_probs)
+        (log_act_probs, value) = self.network(resolve_lazy_frames(state))
+        dist = Categorical(logits=log_act_probs)
         act = dist.sample()
 
         return (
@@ -170,6 +172,44 @@ class PPO(AlgorithmInterface[State, Action]):
         )
 
     @torch.no_grad()
+    def compute_advantages_and_returns_gae(self) -> Tuple[torch.Tensor, torch.Tensor]:
+
+        values = [i["value"].item() for (_, (_, i), _) in self.no_stop_step]
+
+        advs = [float("nan") for _ in range(len(values))]
+
+        (_, la, _) = self.memory[-1]
+
+        next_is_stop = la is None
+        next_value = 0 if next_is_stop else la[1]["value"].item()
+        lastgaelambda = 0
+        i = 0
+        for j in reversed(range(len(self.memory[:-1]))):
+            # for (_, a, r) in reversed(self.memory[:-1]):
+            (_, a, r) = self.memory[j]
+            if a is None:
+                assert not next_is_stop
+                next_is_stop = True
+                next_value = 0
+            else:
+                assert r is not None
+
+                delta = r + (0 if next_is_stop else self.gamma *
+                             next_value) - values[-(i+1)]
+                advs[-(i+1)] = delta + \
+                    (0 if next_is_stop else self.gamma *
+                     self.gae_lambda * lastgaelambda)
+                next_is_stop = False
+                lastgaelambda = advs[-(i+1)]
+                next_value = values[-(i+1)]
+                i += 1
+
+        values = torch.tensor(values, dtype=torch.float32)
+        advs = torch.tensor(advs, dtype=torch.float32)
+
+        return advs, advs + values
+
+    @torch.no_grad()
     def compute_advantages_and_returns(self) -> Tuple[torch.Tensor, torch.Tensor]:
 
         values = [i["value"].item() for (_, (_, i), _) in self.no_stop_step]
@@ -182,7 +222,9 @@ class PPO(AlgorithmInterface[State, Action]):
         next_value = 0 if next_is_stop else la[1]["value"].item()
 
         i = 0
-        for (_, a, r) in reversed(self.memory[:-1]):
+        for j in reversed(range(len(self.memory[:-1]))):
+            # for (_, a, r) in reversed(self.memory[:-1]):
+            (_, a, r) = self.memory[j]
             if a is None:
                 assert not next_is_stop
                 next_is_stop = True
@@ -204,7 +246,7 @@ class PPO(AlgorithmInterface[State, Action]):
         return returns - values, returns
 
     def train(self):
-        (advantages, returns) = self.compute_advantages_and_returns()
+        (advantages, returns) = self.compute_advantages_and_returns_gae()
         memory = list(self.no_stop_step)
 
         for _ in range(self.epoch):
@@ -216,6 +258,7 @@ class PPO(AlgorithmInterface[State, Action]):
                     batch.append(memory[i])
 
                 advs = advantages[batch_index]
+                advs = (advs - advs.mean()) / (advs.std() + 1e-8)
                 rets = returns[batch_index]
 
                 L = self.batch_size
@@ -223,14 +266,15 @@ class PPO(AlgorithmInterface[State, Action]):
                 states = torch.cat([resolve_lazy_frames(s)
                                    for (s, _, _) in batch])
 
-                states.shape == (L, 4, 84, 84)
+                assert states.shape == (L, 4, 84, 84)
 
                 old_acts = torch.tensor([a for (_, (a, _), _) in batch])
 
                 assert old_acts.shape == (L,)
 
                 (act_probs, new_vals) = self.network(states)
-                dists = Categorical(act_probs)
+                new_vals = new_vals.squeeze(1)
+                dists = Categorical(logits=act_probs)
 
                 entropy: torch.Tensor = dists.entropy()
                 assert entropy.shape == (L,)
@@ -261,7 +305,19 @@ class PPO(AlgorithmInterface[State, Action]):
 
                 policy_loss = policy_loss.mean()
 
-                value_loss = ((new_vals.squeeze(1) - rets) ** 2) / 2
+                v_loss_unclipped = ((new_vals - rets) ** 2)
+
+                old_values = torch.tensor(
+                    [i['value'].item() for (_, (_, i), _) in batch])
+
+                assert old_values.shape == (L,)
+
+                v_clipped = old_values + \
+                    torch.clamp(new_vals - old_values, -self.sigma, self.sigma)
+                v_loss_clipped = (v_clipped - rets) ** 2
+
+                v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                value_loss = v_loss_max / 2
 
                 assert value_loss.shape == (L,)
 

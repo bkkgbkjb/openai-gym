@@ -12,6 +12,13 @@ from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
+from stable_baselines3.common.atari_wrappers import (  # isort:skip
+    ClipRewardEnv,
+    EpisodicLifeEnv,
+    FireResetEnv,
+    MaxAndSkipEnv,
+    NoopResetEnv,
+)
 
 
 # %%
@@ -42,6 +49,9 @@ TOTAL_ACTIONS
 
 # %%
 # env = PreprocessObservation(env)
+if "FIRE" in env.unwrapped.get_action_meanings():
+    env = FireResetEnv(env)
+env = NoopResetEnv(env, noop_max=25)
 env = WarpFrame(env)
 env = ToTensorEnv(env)
 env = FrameStack(env, num_stack=4)
