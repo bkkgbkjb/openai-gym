@@ -39,6 +39,12 @@ NotNoneStep = NotNoneStepGeneric[State, ActionInfo[Action]]
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
+
+
 class ActorCritic(nn.Module):
     def __init__(self, n_actions: int):
         super().__init__()
@@ -46,23 +52,23 @@ class ActorCritic(nn.Module):
         self.n_actions = n_actions
 
         self.base = nn.Sequential(
-            nn.Conv2d(4, 32, (8, 8), 4),
+            layer_init(nn.Conv2d(4, 32, (8, 8), 4)),
             nn.ReLU(),
-            nn.Conv2d(32, 64, (4, 4), 2),
+            layer_init(nn.Conv2d(32, 64, (4, 4), 2)),
             nn.ReLU(),
-            nn.Conv2d(64, 64, (3, 3), 1),
+            layer_init(nn.Conv2d(64, 64, (3, 3), 1)),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(7 * 7 * 64, 512),
+            layer_init(nn.Linear(7 * 7 * 64, 512)),
             nn.ReLU(),
             # nn.Linear(256, n_actions),
             # nn.Softmax(dim=1),
         ).to(DEVICE)
 
-        self.actor = nn.Sequential(nn.Linear(512, n_actions)).to(
+        self.actor = nn.Sequential(layer_init(nn.Linear(512, n_actions))).to(
             DEVICE
         )
-        self.critic = nn.Linear(512, 1).to(DEVICE)
+        self.critic = layer_init(nn.Linear(512, 1), std=1).to(DEVICE)
 
     def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
         base = self.base(s.to(DEVICE))
@@ -125,7 +131,7 @@ class PPO(AlgorithmInterface[State, Action]):
         act = dist.sample()
 
         return (
-            cast(int, act),
+            cast(int, act.item()),
             {"log_prob": dist.log_prob(act), "value": value},
         )
 
