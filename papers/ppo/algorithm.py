@@ -90,7 +90,6 @@ class PPO(AlgorithmInterface[State, Action]):
         c2: float = 0.01,
         gamma: float = 0.99,
     ):
-        self.frame_skip = 0
         self.name = "ppo"
         self.n_actions = n_actions
         # self.actor = Actor(n_actions).to(DEVICE)
@@ -356,7 +355,6 @@ class PPO(AlgorithmInterface[State, Action]):
 class RandomAlgorithm(AlgorithmInterface[State, Action]):
     def __init__(self, n_actions: int):
         self.name = "random"
-        self.frame_skip = 0
         self.n_actions = n_actions
         self.times = -1
         self.action_keeps = 10

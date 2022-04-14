@@ -14,7 +14,6 @@ R = float
 
 class AlgorithmInterface(Protocol[S, A]):
 
-    frame_skip: int
     name: str
 
     @abstractmethod

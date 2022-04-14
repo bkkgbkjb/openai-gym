@@ -80,17 +80,7 @@ class Agent(Generic[O, S, A]):
             self.algm.take_action(self.episode_state[-1])
         )
 
-        rwd: float = 0.0
-        obs: Optional[O] = None
-        stop: bool = False
-
-        for _ in range(self.algm.frame_skip + 1):
-            (o, r, s, _) = self.env.step(act[0])
-            rwd += r
-            obs = o
-            stop = s
-            if stop:
-                break
+        (obs, rwd, stop, _) = self.env.step(act[0])
 
         self.episode_action.append(act)
         self.episode_reward.append(rwd)

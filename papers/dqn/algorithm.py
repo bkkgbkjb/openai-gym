@@ -54,7 +54,6 @@ class DQN(nn.Module):
 class DQNAlgorithm(AlgorithmInterface[State, Action]):
     def __init__(self, n_actions: int, gamma: float = 0.99):
         self.name = "dqn"
-        self.frame_skip = 0
         self.n_actions = n_actions
 
         self.times = 0
@@ -255,7 +254,6 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
 class RandomAlgorithm(AlgorithmInterface[State, Action]):
     def __init__(self, n_actions: int):
         self.name = "random"
-        self.frame_skip = 0
         self.n_actions = n_actions
         self.times = -1
         self.reset()
