@@ -102,16 +102,15 @@ class PaiFunction(nn.Module):
         std = log_std.exp()
         normal = Normal(mean, std)
         raw_act = normal.rsample()
-        raw_log_prob = normal.log_prob(raw_act)
-
         assert raw_act.shape == (s.size(0), 6)
-        assert raw_log_prob == (s.size(0), 1)
-
         act = torch.tanh(raw_act)
 
-        mod_log_prob = (1 - act.pow(2) + 1e-6).log().sum(1, keepdim=True)
-        assert mod_log_prob == (s.size(0), 1)
-        log_prob = raw_log_prob - mod_log_prob
+        raw_log_prob = normal.log_prob(raw_act)
+        assert raw_log_prob.shape == (s.size(0), 6)
+
+        mod_log_prob = (1 - act.pow(2) + 1e-6).log()
+        assert mod_log_prob.shape == (s.size(0), 6)
+        log_prob = (raw_log_prob - mod_log_prob).sum(1, keepdim=True)
 
         mean = torch.tanh(mean)
         return act, log_prob, mean
@@ -150,7 +149,8 @@ class SAC(AlgorithmInterface[State, Action]):
         pass
 
     def take_action(self, state: State) -> Action:
-        return torch.as_tensor([0.0] * 6)
+        action, _, _ = self.policy.sample(state.unsqueeze(0))
+        return action.detach().cpu().squeeze(0).numpy()
 
     def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]):
         pass
@@ -173,4 +173,4 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
         assert len(h) > 0
 
         # assert h[-1].shape == (4, 1, 84, 84)
-        return h[-1]
+        return torch.from_numpy(h[-1]).type(torch.float32)
