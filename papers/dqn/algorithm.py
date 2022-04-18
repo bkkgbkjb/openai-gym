@@ -82,7 +82,7 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
 
         self.loss: float = -1.0
 
-    def on_reset(self):
+    def on_agent_reset(self):
         pass
     
 
@@ -178,7 +178,7 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
-    def on_termination(
+    def on_episode_termination(
         self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
     ):
         (s, a, r) = sar
@@ -241,7 +241,7 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
     def __init__(self):
         pass
 
-    def on_reset(self):
+    def on_agent_reset(self):
         pass
 
     def get_current_state(self, h: List[Observation]) -> State:

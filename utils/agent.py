@@ -45,30 +45,31 @@ class Agent(Generic[O, S, A]):
     def reset(
         self,
     ):
-        self.ready_act: Optional[Tuple[A, Any]] = None
+        self.ready_act: Optional[Tuple[A, Dict[str, Any]]] = None
         self.end = False
 
-        self.episode_observation: List[O] = []
-        self.episode_state: List[S] = []
-        self.episode_action: List[Tuple[A, Any]] = []
-        self.episode_reward: List[R] = []
+        self.observation_episode: List[O] = []
+        self.state_episode: List[S] = []
+        self.action_episode: List[Tuple[A, Dict[str, Any]]] = []
+        self.reward_episode: List[R] = []
 
         o: O = self.env.reset()
-        self.episode_observation.append(o)
-        self.episode_state.append(
-            self.preprocess.get_current_state(self.episode_observation)
+        self.observation_episode.append(o)
+        self.state_episode.append(
+            self.preprocess.get_current_state(self.observation_episode)
         )
+        assert len(self.state_episode) == len(self.observation_episode)
 
-        self.preprocess.on_reset()
-        self.algm.on_reset()
+        self.preprocess.on_agent_reset()
+        self.algm.on_agent_reset()
 
-    def set_algm_reporter(self, reporter: Callable[[Dict[Any, Any]], None]):
+    def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.algm.set_reporter(reporter)
 
     def toggleEval(self, newEval: bool):
         self.eval = newEval
 
-    def format_action(self, a: Union[A, ActionInfo[A]]) -> Tuple[A, Any]:
+    def format_action(self, a: Union[A, ActionInfo[A]]) -> Tuple[A, Dict[str, Any]]:
         if isinstance(a, tuple):
             return a
         return (a, dict())
@@ -77,39 +78,45 @@ class Agent(Generic[O, S, A]):
         assert not self.end, "cannot step on a ended agent"
 
         act = self.ready_act or self.format_action(
-            self.algm.take_action(self.episode_state[-1])
+            self.algm.take_action(self.state_episode[-1])
         )
 
         (obs, rwd, stop, _) = self.env.step(act[0])
 
-        self.episode_action.append(act)
-        self.episode_reward.append(rwd)
+        self.action_episode.append(act)
+        self.reward_episode.append(rwd)
 
         obs = cast(O, obs)
-        self.episode_observation.append(obs)
-        self.episode_state.append(
-            self.preprocess.get_current_state(self.episode_observation)
+        self.observation_episode.append(obs)
+        self.state_episode.append(
+            self.preprocess.get_current_state(self.observation_episode)
         )
 
         self.ready_act = (
             None
             if stop
-            else self.format_action(self.algm.take_action(self.episode_state[-1]))
+            else self.format_action(self.algm.take_action(self.state_episode[-1]))
         )
 
+        assert len(self.state_episode) == len(self.observation_episode)
+
         self.eval or self.algm.after_step(
-            (self.episode_state[-2], self.episode_action[-1],
-             self.episode_reward[-1]),
+            (self.state_episode[-2], self.action_episode[-1],
+             self.reward_episode[-1]),
             (
-                self.episode_state[-1],
+                self.state_episode[-1],
                 self.ready_act,
             ),
         )
 
         if stop:
+            assert len(self.action_episode) == len(self.reward_episode)
+            assert len(self.state_episode) == len(self.action_episode) + 1
+
             self.end = True
-            self.eval or self.algm.on_termination(
-                (self.episode_state, self.episode_action, self.episode_reward)
+
+            self.eval or self.algm.on_episode_termination(
+                (self.state_episode, self.action_episode, self.reward_episode)
             )
 
         return (obs, stop)

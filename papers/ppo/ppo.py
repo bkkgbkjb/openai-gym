@@ -95,7 +95,7 @@ with tqdm(total=TRAINING_TIMES) as pbar:
         frames += i
         pbar.update(i)
 
-        rwd = np.sum([r for r in agent.episode_reward])
+        rwd = np.sum([r for r in agent.reward_episode])
         writer.add_scalar("reward", rwd, epi)
 
         # if frames >= 3_00_0000:
@@ -130,7 +130,7 @@ for _ in tqdm(range(EVALUATION_TIMES)):
         (o, end) = agent.step()
         i += 1
         agent.render('human')
-    rwds.append(np.sum([r for r in agent.episode_reward]))
+    rwds.append(np.sum([r for r in agent.reward_episode]))
 
 np.save(f"./eval_rwds_{agent.name}.arr", np.asarray(rwds))
 

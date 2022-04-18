@@ -1,6 +1,6 @@
 import setup
 from time import sleep, time
-from algorithm import RandomAlgorithm, Preprocess
+from algorithm import SAC, Preprocess
 import torch
 from os import times
 import plotly.graph_objects as go
@@ -12,13 +12,6 @@ from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
-from stable_baselines3.common.atari_wrappers import (  # isort:skip
-    ClipRewardEnv,
-    EpisodicLifeEnv,
-    FireResetEnv,
-    MaxAndSkipEnv,
-    NoopResetEnv,
-)
 
 # %%
 RANDOM_SEED = 0
@@ -31,35 +24,75 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 
 # %%
-env = gym.make("Walker2d-v2")
-env.seed(RANDOM_SEED)
-env.action_space.seed(RANDOM_SEED)
-env.observation_space.seed(RANDOM_SEED)
-env.reset()
-
-print(env.action_space, env.observation_space)
-
 writer = SummaryWriter()
 
-
 # %%
-for _ in range(3):
-    r = 0.0
+
+
+def glance():
+    env = gym.make("Walker2d-v2")
+    env.seed(RANDOM_SEED)
+    env.action_space.seed(RANDOM_SEED)
+    env.observation_space.seed(RANDOM_SEED)
     env.reset()
-    s = False
-    t = 0
 
-    while not s:
-        env.render(mode='human')
-        sleep(0.05)
+    print(env.action_space, env.observation_space)
+    for _ in range(3):
+        r = 0.0
+        env.reset()
+        s = False
+        t = 0
 
-        (_, rwd, stop, _) = env.step(env.action_space.sample())
-        t += 1
+        while not s:
+            env.render(mode='human')
+            sleep(0.05)
 
-        r += rwd
+            (_, rwd, stop, _) = env.step(env.action_space.sample())
+            t += 1
 
-        if stop:
-            print(f'rwd is: {r}, steps: {t}')
-            break
+            r += rwd
+
+            if stop:
+                print(f'rwd is: {r}, steps: {t}')
+                break
 
 # %%
+
+
+def train():
+    env = gym.make("Walker2d-v2")
+    env.seed(RANDOM_SEED)
+    env.action_space.seed(RANDOM_SEED)
+    env.observation_space.seed(RANDOM_SEED)
+    env.reset()
+
+    TRAINING_TIMES = 1e6
+
+    print(env.action_space, env.observation_space)
+    agent = Agent(env, SAC(17, 6), Preprocess())
+    agent.reset()
+    print(f"train agent: {agent.name}")
+
+    with tqdm(total=TRAINING_TIMES) as pbar:
+        frames = 0
+        epi = 0
+        while frames < TRAINING_TIMES:
+            agent.reset()
+            i = 0
+            end = False
+            while not end and frames < TRAINING_TIMES:
+
+                (_, end) = agent.step()
+                i += 1
+
+            epi += 1
+            frames += i
+
+            pbar.update(i)
+
+            rwd = np.sum([r for r in agent.reward_episode])
+            writer.add_scalar("reward", rwd, epi)
+
+
+# %%
+train()

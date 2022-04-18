@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, TypeVar, Optional, List
+from typing import Dict, Tuple, TypeVar, Optional, List, Any
 
 
 OS = TypeVar("OS")
@@ -15,7 +15,7 @@ AE = TypeVar("AE")
 Episode = List[StepGeneric[OE, AE]]
 
 AA = TypeVar("AA")
-ActionInfo = Tuple[AA, Dict]
+ActionInfo = Tuple[AA, Dict[str, Any]]
 
 TS = TypeVar("TS")
 TA = TypeVar("TA")

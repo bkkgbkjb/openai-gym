@@ -69,7 +69,7 @@ with tqdm(total=DEFAULT_TRAINING_TIMES) as pbar:
         sigma = 1 - 0.95 / max_decry_times * \
             np.min([agent.algm.times, max_decry_times])
 
-        training_rwds.append(np.sum([r for r in agent.episode_reward]))
+        training_rwds.append(np.sum([r for r in agent.reward_episode]))
         pbar.set_postfix(
             rwd=training_rwds[-1],
             sigma=sigma,
@@ -121,6 +121,6 @@ for _ in tqdm(range(EVALUATION_TIMES)):
         (o, end) = agent.step()
         i += 1
         env.render()
-    rwds.append(np.sum([r for r in agent.episode_reward]))
+    rwds.append(np.sum([r for r in agent.reward_episode]))
 
 np.save(f"./eval_rwds_{agent.name}.arr", np.asarray(rwds))

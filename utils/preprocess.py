@@ -13,5 +13,5 @@ class PreprocessInterface(Protocol[O, A, S]):
         raise NotImplementedError()
 
     @abstractmethod
-    def on_reset(self):
+    def on_agent_reset(self):
         raise NotImplementedError()

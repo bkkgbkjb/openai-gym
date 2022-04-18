@@ -113,10 +113,10 @@ class PPO(AlgorithmInterface[State, Action]):
         self.batch_size = 32
         self.reporter = None
 
-    def set_reporter(self, reporter: Callable[[Dict[Any, Any]], None]):
+    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.reporter = reporter
 
-    def on_reset(self):
+    def on_agent_reset(self):
         pass
 
     def allowed_actions(self, state: State) -> List[Action]:
@@ -343,7 +343,7 @@ class PPO(AlgorithmInterface[State, Action]):
                 nn.utils.clip_grad_norm_(self.network.parameters(), 1)
                 self.optimzer.step()
 
-    def on_termination(
+    def on_episode_termination(
         self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
     ):
         (s, a, r) = sar
@@ -363,7 +363,7 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
     def reset(self):
         self.last_action = None
 
-    def on_reset(self):
+    def on_agent_reset(self):
         self.reset()
 
     def allowed_actions(self, state: State) -> List[Action]:
@@ -387,7 +387,7 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
     ):
         pass
 
-    def on_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):
+    def on_episode_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):
         (s, a, r) = sar
         assert len(s) == len(a) + 1
         assert len(s) == len(r) + 1
@@ -398,7 +398,7 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
     def __init__(self):
         pass
 
-    def on_reset(self):
+    def on_agent_reset(self):
         pass
 
     def get_current_state(self, h: List[Observation]) -> State:

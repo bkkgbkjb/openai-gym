@@ -17,10 +17,6 @@ class AlgorithmInterface(Protocol[S, A]):
     name: str
 
     @abstractmethod
-    def allowed_actions(self, state: S) -> List[A]:
-        raise NotImplementedError()
-
-    @abstractmethod
     def take_action(self, state: S) -> Union[ActionInfo[A], A]:
         raise NotImplementedError()
 
@@ -31,12 +27,12 @@ class AlgorithmInterface(Protocol[S, A]):
         raise NotImplementedError()
 
     @abstractmethod
-    def on_termination(self, sar: Tuple[List[S], List[ActionInfo[A]], List[R]]):
+    def on_episode_termination(self, sar: Tuple[List[S], List[ActionInfo[A]], List[R]]):
         raise NotImplementedError()
 
     @abstractmethod
-    def on_reset(self):
+    def on_agent_reset(self):
         raise NotImplementedError()
 
-    def set_reporter(self, reporter: Callable[[Dict[Any, Any]], None]):
+    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         raise NotImplementedError()

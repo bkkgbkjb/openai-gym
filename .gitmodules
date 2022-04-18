@@ -1,6 +1,9 @@
 [submodule "papers/dqn/example"]
 	path = papers/dqn/example
 	url = https://github.com/jacobaustin123/pytorch-dqn.git
-[submodule "cleanrl"]
-	path = cleanrl
-	url = https://github.com/vwxyzjn/cleanrl.git
+[submodule "rlexample"]
+	path = rlexample
+	url = https://github.com/quantumiracle/Popular-RL-Algorithms
+[submodule "sac-example"]
+	path = sac-example
+	url = https://github.com/pranz24/pytorch-soft-actor-critic.git
