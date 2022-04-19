@@ -73,6 +73,20 @@ def train():
     agent.reset()
     print(f"train agent: {agent.name}")
 
+    j = 0
+
+    def report(info: Dict[Any, Any]):
+        nonlocal j
+        # writer.add_scalar("target", info['target'], j)
+        # writer.add_scalar("policy_loss", info['policy_loss'], j)
+        # writer.add_scalar("entropy", info['entropy'], j)
+        # writer.add_scalar("value_loss", info['value_loss'], j)
+        for k, v in info.items():
+            writer.add_scalar(k, v, j)
+        j += 1
+
+    agent.set_algm_reporter(report)
+
     with tqdm(total=TRAINING_TIMES) as pbar:
         frames = 0
         epi = 0
