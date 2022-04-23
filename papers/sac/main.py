@@ -1,13 +1,15 @@
 import setup
 from time import sleep, time
-from algorithm import SAC, Preprocess
+from algorithm import SAC, Observation, Preprocess
 import torch
 from os import times
 import plotly.graph_objects as go
+from gym.wrappers import Monitor
 from tqdm import tqdm
 from utils.agent import Agent
 from typing import Dict, List, Any
 import gym
+from algorithm import State, Observation, Action
 from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
@@ -28,6 +30,24 @@ writer = SummaryWriter()
 
 # %%
 
+def eval(a: Agent[Observation, State, Action]):
+    a.toggleEval(True)
+
+    for _ in range(3):
+        input('press any key to start eval agent')
+        a.reset()
+
+        while True:
+            a.render(mode='human')
+
+            (_, s) = a.step()
+
+
+            if s:
+                print(f'rwd is: {np.sum(a.reward_episode)}, steps: {a.steps}')
+                break
+
+
 
 def glance():
     env = gym.make("Walker2d-v2")
@@ -45,7 +65,6 @@ def glance():
 
         while not s:
             env.render(mode='human')
-            sleep(0.05)
 
             (_, rwd, stop, _) = env.step(env.action_space.sample())
             t += 1
@@ -59,14 +78,14 @@ def glance():
 # %%
 
 
-def train():
+def train() -> Agent[Observation, State, Action]:
     env = gym.make("Walker2d-v2")
     env.seed(RANDOM_SEED)
     env.action_space.seed(RANDOM_SEED)
     env.observation_space.seed(RANDOM_SEED)
     env.reset()
 
-    TRAINING_TIMES = 1e6
+    TRAINING_TIMES = int(3e5)
 
     print(env.action_space, env.observation_space)
     agent = Agent(env, SAC(17, 6), Preprocess())
@@ -75,12 +94,8 @@ def train():
 
     j = 0
 
-    def report(info: Dict[Any, Any]):
+    def report(info: Dict[str, Any]):
         nonlocal j
-        # writer.add_scalar("target", info['target'], j)
-        # writer.add_scalar("policy_loss", info['policy_loss'], j)
-        # writer.add_scalar("entropy", info['entropy'], j)
-        # writer.add_scalar("value_loss", info['value_loss'], j)
         for k, v in info.items():
             writer.add_scalar(k, v, j)
         j += 1
@@ -106,7 +121,10 @@ def train():
 
             rwd = np.sum([r for r in agent.reward_episode])
             writer.add_scalar("reward", rwd, epi)
+        print(f'training end after {frames} frames')
+    
+    return agent
 
 
 # %%
-train()
+eval(train())

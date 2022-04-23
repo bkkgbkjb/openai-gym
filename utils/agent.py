@@ -121,6 +121,11 @@ class Agent(Generic[O, S, A]):
 
         return (obs, stop)
 
+    @property
+    def steps(self):
+        return len(self.action_episode)
+
+
     def render(self, mode: str):
         self.env.render(mode)
 
