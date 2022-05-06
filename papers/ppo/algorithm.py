@@ -1,4 +1,3 @@
-from cv2 import log
 import setup
 from utils.common import (
     ActionInfo,
