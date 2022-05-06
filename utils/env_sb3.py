@@ -42,6 +42,46 @@ class WarpFrame(gym.ObservationWrapper):
                            interpolation=cv2.INTER_AREA)
         return frame[:, :, None]
 
+class ClipRewardEnv(gym.RewardWrapper):
+    """
+    Clips the reward to {+1, 0, -1} by its sign.
+
+    :param env: the environment
+    """
+
+    def __init__(self, env: gym.Env):
+        gym.RewardWrapper.__init__(self, env)
+
+    def reward(self, reward: float) -> float:
+        """
+        Bin reward to {+1, 0, -1} by its sign.
+
+        :param reward:
+        :return:
+        """
+        return np.sign(reward)
+
+class FireResetEnv(gym.Wrapper):
+    """
+    Take action on reset for environments that are fixed until firing.
+
+    :param env: the environment to wrap
+    """
+
+    def __init__(self, env: gym.Env):
+        gym.Wrapper.__init__(self, env)
+        assert env.unwrapped.get_action_meanings()[1] == "FIRE"
+        assert len(env.unwrapped.get_action_meanings()) >= 3
+
+    def reset(self, **kwargs) -> np.ndarray:
+        self.env.reset(**kwargs)
+        obs, _, done, _ = self.env.step(1)
+        if done:
+            self.env.reset(**kwargs)
+        obs, _, done, _ = self.env.step(2)
+        if done:
+            self.env.reset(**kwargs)
+        return obs
 
 class MaxAndSkipEnv(gym.Wrapper):
     """
@@ -108,7 +148,7 @@ class NoopResetEnv(gym.Wrapper):
         if self.override_num_noops is not None:
             noops = self.override_num_noops
         else:
-            noops = self.unwrapped.np_random.randint(1, self.noop_max + 1)
+            noops = self.unwrapped.np_random.integers(1, self.noop_max + 1)
         assert noops > 0
         obs = np.zeros(0)
         for _ in range(noops):

@@ -12,7 +12,7 @@ from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
-from stable_baselines3.common.atari_wrappers import (  # isort:skip
+from utils.env_sb3 import (  # isort:skip
     ClipRewardEnv,
     EpisodicLifeEnv,
     FireResetEnv,
