@@ -4,11 +4,11 @@ from algorithm import SAC, Observation, Preprocess
 import torch
 from os import times
 import plotly.graph_objects as go
-from gym.wrappers import Monitor
 from tqdm import tqdm
 from utils.agent import Agent
 from typing import Dict, List, Any
 import gym
+from gym.wrappers import RecordVideo
 from algorithm import State, Observation, Action
 from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
@@ -30,23 +30,22 @@ writer = SummaryWriter()
 
 # %%
 
+
 def eval(a: Agent[Observation, State, Action]):
     a.toggleEval(True)
 
     for _ in range(3):
-        input('press any key to start eval agent')
+        input("press any key to start eval agent")
         a.reset()
 
         while True:
-            a.render(mode='human')
+            a.render(mode="human")
 
             (_, s) = a.step()
 
-
             if s:
-                print(f'rwd is: {np.sum(a.reward_episode)}, steps: {a.steps}')
+                print(f"rwd is: {np.sum(a.reward_episode)}, steps: {a.steps}")
                 break
-
 
 
 def glance():
@@ -64,7 +63,7 @@ def glance():
         t = 0
 
         while not s:
-            env.render(mode='human')
+            env.render(mode="human")
 
             (_, rwd, stop, _) = env.step(env.action_space.sample())
             t += 1
@@ -72,8 +71,9 @@ def glance():
             r += rwd
 
             if stop:
-                print(f'rwd is: {r}, steps: {t}')
+                print(f"rwd is: {r}, steps: {t}")
                 break
+
 
 # %%
 
@@ -83,9 +83,10 @@ def train() -> Agent[Observation, State, Action]:
     env.seed(RANDOM_SEED)
     env.action_space.seed(RANDOM_SEED)
     env.observation_space.seed(RANDOM_SEED)
+    env = RecordVideo(env, "rl-video")
     env.reset()
 
-    TRAINING_TIMES = int(3e5)
+    TRAINING_TIMES = int(4e5)
 
     print(env.action_space, env.observation_space)
     agent = Agent(env, SAC(17, 6), Preprocess())
@@ -121,8 +122,8 @@ def train() -> Agent[Observation, State, Action]:
 
             rwd = np.sum([r for r in agent.reward_episode])
             writer.add_scalar("reward", rwd, epi)
-        print(f'training end after {frames} frames')
-    
+        print(f"training end after {frames} frames")
+
     return agent
 
 
