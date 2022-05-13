@@ -7,3 +7,6 @@
 [submodule "sac-example"]
 	path = sac-example
 	url = https://github.com/pranz24/pytorch-soft-actor-critic.git
+[submodule "ddpg_example"]
+	path = ddpg_example
+	url = https://github.com/MoritzTaylor/ddpg-pytorch.git

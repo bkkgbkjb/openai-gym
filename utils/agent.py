@@ -68,6 +68,7 @@ class Agent(Generic[O, S, A]):
 
     def toggleEval(self, newEval: bool):
         self.eval = newEval
+        self.algm.on_toggle_eval(newEval)
 
     def format_action(self, a: Union[A, ActionInfo[A]]) -> Tuple[A, Dict[str, Any]]:
         if isinstance(a, tuple):
@@ -101,8 +102,7 @@ class Agent(Generic[O, S, A]):
         assert len(self.state_episode) == len(self.observation_episode)
 
         self.eval or self.algm.after_step(
-            (self.state_episode[-2], self.action_episode[-1],
-             self.reward_episode[-1]),
+            (self.state_episode[-2], self.action_episode[-1], self.reward_episode[-1]),
             (
                 self.state_episode[-1],
                 self.ready_act,
@@ -124,7 +124,6 @@ class Agent(Generic[O, S, A]):
     @property
     def steps(self):
         return len(self.action_episode)
-
 
     def render(self, mode: str):
         self.env.render(mode)

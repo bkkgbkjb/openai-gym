@@ -32,6 +32,10 @@ class AlgorithmInterface(Protocol[S, A]):
     @abstractmethod
     def on_agent_reset(self):
         raise NotImplementedError()
+    
+    @abstractmethod
+    def on_toggle_eval(self, isEval: bool):
+        raise NotImplementedError()
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         raise NotImplementedError()
