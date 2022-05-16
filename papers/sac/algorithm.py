@@ -160,6 +160,9 @@ class SAC(AlgorithmInterface[State, Action]):
 
         self.reset()
 
+    def on_toggle_eval(self, isEval: bool):
+        pass
+
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.reporter = reporter
 

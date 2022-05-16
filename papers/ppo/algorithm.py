@@ -117,6 +117,9 @@ class PPO(AlgorithmInterface[State, Action]):
 
     def on_agent_reset(self):
         pass
+    
+    def on_toggle_eval(self, isEval: bool):
+        pass
 
     def allowed_actions(self, state: State) -> List[Action]:
         return list(range(self.n_actions))

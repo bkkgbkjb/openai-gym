@@ -84,6 +84,9 @@ class DQNAlgorithm(AlgorithmInterface[State, Action]):
 
     def on_agent_reset(self):
         pass
+
+    def on_toggle_eval(self, isEval: bool):
+        pass
     
 
     def allowed_actions(self, _: State) -> List[Action]:
