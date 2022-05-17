@@ -39,7 +39,7 @@ from utils.env import PreprocessObservation, FrameStack, resolve_lazy_frames
 import numpy as np
 
 Observation = torch.Tensor
-Action = torch.Tensor
+Action = np.ndarray
 
 State = Observation
 Reward = float
@@ -76,13 +76,11 @@ class Actor(NeuralNetworks):
         super(Actor, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(n_states, 400),
-            nn.LayerNorm(400),
+            nn.Linear(n_states, 256),
             nn.ReLU(),
-            nn.Linear(400, 300),
-            nn.LayerNorm(300),
+            nn.Linear(256, 256),
             nn.ReLU(),
-            nn.Linear(300, n_actions),
+            nn.Linear(256, n_actions),
             nn.Tanh(),
         ).to(DEVICE)
 
@@ -93,88 +91,55 @@ class Actor(NeuralNetworks):
 class Critic(NeuralNetworks):
     def __init__(self, n_states: int, n_actions: int) -> None:
         super(Critic, self).__init__()
-        self.net1 = nn.Sequential(
-            nn.Linear(n_states, 400),
-            nn.LayerNorm(400),
+        self.net = nn.Sequential(
+            nn.Linear(n_states + n_actions, 256),
             nn.ReLU(),
-        ).to(DEVICE)
-
-        self.net2 = nn.Sequential(
-            nn.Linear(400 + n_actions, 300),
-            nn.LayerNorm(300),
+            nn.Linear(256, 256),
             nn.ReLU(),
-            nn.Linear(300, 1),
+            nn.Linear(256, 1),
         ).to(DEVICE)
 
     def forward(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        state_value = self.net1(state)
-        return self.net2(torch.cat([state_value, action], 1))
+        return self.net(torch.cat([state, action], 1))
 
 
-class OrnsteinUhlenbeckActionNoise:
-    def __init__(self, mu, sigma, theta=0.15, dt=1e-2, x0=None):
-        self.theta = theta
-        self.mu = mu
-        self.sigma = sigma
-        self.dt = dt
-        self.x0 = x0
-        self.reset()
-
-    def noise(self):
-        x = (
-            self.x_prev
-            + self.theta * (self.mu - self.x_prev) * self.dt
-            + self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
-        )
-        self.x_prev = x
-        return x
-
-    def reset(self):
-        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
-        return self
-
-
-class DDPG(AlgorithmInterface[State, Action]):
+class TD3(AlgorithmInterface[State, Action]):
     def __init__(self, n_states: int, n_actions: int) -> None:
-        self.name = "ddpg"
+        self.name = "td3"
         self.n_actions = n_actions
         self.n_states = n_states
 
         self.gamma = 0.99
-        self.tau = 1e-2
-
+        self.tau = 5e-3
 
         self.actor = Actor(self.n_states, self.n_actions)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
         self.actor_loss = nn.MSELoss()
 
-        self.actor_target = (
-            Actor(self.n_states, self.n_actions).hard_update_to(self.actor).no_grad()
-        )
+        self.actor_target = self.actor.clone().no_grad()
 
-        self.critic = Critic(self.n_states, self.n_actions)
-        self.critic_optimizer = torch.optim.Adam(
-            self.critic.parameters(), lr=1e-3, weight_decay=1e-2
-        )
-        self.critic_loss = nn.MSELoss()
+        self.critic1 = Critic(self.n_states, self.n_actions)
+        self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(), lr=3e-4)
+        self.critic1_loss = nn.MSELoss()
 
-        self.critic_target = (
-            Critic(self.n_states, self.n_actions).hard_update_to(self.critic).no_grad()
-        )
+        self.critic_target1 = self.critic1.clone().no_grad()
 
-        self.replay_buffer_size = int(1e6)
-        self.replay_buffer: Deque[Transition] = deque(maxlen=self.replay_buffer_size)
+        self.critic2 = Critic(self.n_states, self.n_actions)
+        self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(), lr=3e-4)
+        self.critic2_loss = nn.MSELoss()
 
-        self.noise_generator = OrnsteinUhlenbeckActionNoise(
-            np.zeros(n_actions), sigma=0.2 * np.ones(n_actions)
-        ).reset()
+        self.critic_target2 = self.critic2.clone().no_grad()
+
+        self.replay_buffer: Deque[Transition] = deque(maxlen=int(1e6))
+
+        self.noise_generator = lambda: np.random.normal(0, 0.1, size=self.n_actions)
 
         self.mini_batch_size = 64
 
-        self.start_train_ratio = 0.1
-
         self.times = 0
         self.eval = False
+        self.max_action = 1.0
+        self.start_timestamp = int(25e3)
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
@@ -234,49 +199,74 @@ class DDPG(AlgorithmInterface[State, Action]):
             self.get_mini_batch()
         )
 
-        # next_action_target = self.actor_target(next_states)
-        target_q_value = rewards + self.gamma * (1 - done) * self.critic_target(
-            next_states, self.actor_target(next_states)
+        noise = (
+            torch.distributions.uniform.Uniform(
+                -self.max_action * 0.2, self.max_action * 0.2
+            )
+            .sample(actions.shape)
+            .to(DEVICE)
         )
-        current_q_value = self.critic(states, actions)
 
-        self.critic_optimizer.zero_grad()
-        value_loss = self.critic_loss(current_q_value, target_q_value)
-        value_loss.backward()
-        self.critic_optimizer.step()
+        next_actions = (self.actor_target(next_states) + noise).clamp(
+            -self.max_action, self.max_action
+        )
 
-        self.actor_optimizer.zero_grad()
-        policy_loss = (-self.critic(states, self.actor(states))).mean()
-        policy_loss.backward()
-        self.actor_optimizer.step()
+        target_Q1 = self.critic_target1(next_states, next_actions)
+        target_Q2 = self.critic_target2(next_states, next_actions)
 
-        self.actor_target.soft_update_to(self.actor, self.tau)
-        self.critic_target.soft_update_to(self.critic, self.tau)
+        target_Q = torch.min(target_Q1, target_Q2)
+        target_Q = rewards + (1 - done) * self.gamma * target_Q
 
-        self.reporter(dict(policy_loss=policy_loss, value_loss=value_loss))
+        current_Q1 = self.critic1(states, actions)
+        current_Q2 = self.critic2(states, actions)
+        critic_loss = self.critic1_loss(current_Q1, target_Q) + self.critic2_loss(
+            current_Q2, target_Q
+        )
+
+        self.critic1_optimizer.zero_grad()
+        self.critic2_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic1_optimizer.step()
+        self.critic2_optimizer.step()
+
+        self.reporter(dict(critic_loss=critic_loss))
+
+        if self.times % 2 == 0:
+            actor_loss = -self.critic1(states, self.actor(states)).mean()
+
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
+
+            self.critic_target1.soft_update_to(self.critic1, self.tau)
+            self.critic_target2.soft_update_to(self.critic2, self.tau)
+
+            self.reporter(dict(actor_loss=actor_loss))
 
     def reset(self):
         self.times = 0
         self.replay_buffer = deque(maxlen=int(1e6))
-        self.noise_generator.reset()
 
     def on_agent_reset(self):
         pass
 
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
-        self.actor.eval()
-        act = self.actor(state)
-        self.actor.train()
+        if self.times <= self.start_timestamp:
+            return np.random.uniform(
+                -self.max_action, self.max_action, size=self.n_actions
+            )
+
+        act = self.actor(state).cpu()
         if not self.eval:
-            noise = self.noise_generator.noise()
-            act += torch.from_numpy(noise).to(DEVICE)
-        return act.cpu().squeeze(0).numpy()
+            noise = self.noise_generator()
+            act += torch.from_numpy(noise)
+        return act.squeeze(0).numpy().clip(-self.max_action, self.max_action)
 
     def on_episode_termination(
         self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
     ):
-        self.noise_generator.reset()
+        pass
 
     def after_step(
         self,
@@ -287,9 +277,7 @@ class DDPG(AlgorithmInterface[State, Action]):
         (sn, an) = sa
         self.replay_buffer.append((s, a, r, sn, an))
 
-        if len(self.replay_buffer) >= math.ceil(
-            self.start_train_ratio * self.replay_buffer_size
-        ):
+        if self.times >= self.start_timestamp:
             self.train()
 
         self.times += 1

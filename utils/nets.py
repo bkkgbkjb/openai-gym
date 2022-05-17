@@ -1,3 +1,4 @@
+from copy import deepcopy
 from torch import nn
 
 
@@ -20,3 +21,6 @@ class NeuralNetworks(nn.Module):
         for p in self.parameters():
             p.requires_grad = False
         return self
+    
+    def clone(self):
+        return deepcopy(self)

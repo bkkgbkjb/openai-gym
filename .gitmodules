@@ -10,3 +10,6 @@
 [submodule "ddpg_example"]
 	path = ddpg_example
 	url = https://github.com/MoritzTaylor/ddpg-pytorch.git
+[submodule "td3-example"]
+	path = td3-example
+	url = https://github.com/sfujim/TD3.git

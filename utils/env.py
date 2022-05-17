@@ -118,16 +118,7 @@ def train(
     agent.reset()
     print(f"train agent: {agent.name}")
 
-    # j = 0
-
-    # def report(info: Dict[str, Any]):
-    #     nonlocal j
-    #     for k, v in info.items():
-    #         writer.add_scalar(k, v, j)
-    #     j += 1
-
-    # agent.set_algm_reporter(report)
-    agent.toggleEval(True)
+    agent.toggleEval(False)
 
     with tqdm(total=TRAINING_TIMES) as pbar:
         frames = 0
@@ -151,19 +142,20 @@ def train(
     return agent
 
 
-def eval(agent: Agent[O, S, A], repeats=3) -> Agent[O, S, A]:
+def eval(agent: Agent[O, S, A], repeats=10) -> Agent[O, S, A]:
     agent.toggleEval(True)
 
+    print('eval process start')
     for _ in range(repeats):
-        input("press any key to start eval agent")
         agent.reset()
 
         while True:
-            agent.render(mode="human")
+            # agent.render(mode="human")
 
             (_, s) = agent.step()
 
             if s:
-                print(f"rwd is: {np.sum(agent.reward_episode)}, steps: {agent.steps}")
                 break
+
+    print('eval process end')
     return agent

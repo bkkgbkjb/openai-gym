@@ -64,6 +64,7 @@ class Agent(Generic[O, S, A]):
         self.algm.on_agent_reset()
 
     def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
+        self.reporter = reporter
         self.algm.set_reporter(reporter)
 
     def toggleEval(self, newEval: bool):
@@ -117,6 +118,13 @@ class Agent(Generic[O, S, A]):
 
             self.eval or self.algm.on_episode_termination(
                 (self.state_episode, self.action_episode, self.reward_episode)
+            )
+            self.reporter(
+                {
+                    "train_return"
+                    if not self.eval
+                    else "eval_return": np.sum([r for r in self.reward_episode])
+                }
             )
 
         return (obs, stop)
