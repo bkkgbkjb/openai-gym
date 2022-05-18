@@ -76,11 +76,11 @@ class Actor(NeuralNetworks):
         super(Actor, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(n_states, 256),
+            layer_init(nn.Linear(n_states, 256)),
             nn.ReLU(),
-            nn.Linear(256, 256),
+            layer_init(nn.Linear(256, 256)),
             nn.ReLU(),
-            nn.Linear(256, n_actions),
+            layer_init(nn.Linear(256, n_actions)),
             nn.Tanh(),
         ).to(DEVICE)
 
@@ -92,11 +92,11 @@ class Critic(NeuralNetworks):
     def __init__(self, n_states: int, n_actions: int) -> None:
         super(Critic, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_states + n_actions, 256),
+            layer_init(nn.Linear(n_states + n_actions, 256)),
             nn.ReLU(),
-            nn.Linear(256, 256),
+            layer_init(nn.Linear(256, 256)),
             nn.ReLU(),
-            nn.Linear(256, 1),
+            layer_init(nn.Linear(256, 1)),
         ).to(DEVICE)
 
     def forward(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -134,7 +134,7 @@ class TD3(AlgorithmInterface[State, Action]):
 
         self.noise_generator = lambda: np.random.normal(0, 0.1, size=self.n_actions)
 
-        self.mini_batch_size = 64
+        self.mini_batch_size = 256
 
         self.times = 0
         self.eval = False

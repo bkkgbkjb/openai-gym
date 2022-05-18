@@ -1,4 +1,5 @@
 import gym
+import math
 from typing import (
     List,
     Tuple,
@@ -104,40 +105,27 @@ S = TypeVar("S")
 O = TypeVar("O")
 
 
-def train(
-    env: gym.Env, agent: Agent[O, S, A], random_seed=0, training_frames: int = int(1e6)
-) -> Agent[O, S, A]:
-    env.seed(random_seed)
-    env.action_space.seed(random_seed)
-    env.observation_space.seed(random_seed)
-    env.reset()
+def train(agent: Agent[O, S, A], training_frames=int(1e6)) -> Agent[O, S, A]:
 
-    TRAINING_TIMES = training_frames
-
-    print(env.action_space, env.observation_space)
     agent.reset()
-    print(f"train agent: {agent.name}")
 
     agent.toggleEval(False)
 
-    with tqdm(total=TRAINING_TIMES) as pbar:
+    with tqdm(total=training_frames) as pbar:
         frames = 0
-        epi = 0
-        while frames < TRAINING_TIMES:
+        while frames < training_frames:
             agent.reset()
             i = 0
             end = False
-            while not end and frames < TRAINING_TIMES:
+            while not end and frames < training_frames:
 
                 (_, end) = agent.step()
                 i += 1
 
-            epi += 1
             frames += i
 
             pbar.update(i)
 
-        print(f"training end after {frames} frames")
 
     return agent
 
@@ -145,17 +133,28 @@ def train(
 def eval(agent: Agent[O, S, A], repeats=10) -> Agent[O, S, A]:
     agent.toggleEval(True)
 
-    print('eval process start')
     for _ in range(repeats):
         agent.reset()
 
         while True:
-            # agent.render(mode="human")
 
             (_, s) = agent.step()
 
             if s:
                 break
 
-    print('eval process end')
+    return agent
+
+
+def train_and_eval(
+    agent: Agent[O, S, A],
+    single_train_frames=int(1e4),
+    eval_repeats=10,
+    total_train_frames=int(1e6),
+) -> Agent[O, S, A]:
+
+    for _ in tqdm(range(math.ceil(total_train_frames / single_train_frames))):
+        train(agent, single_train_frames)
+        eval(agent, eval_repeats)
+
     return agent
