@@ -39,7 +39,7 @@ from utils.env import PreprocessObservation, FrameStack, resolve_lazy_frames
 import numpy as np
 
 Observation = torch.Tensor
-Action = torch.Tensor
+Action = np.ndarray
 
 State = Observation
 Reward = float
@@ -76,13 +76,13 @@ class Actor(NeuralNetworks):
         super(Actor, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(n_states, 400),
+            layer_init(nn.Linear(n_states, 400)),
             nn.LayerNorm(400),
             nn.ReLU(),
-            nn.Linear(400, 300),
+            layer_init(nn.Linear(400, 300)),
             nn.LayerNorm(300),
             nn.ReLU(),
-            nn.Linear(300, n_actions),
+            layer_init(nn.Linear(300, n_actions)),
             nn.Tanh(),
         ).to(DEVICE)
 
@@ -94,16 +94,16 @@ class Critic(NeuralNetworks):
     def __init__(self, n_states: int, n_actions: int) -> None:
         super(Critic, self).__init__()
         self.net1 = nn.Sequential(
-            nn.Linear(n_states, 400),
+            layer_init(nn.Linear(n_states, 400)),
             nn.LayerNorm(400),
             nn.ReLU(),
         ).to(DEVICE)
 
         self.net2 = nn.Sequential(
-            nn.Linear(400 + n_actions, 300),
+            layer_init(nn.Linear(400 + n_actions, 300)),
             nn.LayerNorm(300),
             nn.ReLU(),
-            nn.Linear(300, 1),
+            layer_init(nn.Linear(300, 1)),
         ).to(DEVICE)
 
     def forward(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
@@ -135,7 +135,7 @@ class OrnsteinUhlenbeckActionNoise:
 
 
 class DDPG(AlgorithmInterface[State, Action]):
-    def __init__(self, n_states: int, n_actions: int) -> None:
+    def __init__(self, n_states: int, n_actions: int):
         self.name = "ddpg"
         self.n_actions = n_actions
         self.n_states = n_states
@@ -143,13 +143,13 @@ class DDPG(AlgorithmInterface[State, Action]):
         self.gamma = 0.99
         self.tau = 1e-2
 
-
         self.actor = Actor(self.n_states, self.n_actions)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
         self.actor_loss = nn.MSELoss()
 
         self.actor_target = (
-            Actor(self.n_states, self.n_actions).hard_update_to(self.actor).no_grad()
+            # Actor(self.n_states, self.n_actions).hard_update_to(self.actor).no_grad()
+            self.actor.clone().no_grad()
         )
 
         self.critic = Critic(self.n_states, self.n_actions)
@@ -159,7 +159,8 @@ class DDPG(AlgorithmInterface[State, Action]):
         self.critic_loss = nn.MSELoss()
 
         self.critic_target = (
-            Critic(self.n_states, self.n_actions).hard_update_to(self.critic).no_grad()
+            # Critic(self.n_states, self.n_actions).hard_update_to(self.critic).no_grad()
+            self.critic.clone().no_grad()
         )
 
         self.replay_buffer_size = int(1e6)
