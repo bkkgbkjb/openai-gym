@@ -25,14 +25,15 @@ Action = torch.Tensor
 State = Observation
 Reward = int
 
-Transition = TransitionGeneric[State, Action]
-Step = StepGeneric[State, ActionInfo[Action]]
-NotNoneStep = NotNoneStepGeneric[State, ActionInfo[Action]]
+Transition = TransitionGeneric[State]
+Step = StepGeneric[State]
+NotNoneStep = NotNoneStepGeneric[State]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class VFunction(NeuralNetworks):
+
     def __init__(self, n_state: int):
         super().__init__()
         self.net = nn.Sequential(
@@ -48,6 +49,7 @@ class VFunction(NeuralNetworks):
 
 
 class QFunction(NeuralNetworks):
+
     def __init__(self, n_state: int, n_action: int):
         super().__init__()
         self.net = nn.Sequential(
@@ -65,6 +67,7 @@ class QFunction(NeuralNetworks):
 
 
 class PaiFunction(NeuralNetworks):
+
     def __init__(self, n_state: int, n_action):
         super().__init__()
         self.net = nn.Sequential(
@@ -108,7 +111,8 @@ class PaiFunction(NeuralNetworks):
         return act, log_prob, mean
 
 
-class SAC(AlgorithmInterface[State, Action]):
+class SAC(AlgorithmInterface[State]):
+
     def __init__(self, n_state: int, n_actions: int):
         self.name = "sac"
         self.n_actions = n_actions
@@ -150,7 +154,7 @@ class SAC(AlgorithmInterface[State, Action]):
 
     def reset(self):
         self.times = 0
-        self.replay_memory = ReplayBuffer[State, Action]()
+        self.replay_memory = ReplayBuffer[State]()
 
     def on_agent_reset(self):
         pass
@@ -160,15 +164,14 @@ class SAC(AlgorithmInterface[State, Action]):
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.detach().cpu().squeeze(0).numpy()
 
-    def on_episode_termination(
-        self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
-    ):
+    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
+                                                List[Reward]]):
         pass
 
     def after_step(
         self,
-        sar: Tuple[State, ActionInfo[Action], Reward],
-        sa: Tuple[State, Optional[ActionInfo[Action]]],
+        sar: Tuple[State, ActionInfo, Reward],
+        sa: Tuple[State, Optional[ActionInfo]],
     ):
         (s, a, r) = sar
         (sn, an) = sa
@@ -182,8 +185,7 @@ class SAC(AlgorithmInterface[State, Action]):
     def train(self):
 
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
-            self.replay_memory.sample(self.mini_batch_size)
-        )
+            self.replay_memory.sample(self.mini_batch_size))
 
         new_actions, new_log_probs, _ = self.policy.sample(states)
 
@@ -191,7 +193,8 @@ class SAC(AlgorithmInterface[State, Action]):
         predicted_q1 = self.q1(states, actions)
         predicted_q2 = self.q2(states, actions)
         target_val = self.offline_v(next_states)
-        target_q_val = (rewards + (1 - done) * self.gamma * target_val).detach()
+        target_q_val = (rewards +
+                        (1 - done) * self.gamma * target_val).detach()
 
         q_val_loss1 = self.q1_loss(predicted_q1, target_q_val)
         q_val_loss2 = self.q2_loss(predicted_q2, target_q_val)
@@ -206,13 +209,11 @@ class SAC(AlgorithmInterface[State, Action]):
 
         # Training V Function
         predicted_val = self.online_v(states)
-        predicted_new_q_value = torch.min(
-            self.q1(states, new_actions), self.q2(states, new_actions)
-        )
+        predicted_new_q_value = torch.min(self.q1(states, new_actions),
+                                          self.q2(states, new_actions))
 
-        target_value_func = (
-            predicted_new_q_value - self.alpha * new_log_probs
-        ).detach()
+        target_value_func = (predicted_new_q_value -
+                             self.alpha * new_log_probs).detach()
 
         value_loss = self.v_loss(predicted_val, target_value_func)
 
@@ -221,7 +222,8 @@ class SAC(AlgorithmInterface[State, Action]):
         self.v_optimizer.step()
 
         # Training P Function
-        policy_loss = (self.alpha * new_log_probs - predicted_new_q_value).mean()
+        policy_loss = (self.alpha * new_log_probs -
+                       predicted_new_q_value).mean()
         self.p_optimizer.zero_grad()
         policy_loss.backward()
         self.p_optimizer.step()
@@ -235,11 +237,11 @@ class SAC(AlgorithmInterface[State, Action]):
                 policy_loss=policy_loss,
                 q_loss1=q_val_loss1,
                 q_loss2=q_val_loss2,
-            )
-        )
+            ))
 
 
-class Preprocess(PreprocessInterface[Observation, Action, State]):
+class Preprocess(PreprocessInterface[Observation, State]):
+
     def __init__(self):
         pass
 

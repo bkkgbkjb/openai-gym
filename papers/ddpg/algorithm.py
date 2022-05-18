@@ -31,14 +31,15 @@ Action = np.ndarray
 State = Observation
 Reward = float
 
-Transition = TransitionGeneric[State, Action]
-Step = StepGeneric[State, ActionInfo[Action]]
-NotNoneStep = NotNoneStepGeneric[State, ActionInfo[Action]]
+Transition = TransitionGeneric[State]
+Step = StepGeneric[State]
+NotNoneStep = NotNoneStepGeneric[State]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(PreprocessInterface[Observation, Action, State]):
+class Preprocess(PreprocessInterface[Observation, State]):
+
     def __init__(self):
         pass
 
@@ -53,6 +54,7 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
 
 
 class Actor(NeuralNetworks):
+
     def __init__(self, n_states: int, n_actions: int) -> None:
         super(Actor, self).__init__()
 
@@ -72,6 +74,7 @@ class Actor(NeuralNetworks):
 
 
 class Critic(NeuralNetworks):
+
     def __init__(self, n_states: int, n_actions: int) -> None:
         super(Critic, self).__init__()
         self.net1 = nn.Sequential(
@@ -87,12 +90,14 @@ class Critic(NeuralNetworks):
             layer_init(nn.Linear(300, 1)),
         ).to(DEVICE)
 
-    def forward(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def forward(self, state: torch.Tensor,
+                action: torch.Tensor) -> torch.Tensor:
         state_value = self.net1(state)
         return self.net2(torch.cat([state_value, action], 1))
 
 
 class OrnsteinUhlenbeckActionNoise:
+
     def __init__(self, mu, sigma, theta=0.15, dt=1e-2, x0=None):
         self.theta = theta
         self.mu = mu
@@ -102,20 +107,20 @@ class OrnsteinUhlenbeckActionNoise:
         self.reset()
 
     def noise(self):
-        x = (
-            self.x_prev
-            + self.theta * (self.mu - self.x_prev) * self.dt
-            + self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
-        )
+        x = (self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt +
+             self.sigma * np.sqrt(self.dt) *
+             np.random.normal(size=self.mu.shape))
         self.x_prev = x
         return x
 
     def reset(self):
-        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
+        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(
+            self.mu)
         return self
 
 
-class DDPG(AlgorithmInterface[State, Action]):
+class DDPG(AlgorithmInterface[State]):
+
     def __init__(self, n_states: int, n_actions: int):
         self.name = "ddpg"
         self.n_actions = n_actions
@@ -125,24 +130,24 @@ class DDPG(AlgorithmInterface[State, Action]):
         self.tau = 1e-2
 
         self.actor = Actor(self.n_states, self.n_actions)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
+                                                lr=1e-4)
         self.actor_loss = nn.MSELoss()
 
         self.actor_target = self.actor.clone().no_grad()
 
         self.critic = Critic(self.n_states, self.n_actions)
-        self.critic_optimizer = torch.optim.Adam(
-            self.critic.parameters(), lr=1e-3, weight_decay=1e-2
-        )
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),
+                                                 lr=1e-3,
+                                                 weight_decay=1e-2)
         self.critic_loss = nn.MSELoss()
 
         self.critic_target = self.critic.clone().no_grad()
 
-        self.replay_buffer = ReplayBuffer[State, Action](int(1e6))
+        self.replay_buffer = ReplayBuffer[State](int(1e6))
 
         self.noise_generator = OrnsteinUhlenbeckActionNoise(
-            np.zeros(n_actions), sigma=0.2 * np.ones(n_actions)
-        ).reset()
+            np.zeros(n_actions), sigma=0.2 * np.ones(n_actions)).reset()
 
         self.mini_batch_size = 64
 
@@ -159,12 +164,11 @@ class DDPG(AlgorithmInterface[State, Action]):
 
     def train(self):
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
-            self.replay_buffer.sample(self.mini_batch_size)
-        )
+            self.replay_buffer.sample(self.mini_batch_size))
 
-        target_q_value = rewards + self.gamma * (1 - done) * self.critic_target(
-            next_states, self.actor_target(next_states)
-        )
+        target_q_value = rewards + self.gamma * (
+            1 - done) * self.critic_target(next_states,
+                                           self.actor_target(next_states))
         current_q_value = self.critic(states, actions)
 
         self.critic_optimizer.zero_grad()
@@ -200,23 +204,21 @@ class DDPG(AlgorithmInterface[State, Action]):
             act += torch.from_numpy(noise).to(DEVICE)
         return act.cpu().squeeze(0).numpy()
 
-    def on_episode_termination(
-        self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
-    ):
+    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
+                                                List[Reward]]):
         self.noise_generator.reset()
 
     def after_step(
         self,
-        sar: Tuple[State, ActionInfo[Action], Reward],
-        sa: Tuple[State, Optional[ActionInfo[Action]]],
+        sar: Tuple[State, ActionInfo, Reward],
+        sa: Tuple[State, Optional[ActionInfo]],
     ):
         (s, a, r) = sar
         (sn, an) = sa
         self.replay_buffer.append((s, a, r, sn, an))
 
         if self.replay_buffer.len >= math.ceil(
-            self.start_train_ratio * self.replay_buffer.size
-        ):
+                self.start_train_ratio * self.replay_buffer.size):
             self.train()
 
         self.times += 1

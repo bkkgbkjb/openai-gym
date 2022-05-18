@@ -55,8 +55,11 @@ class ReplayBuffer(Generic[S]):
                 cast(LazyFrames, s)) for (s, _, _, _, _) in mini_batch
         ])
 
-        actions = torch.stack(
-            [torch.from_numpy(a) for (_, (a, _), _, _, _) in mini_batch])
+        actions = torch.stack([
+            torch.from_numpy(a).type(torch.float32)
+            if a.dtype == np.float64 else torch.from_numpy(a)
+            for (_, (a, _), _, _, _) in mini_batch
+        ])
 
         rewards = torch.stack([
             torch.tensor(r, dtype=torch.float32)

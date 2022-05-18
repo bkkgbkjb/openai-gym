@@ -20,6 +20,6 @@ agent = Agent(
 )
 
 
-agent.set_algm_reporter(get_reporter())
+agent.set_algm_reporter(get_reporter(agent.name))
 
 train_and_eval(agent)

@@ -22,6 +22,6 @@ env = FrameStack(env, num_stack=4)
 
 agent = Agent(env, DQNAlgorithm(env.action_space.n), Preprocess())
 
-agent.set_algm_reporter(get_reporter())
+agent.set_algm_reporter(get_reporter(agent.name))
 
 train_and_eval(agent)

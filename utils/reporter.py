@@ -1,10 +1,9 @@
 from typing import Dict, Any
 from torch.utils.tensorboard import SummaryWriter
 
-writer = SummaryWriter()
 
-
-def get_reporter():
+def get_reporter(name: str):
+    writer = SummaryWriter(comment='_' + name)
     times_counter: Dict[str, int] = dict()
 
     def reporter(info: Dict[str, Any]):

@@ -30,14 +30,15 @@ Action = np.ndarray
 State = Observation
 Reward = float
 
-Transition = TransitionGeneric[State, Action]
-Step = StepGeneric[State, ActionInfo[Action]]
-NotNoneStep = NotNoneStepGeneric[State, ActionInfo[Action]]
+Transition = TransitionGeneric[State]
+Step = StepGeneric[State]
+NotNoneStep = NotNoneStepGeneric[State]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(PreprocessInterface[Observation, Action, State]):
+class Preprocess(PreprocessInterface[Observation, State]):
+
     def __init__(self):
         pass
 
@@ -52,6 +53,7 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
 
 
 class Actor(NeuralNetworks):
+
     def __init__(self, n_states: int, n_actions: int):
         super(Actor, self).__init__()
 
@@ -69,6 +71,7 @@ class Actor(NeuralNetworks):
 
 
 class Critic(NeuralNetworks):
+
     def __init__(self, n_states: int, n_actions: int):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
@@ -79,11 +82,13 @@ class Critic(NeuralNetworks):
             layer_init(nn.Linear(256, 1)),
         ).to(DEVICE)
 
-    def forward(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def forward(self, state: torch.Tensor,
+                action: torch.Tensor) -> torch.Tensor:
         return self.net(torch.cat([state, action], 1))
 
 
-class TD3(AlgorithmInterface[State, Action]):
+class TD3(AlgorithmInterface[State]):
+
     def __init__(self, n_states: int, n_actions: int) -> None:
         self.name = "td3"
         self.n_actions = n_actions
@@ -93,26 +98,30 @@ class TD3(AlgorithmInterface[State, Action]):
         self.tau = 5e-3
 
         self.actor = Actor(self.n_states, self.n_actions)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
+                                                lr=3e-4)
         self.actor_loss = nn.MSELoss()
 
         self.actor_target = self.actor.clone().no_grad()
 
         self.critic1 = Critic(self.n_states, self.n_actions)
-        self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(), lr=3e-4)
+        self.critic1_optimizer = torch.optim.Adam(self.critic1.parameters(),
+                                                  lr=3e-4)
         self.critic1_loss = nn.MSELoss()
 
         self.critic_target1 = self.critic1.clone().no_grad()
 
         self.critic2 = Critic(self.n_states, self.n_actions)
-        self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(), lr=3e-4)
+        self.critic2_optimizer = torch.optim.Adam(self.critic2.parameters(),
+                                                  lr=3e-4)
         self.critic2_loss = nn.MSELoss()
 
         self.critic_target2 = self.critic2.clone().no_grad()
 
-        self.replay_buffer = ReplayBuffer[State, Action](int(1e6))
+        self.replay_buffer = ReplayBuffer[State](int(1e6))
 
-        self.noise_generator = lambda: np.random.normal(0, 0.1, size=self.n_actions)
+        self.noise_generator = lambda: np.random.normal(
+            0, 0.1, size=self.n_actions)
 
         self.mini_batch_size = 256
 
@@ -129,20 +138,14 @@ class TD3(AlgorithmInterface[State, Action]):
 
     def train(self):
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
-            self.replay_buffer.sample(self.mini_batch_size)
-        )
+            self.replay_buffer.sample(self.mini_batch_size))
 
-        noise = (
-            torch.distributions.uniform.Uniform(
-                -self.max_action * 0.2, self.max_action * 0.2
-            )
-            .sample(actions.shape)
-            .to(DEVICE)
-        )
+        noise = (torch.distributions.uniform.Uniform(
+            -self.max_action * 0.2,
+            self.max_action * 0.2).sample(actions.shape).to(DEVICE))
 
         next_actions = (self.actor_target(next_states) + noise).clamp(
-            -self.max_action, self.max_action
-        )
+            -self.max_action, self.max_action)
 
         target_Q1 = self.critic_target1(next_states, next_actions)
         target_Q2 = self.critic_target2(next_states, next_actions)
@@ -152,9 +155,8 @@ class TD3(AlgorithmInterface[State, Action]):
 
         current_Q1 = self.critic1(states, actions)
         current_Q2 = self.critic2(states, actions)
-        critic_loss = self.critic1_loss(current_Q1, target_Q) + self.critic2_loss(
-            current_Q2, target_Q
-        )
+        critic_loss = self.critic1_loss(
+            current_Q1, target_Q) + self.critic2_loss(current_Q2, target_Q)
 
         self.critic1_optimizer.zero_grad()
         self.critic2_optimizer.zero_grad()
@@ -186,9 +188,9 @@ class TD3(AlgorithmInterface[State, Action]):
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         if self.times <= self.start_timestamp:
-            return np.random.uniform(
-                -self.max_action, self.max_action, size=self.n_actions
-            )
+            return np.random.uniform(-self.max_action,
+                                     self.max_action,
+                                     size=self.n_actions)
 
         act = self.actor(state).cpu()
         if not self.eval:
@@ -196,15 +198,14 @@ class TD3(AlgorithmInterface[State, Action]):
             act += torch.from_numpy(noise)
         return act.squeeze(0).numpy().clip(-self.max_action, self.max_action)
 
-    def on_episode_termination(
-        self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
-    ):
+    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
+                                                List[Reward]]):
         pass
 
     def after_step(
         self,
-        sar: Tuple[State, ActionInfo[Action], Reward],
-        sa: Tuple[State, Optional[ActionInfo[Action]]],
+        sar: Tuple[State, ActionInfo, Reward],
+        sa: Tuple[State, Optional[ActionInfo]],
     ):
         (s, a, r) = sar
         (sn, an) = sa
