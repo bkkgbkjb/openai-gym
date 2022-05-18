@@ -1,5 +1,7 @@
 from copy import deepcopy
 from torch import nn
+import torch
+import numpy as np
 
 
 class NeuralNetworks(nn.Module):
@@ -21,6 +23,12 @@ class NeuralNetworks(nn.Module):
         for p in self.parameters():
             p.requires_grad = False
         return self
-    
+
     def clone(self):
         return deepcopy(self)
+
+
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer

@@ -2,40 +2,26 @@ import setup
 from utils.common import (
     ActionInfo,
     StepGeneric,
-    Episode,
     TransitionGeneric,
     NotNoneStepGeneric,
 )
 from torch import nn
-import math
 from collections import deque
 import torch
 from utils.nets import NeuralNetworks
 from utils.preprocess import PreprocessInterface
 from utils.algorithm import AlgorithmInterface
-import plotly.graph_objects as go
-from torch.distributions import Categorical, Normal
-from tqdm.autonotebook import tqdm
 
-from torchvision import transforms as T
-from utils.agent import Agent
-from gym.spaces import Box
 from typing import (
-    Deque,
     List,
     Tuple,
-    Literal,
     Any,
     Optional,
-    cast,
     Callable,
-    Union,
-    Iterable,
     Dict,
 )
-import gym
-import numpy.typing as npt
-from utils.env import PreprocessObservation, FrameStack, resolve_lazy_frames
+from utils.replay_buffer import ReplayBuffer
+from utils.nets import layer_init
 import numpy as np
 
 Observation = torch.Tensor
@@ -65,14 +51,8 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
         return torch.from_numpy(h[-1]).type(torch.float32).to(DEVICE)
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
-
-
 class Actor(NeuralNetworks):
-    def __init__(self, n_states: int, n_actions: int) -> None:
+    def __init__(self, n_states: int, n_actions: int):
         super(Actor, self).__init__()
 
         self.net = nn.Sequential(
@@ -89,7 +69,7 @@ class Actor(NeuralNetworks):
 
 
 class Critic(NeuralNetworks):
-    def __init__(self, n_states: int, n_actions: int) -> None:
+    def __init__(self, n_states: int, n_actions: int):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
             layer_init(nn.Linear(n_states + n_actions, 256)),
@@ -130,7 +110,7 @@ class TD3(AlgorithmInterface[State, Action]):
 
         self.critic_target2 = self.critic2.clone().no_grad()
 
-        self.replay_buffer: Deque[Transition] = deque(maxlen=int(1e6))
+        self.replay_buffer = ReplayBuffer[State, Action](int(1e6))
 
         self.noise_generator = lambda: np.random.normal(0, 0.1, size=self.n_actions)
 
@@ -144,59 +124,12 @@ class TD3(AlgorithmInterface[State, Action]):
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
-    def get_mini_batch(self) -> List[Transition]:
-        idx = np.random.choice(len(self.replay_buffer), self.mini_batch_size)
-
-        l = list(self.replay_buffer)
-
-        r: List[Transition] = []
-        for i in idx:
-            r.append(self.replay_buffer[i])
-
-        return r
-
-    def resolve_minibatch_detail(
-        self, mini_batch: List[Transition]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        states = torch.stack([s for (s, _, _, _, _) in mini_batch])
-        assert states.shape == (self.mini_batch_size, self.n_states)
-
-        actions = torch.stack(
-            [
-                torch.from_numpy(a).type(torch.float32)
-                for (_, (a, _), _, _, _) in mini_batch
-            ]
-        )
-        assert actions.shape == (self.mini_batch_size, self.n_actions)
-
-        rewards = torch.stack(
-            [torch.tensor(r, dtype=torch.float32) for (_, _, r, _, _) in mini_batch]
-        ).unsqueeze(1)
-        assert rewards.shape == (self.mini_batch_size, 1)
-
-        next_states = torch.stack([sn for (_, _, _, sn, _) in mini_batch])
-        assert next_states.shape == (self.mini_batch_size, self.n_states)
-
-        done = torch.as_tensor(
-            [1 if an is None else 0 for (_, _, _, _, an) in mini_batch],
-            dtype=torch.int8,
-        ).unsqueeze(1)
-        assert done.shape == (self.mini_batch_size, 1)
-
-        return (
-            states.to(DEVICE),
-            actions.to(DEVICE),
-            rewards.to(DEVICE),
-            next_states.to(DEVICE),
-            done.to(DEVICE),
-        )
-
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.reporter = reporter
+        self.report = reporter
 
     def train(self):
-        (states, actions, rewards, next_states, done) = self.resolve_minibatch_detail(
-            self.get_mini_batch()
+        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+            self.replay_buffer.sample(self.mini_batch_size)
         )
 
         noise = (
@@ -229,7 +162,7 @@ class TD3(AlgorithmInterface[State, Action]):
         self.critic1_optimizer.step()
         self.critic2_optimizer.step()
 
-        self.reporter(dict(critic_loss=critic_loss))
+        self.report(dict(critic_loss=critic_loss))
 
         if self.times % 2 == 0:
             actor_loss = -self.critic1(states, self.actor(states)).mean()
@@ -241,11 +174,11 @@ class TD3(AlgorithmInterface[State, Action]):
             self.critic_target1.soft_update_to(self.critic1, self.tau)
             self.critic_target2.soft_update_to(self.critic2, self.tau)
 
-            self.reporter(dict(actor_loss=actor_loss))
+            self.report(dict(actor_loss=actor_loss))
 
     def reset(self):
         self.times = 0
-        self.replay_buffer = deque(maxlen=int(1e6))
+        self.replay_buffer.clear()
 
     def on_agent_reset(self):
         pass
