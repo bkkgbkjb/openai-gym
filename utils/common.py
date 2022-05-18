@@ -1,23 +1,21 @@
 from typing import Dict, Tuple, TypeVar, Optional, List, Any
+import numpy as np
 
+Action = np.ndarray
+ActionInfo = Tuple[Action, Dict[str, Any]]
+
+Reward = float
 
 OS = TypeVar("OS")
-AS = TypeVar("AS")
-StepGeneric = Tuple[OS, Optional[AS], Optional[float]]
+StepGeneric = Tuple[OS, Optional[ActionInfo], Optional[Reward]]
 
 NOS = TypeVar("NOS")
-NAS = TypeVar("NAS")
-NotNoneStepGeneric = Tuple[NOS, NAS, float]
+NotNoneStepGeneric = Tuple[NOS, ActionInfo, Reward]
 
 
 OE = TypeVar("OE")
-AE = TypeVar("AE")
-Episode = List[StepGeneric[OE, AE]]
+EpisodeGeneric = List[StepGeneric[OE]]
 
-AA = TypeVar("AA")
-ActionInfo = Tuple[AA, Dict[str, Any]]
 
 TS = TypeVar("TS")
-TA = TypeVar("TA")
-TransitionGeneric = Tuple[TS, ActionInfo[TA],
-                          float, TS, Optional[ActionInfo[TA]]]
+TransitionGeneric = Tuple[TS, ActionInfo, Reward, TS, Optional[ActionInfo]]

@@ -1,13 +1,11 @@
 from abc import abstractmethod
-from typing import Optional, Protocol, TypeVar, List, Tuple
-from utils.common import Episode
+from typing import Protocol, TypeVar, List
 
-S = TypeVar("S", covariant=True)
 O = TypeVar("O")
-A = TypeVar("A", covariant=True)
+S = TypeVar("S", covariant=True)
 
 
-class PreprocessInterface(Protocol[O, A, S]):
+class PreprocessInterface(Protocol[O, S]):
     @abstractmethod
     def get_current_state(self, h: List[O]) -> S:
         raise NotImplementedError()

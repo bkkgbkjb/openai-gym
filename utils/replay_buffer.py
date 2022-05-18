@@ -4,21 +4,22 @@ import numpy as np
 import torch
 
 from utils.common import TransitionGeneric
+from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-
+SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+              torch.Tensor]
 
 S = TypeVar("S")
-A = TypeVar("A")
 
 
-class ReplayBuffer(Generic[S, A]):
+class ReplayBuffer(Generic[S]):
+
     def __init__(self, capacity: int = int(1e6)):
-        self.buffer: Deque[TransitionGeneric[S, A]] = deque(maxlen=capacity)
+        self.buffer: Deque[TransitionGeneric[S]] = deque(maxlen=capacity)
 
-    def append(self, transition: TransitionGeneric[S, A]):
+    def append(self, transition: TransitionGeneric[S]):
         self.buffer.append(transition)
 
         return self
@@ -36,37 +37,36 @@ class ReplayBuffer(Generic[S, A]):
     def len(self) -> int:
         return len(self.buffer)
 
-    def sample(self, size: int) -> List[TransitionGeneric[S, A]]:
+    def sample(self, size: int) -> List[TransitionGeneric[S]]:
         idx = np.random.choice(len(self.buffer), size)
         l = list(self.buffer)
 
-        r: List[TransitionGeneric[S, A]] = []
+        r: List[TransitionGeneric[S]] = []
         for i in idx:
             r.append(l[i])
 
         return r
 
     @staticmethod
-    def resolve(
-        mini_batch: List[TransitionGeneric[S, A]],
-    ) -> SARSA:
+    def resolve(mini_batch: List[TransitionGeneric[S]], ) -> SARSA:
 
-        states = torch.stack([cast(torch.Tensor, s) for (s, _, _, _, _) in mini_batch])
+        states = torch.stack([
+            s if isinstance(s, torch.Tensor) else resolve_lazy_frames(
+                cast(LazyFrames, s)) for (s, _, _, _, _) in mini_batch
+        ])
 
         actions = torch.stack(
-            [
-                torch.from_numpy(a).type(torch.float32)
-                for (_, (a, _), _, _, _) in mini_batch
-            ]
-        )
+            [torch.from_numpy(a) for (_, (a, _), _, _, _) in mini_batch])
 
-        rewards = torch.stack(
-            [torch.tensor(r, dtype=torch.float32) for (_, _, r, _, _) in mini_batch]
-        ).unsqueeze(1)
+        rewards = torch.stack([
+            torch.tensor(r, dtype=torch.float32)
+            for (_, _, r, _, _) in mini_batch
+        ]).unsqueeze(1)
 
-        next_states = torch.stack(
-            [cast(torch.Tensor, sn) for (_, _, _, sn, _) in mini_batch]
-        )
+        next_states = torch.stack([
+            sn if isinstance(sn, torch.Tensor) else resolve_lazy_frames(
+                cast(LazyFrames, sn)) for (_, _, _, sn, _) in mini_batch
+        ])
 
         done = torch.as_tensor(
             [1 if an is None else 0 for (_, _, _, _, an) in mini_batch],

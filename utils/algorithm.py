@@ -1,38 +1,35 @@
 from abc import abstractmethod
-from optparse import Option
 from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any
-import numpy as np
-
-from utils.common import ActionInfo
+from utils.common import Action, ActionInfo, Reward
 
 
 S = TypeVar("S")
-A = TypeVar("A")
-R = float
 
 
-class AlgorithmInterface(Protocol[S, A]):
+class AlgorithmInterface(Protocol[S]):
 
     name: str
 
     @abstractmethod
-    def take_action(self, state: S) -> Union[ActionInfo[A], A]:
+    def take_action(self, state: S) -> Union[ActionInfo, Action]:
         raise NotImplementedError()
 
     @abstractmethod
     def after_step(
-        self, sar: Tuple[S, ActionInfo[A], R], sa: Tuple[S, Optional[ActionInfo[A]]]
+        self, sar: Tuple[S, ActionInfo, Reward], sa: Tuple[S, Optional[ActionInfo]]
     ):
         raise NotImplementedError()
 
     @abstractmethod
-    def on_episode_termination(self, sar: Tuple[List[S], List[ActionInfo[A]], List[R]]):
+    def on_episode_termination(
+        self, sar: Tuple[List[S], List[ActionInfo], List[Reward]]
+    ):
         raise NotImplementedError()
 
     @abstractmethod
     def on_agent_reset(self):
         raise NotImplementedError()
-    
+
     @abstractmethod
     def on_toggle_eval(self, isEval: bool):
         raise NotImplementedError()

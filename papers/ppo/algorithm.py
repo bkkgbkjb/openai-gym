@@ -2,7 +2,7 @@ import setup
 from utils.common import (
     ActionInfo,
     StepGeneric,
-    Episode,
+    EpisodeGeneric,
     TransitionGeneric,
     NotNoneStepGeneric,
 )

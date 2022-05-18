@@ -2,19 +2,11 @@ import gym
 import math
 from typing import (
     List,
-    Tuple,
-    Dict,
-    Literal,
     Any,
-    Optional,
     cast,
-    Callable,
-    Union,
-    Iterable,
     TypeVar,
 )
 from tqdm import tqdm
-from gym.wrappers import FrameStack, LazyFrames
 from os import times
 from gym.spaces import Box
 import numpy as np
@@ -24,19 +16,10 @@ import torch
 from utils.agent import Agent
 
 
-def resolve_lazy_frames(lazy_frames: Any) -> torch.Tensor:
-    assert len(lazy_frames) == 4
-    rlt = torch.cat(
-        cast(
-            List[torch.Tensor],
-            [lazy_frames[0], lazy_frames[1], lazy_frames[2], lazy_frames[3]],
-        )
-    ).unsqueeze(0)
-    assert rlt.shape == (1, 4, 84, 84)
-    return rlt
 
 
 class PreprocessObservation(gym.ObservationWrapper):
+
     def __init__(self, env: gym.Env):
         super().__init__(env)
 
@@ -48,8 +31,10 @@ class PreprocessObservation(gym.ObservationWrapper):
         )
 
         self.transform = T.Compose(
-            [T.ToPILImage(), T.Resize((84, 84)), T.Grayscale(), T.ToTensor()]
-        )
+            [T.ToPILImage(),
+             T.Resize((84, 84)),
+             T.Grayscale(),
+             T.ToTensor()])
 
     def observation(self, observation):
         observation = self.transform(observation)
@@ -58,12 +43,16 @@ class PreprocessObservation(gym.ObservationWrapper):
 
 
 class ToTensorEnv(gym.ObservationWrapper):
+
     def __init__(self, env: gym.Env):
         super().__init__(env)
 
         (h, w, c) = env.observation_space.shape
 
-        self.observation_space = Box(low=0, high=1, dtype=np.float32, shape=(c, h, w))
+        self.observation_space = Box(low=0,
+                                     high=1,
+                                     dtype=np.float32,
+                                     shape=(c, h, w))
 
         self.transform = T.ToTensor()
 
@@ -100,12 +89,11 @@ def glance(env: gym.Env, random_seed=0, repeats=3):
                 break
 
 
-A = TypeVar("A")
-S = TypeVar("S")
 O = TypeVar("O")
+S = TypeVar("S")
 
 
-def train(agent: Agent[O, S, A], training_frames=int(1e6)) -> Agent[O, S, A]:
+def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
 
     agent.reset()
 
@@ -126,11 +114,10 @@ def train(agent: Agent[O, S, A], training_frames=int(1e6)) -> Agent[O, S, A]:
 
             pbar.update(i)
 
-
     return agent
 
 
-def eval(agent: Agent[O, S, A], repeats=10) -> Agent[O, S, A]:
+def eval(agent: Agent[O, S], repeats=10) -> Agent[O, S]:
     agent.toggleEval(True)
 
     for _ in range(repeats):
@@ -147,11 +134,11 @@ def eval(agent: Agent[O, S, A], repeats=10) -> Agent[O, S, A]:
 
 
 def train_and_eval(
-    agent: Agent[O, S, A],
-    single_train_frames=int(1e4),
-    eval_repeats=10,
-    total_train_frames=int(1e6),
-) -> Agent[O, S, A]:
+        agent: Agent[O, S],
+        single_train_frames=int(1e4),
+        eval_repeats=10,
+        total_train_frames=int(1e6),
+) -> Agent[O, S]:
 
     for _ in tqdm(range(math.ceil(total_train_frames / single_train_frames))):
         train(agent, single_train_frames)
