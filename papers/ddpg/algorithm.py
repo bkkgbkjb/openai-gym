@@ -2,41 +2,28 @@ import setup
 from utils.common import (
     ActionInfo,
     StepGeneric,
-    Episode,
     TransitionGeneric,
     NotNoneStepGeneric,
 )
 from torch import nn
 import math
-from collections import deque
 import torch
 from utils.nets import NeuralNetworks
 from utils.preprocess import PreprocessInterface
 from utils.algorithm import AlgorithmInterface
-import plotly.graph_objects as go
-from torch.distributions import Categorical, Normal
-from tqdm.autonotebook import tqdm
 
-from torchvision import transforms as T
-from utils.agent import Agent
-from gym.spaces import Box
 from typing import (
-    Deque,
     List,
     Tuple,
-    Literal,
     Any,
     Optional,
-    cast,
     Callable,
-    Union,
-    Iterable,
     Dict,
 )
-import gym
-import numpy.typing as npt
-from utils.env import PreprocessObservation, FrameStack, resolve_lazy_frames
+from utils.nets import layer_init
 import numpy as np
+
+from utils.replay_buffer import ReplayBuffer
 
 Observation = torch.Tensor
 Action = np.ndarray
@@ -63,12 +50,6 @@ class Preprocess(PreprocessInterface[Observation, Action, State]):
 
         # assert h[-1].shape == (4, 1, 84, 84)
         return torch.from_numpy(h[-1]).type(torch.float32).to(DEVICE)
-
-
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
 
 
 class Actor(NeuralNetworks):
@@ -147,10 +128,7 @@ class DDPG(AlgorithmInterface[State, Action]):
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
         self.actor_loss = nn.MSELoss()
 
-        self.actor_target = (
-            # Actor(self.n_states, self.n_actions).hard_update_to(self.actor).no_grad()
-            self.actor.clone().no_grad()
-        )
+        self.actor_target = self.actor.clone().no_grad()
 
         self.critic = Critic(self.n_states, self.n_actions)
         self.critic_optimizer = torch.optim.Adam(
@@ -158,13 +136,9 @@ class DDPG(AlgorithmInterface[State, Action]):
         )
         self.critic_loss = nn.MSELoss()
 
-        self.critic_target = (
-            # Critic(self.n_states, self.n_actions).hard_update_to(self.critic).no_grad()
-            self.critic.clone().no_grad()
-        )
+        self.critic_target = self.critic.clone().no_grad()
 
-        self.replay_buffer_size = int(1e6)
-        self.replay_buffer: Deque[Transition] = deque(maxlen=self.replay_buffer_size)
+        self.replay_buffer = ReplayBuffer[State, Action](int(1e6))
 
         self.noise_generator = OrnsteinUhlenbeckActionNoise(
             np.zeros(n_actions), sigma=0.2 * np.ones(n_actions)
@@ -180,62 +154,14 @@ class DDPG(AlgorithmInterface[State, Action]):
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
-    def get_mini_batch(self) -> List[Transition]:
-        idx = np.random.choice(len(self.replay_buffer), self.mini_batch_size)
-
-        l = list(self.replay_buffer)
-
-        r: List[Transition] = []
-        for i in idx:
-            r.append(self.replay_buffer[i])
-
-        return r
-
-    def resolve_minibatch_detail(
-        self, mini_batch: List[Transition]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        states = torch.stack([s for (s, _, _, _, _) in mini_batch])
-        assert states.shape == (self.mini_batch_size, self.n_states)
-
-        actions = torch.stack(
-            [
-                torch.from_numpy(a).type(torch.float32)
-                for (_, (a, _), _, _, _) in mini_batch
-            ]
-        )
-        assert actions.shape == (self.mini_batch_size, self.n_actions)
-
-        rewards = torch.stack(
-            [torch.tensor(r, dtype=torch.float32) for (_, _, r, _, _) in mini_batch]
-        ).unsqueeze(1)
-        assert rewards.shape == (self.mini_batch_size, 1)
-
-        next_states = torch.stack([sn for (_, _, _, sn, _) in mini_batch])
-        assert next_states.shape == (self.mini_batch_size, self.n_states)
-
-        done = torch.as_tensor(
-            [1 if an is None else 0 for (_, _, _, _, an) in mini_batch],
-            dtype=torch.int8,
-        ).unsqueeze(1)
-        assert done.shape == (self.mini_batch_size, 1)
-
-        return (
-            states.to(DEVICE),
-            actions.to(DEVICE),
-            rewards.to(DEVICE),
-            next_states.to(DEVICE),
-            done.to(DEVICE),
-        )
-
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.reporter = reporter
+        self.report = reporter
 
     def train(self):
-        (states, actions, rewards, next_states, done) = self.resolve_minibatch_detail(
-            self.get_mini_batch()
+        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+            self.replay_buffer.sample(self.mini_batch_size)
         )
 
-        # next_action_target = self.actor_target(next_states)
         target_q_value = rewards + self.gamma * (1 - done) * self.critic_target(
             next_states, self.actor_target(next_states)
         )
@@ -254,11 +180,11 @@ class DDPG(AlgorithmInterface[State, Action]):
         self.actor_target.soft_update_to(self.actor, self.tau)
         self.critic_target.soft_update_to(self.critic, self.tau)
 
-        self.reporter(dict(policy_loss=policy_loss, value_loss=value_loss))
+        self.report(dict(policy_loss=policy_loss, value_loss=value_loss))
 
     def reset(self):
         self.times = 0
-        self.replay_buffer = deque(maxlen=int(1e6))
+        self.replay_buffer.clear()
         self.noise_generator.reset()
 
     def on_agent_reset(self):
@@ -288,8 +214,8 @@ class DDPG(AlgorithmInterface[State, Action]):
         (sn, an) = sa
         self.replay_buffer.append((s, a, r, sn, an))
 
-        if len(self.replay_buffer) >= math.ceil(
-            self.start_train_ratio * self.replay_buffer_size
+        if self.replay_buffer.len >= math.ceil(
+            self.start_train_ratio * self.replay_buffer.size
         ):
             self.train()
 

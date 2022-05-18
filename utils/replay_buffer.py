@@ -15,7 +15,7 @@ A = TypeVar("A")
 
 
 class ReplayBuffer(Generic[S, A]):
-    def __init__(self, capacity: Optional[int] = int(1e6)):
+    def __init__(self, capacity: int = int(1e6)):
         self.buffer: Deque[TransitionGeneric[S, A]] = deque(maxlen=capacity)
 
     def append(self, transition: TransitionGeneric[S, A]):
@@ -26,6 +26,15 @@ class ReplayBuffer(Generic[S, A]):
     def clear(self):
         self.buffer.clear()
         return self
+
+    @property
+    def size(self) -> int:
+        assert self.buffer.maxlen is not None
+        return self.buffer.maxlen
+
+    @property
+    def len(self) -> int:
+        return len(self.buffer)
 
     def sample(self, size: int) -> List[TransitionGeneric[S, A]]:
         idx = np.random.choice(len(self.buffer), size)
