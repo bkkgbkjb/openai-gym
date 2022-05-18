@@ -367,7 +367,7 @@ class FrameStack(ObservationWrapper):
 
 def resolve_lazy_frames(lazy_frames: LazyFrames) -> torch.Tensor:
 
-    rlt = torch.cat(
+    rlt = torch.stack(
         cast(
             List[torch.Tensor],
             [lazy_frames[i] for i in range(len(lazy_frames))],

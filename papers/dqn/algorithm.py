@@ -34,7 +34,7 @@ class Preprocess(PreprocessInterface[Observation, State]):
     def get_current_state(self, h: List[Observation]) -> State:
         assert len(h) > 0
 
-        assert h[-1].shape == (4, 1, 84, 84)
+        assert h[-1].shape == (4, 84, 84)
         return h[-1]
 
 

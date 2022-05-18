@@ -16,8 +16,6 @@ import torch
 from utils.agent import Agent
 
 
-
-
 class PreprocessObservation(gym.ObservationWrapper):
 
     def __init__(self, env: gym.Env):
@@ -26,15 +24,20 @@ class PreprocessObservation(gym.ObservationWrapper):
         self.observation_space = Box(
             low=0,
             high=1,
-            shape=(1, 84, 84),
+            shape=(84, 84),
             dtype=np.float32,
         )
 
-        self.transform = T.Compose(
-            [T.ToPILImage(),
-             T.Resize((84, 84)),
-             T.Grayscale(),
-             T.ToTensor()])
+        def squeeze_tensor(x: torch.Tensor):
+            return x.squeeze(0)
+
+        self.transform = T.Compose([
+            T.ToPILImage(),
+            T.Resize((84, 84)),
+            T.Grayscale(),
+            T.ToTensor(),
+            T.Lambda(squeeze_tensor)
+        ])
 
     def observation(self, observation):
         observation = self.transform(observation)

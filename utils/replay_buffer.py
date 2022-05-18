@@ -48,7 +48,7 @@ class ReplayBuffer(Generic[S]):
         return r
 
     @staticmethod
-    def resolve(mini_batch: List[TransitionGeneric[S]], ) -> SARSA:
+    def resolve(mini_batch: List[TransitionGeneric[S]]) -> SARSA:
 
         states = torch.stack([
             s if isinstance(s, torch.Tensor) else resolve_lazy_frames(
