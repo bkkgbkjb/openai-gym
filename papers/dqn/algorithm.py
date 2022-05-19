@@ -80,7 +80,7 @@ class DQNAlgorithm(AlgorithmInterface[State]):
 
         self.update_target = 250
 
-        self.replay_memory = ReplayBuffer[State]((4, 84, 84), (1, ))
+        self.replay_memory = ReplayBuffer[State]((4, 84, 84), (1, ), int(2e5))
 
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()
@@ -106,7 +106,7 @@ class DQNAlgorithm(AlgorithmInterface[State]):
             return np.asarray([maxi.item()], dtype=np.int64)
 
         rand = np.random.random()
-        max_decry_times = 75_0000
+        max_decry_times = 100_0000
         sigma = 1 - 0.95 / max_decry_times * np.min(
             [self.times, max_decry_times])
 
