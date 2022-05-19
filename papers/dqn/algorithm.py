@@ -15,7 +15,7 @@ from utils.replay_buffer import ReplayBuffer
 Observation = LazyFrames
 Action = np.ndarray
 
-State = LazyFrames
+State = Observation
 Reward = int
 
 Transition = TransitionGeneric[State]
@@ -80,7 +80,7 @@ class DQNAlgorithm(AlgorithmInterface[State]):
 
         self.update_target = 250
 
-        self.replay_memory = ReplayBuffer[State]()
+        self.replay_memory = ReplayBuffer[State]((4, 84, 84), (1, ))
 
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()
@@ -97,9 +97,16 @@ class DQNAlgorithm(AlgorithmInterface[State]):
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
+    @torch.no_grad()
     def take_action(self, state: State) -> Action:
+        if self.eval:
+            act_vals = self.online_network(
+                resolve_lazy_frames(state).unsqueeze(0))
+            maxi = torch.argmax(act_vals)
+            return np.asarray([maxi.item()], dtype=np.int64)
+
         rand = np.random.random()
-        max_decry_times = 100_0000
+        max_decry_times = 75_0000
         sigma = 1 - 0.95 / max_decry_times * np.min(
             [self.times, max_decry_times])
 
@@ -140,18 +147,22 @@ class DQNAlgorithm(AlgorithmInterface[State]):
     def train(self):
 
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
-            self.replay_memory.sample(self.batch_size))
+            self.replay_memory.sample(self.batch_size), (4, 84, 84), (1, ))
 
-        target = rewards + (1 - done) * self.gamma * (torch.max(
-            self.target_network(next_states),
+        q_next = self.target_network(next_states)
+
+        max_values = (torch.max(
+            q_next,
             dim=1,
         )[0].unsqueeze(1))
 
-        assert target.shape == (32, 1)
-        s_curr = states
-        assert s_curr.shape == (32, 4, 84, 84)
+        assert max_values.shape == (32, 1)
 
-        x_vals = self.online_network(s_curr)
+        target = rewards + (1 - done) * self.gamma * max_values
+
+        assert target.shape == (32, 1)
+
+        x_vals = self.online_network(states)
 
         x = x_vals.gather(1, actions)
 
@@ -184,46 +195,38 @@ class DDQNAlgorithm(DQNAlgorithm, AlgorithmInterface[State]):
         self.update_target = 1250
         self.name = "ddqn"
 
-    def train(self, batch: List[Transition]):
+    def train(self):
+        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+            self.replay_memory.sample(self.batch_size), (4, 84, 84), (1, ))
 
-        s_next = torch.cat(
-            [self.resolve_lazy_frames(sn) for (_, _, _, sn, _) in batch])
-        assert s_next.shape == (32, 4, 84, 84)
+        q_next = self.target_network(next_states)
 
-        q_next = self.target_network(s_next).detach()
-
-        assert q_next.shape == (32, self.n_actions)
-
-        masks = torch.tensor(
-            [0 if an is None else 1 for (_, _, _, _, an) in batch],
-            dtype=torch.float,
-        )
-
-        target = torch.tensor(
-            [r for (_, _, r, _, _) in batch], dtype=torch.float
-        ) + masks * self.gamma * q_next.gather(
-            1, torch.argmax(self.online_network(s_next), dim=1,
-                            keepdim=True)).squeeze(1)
-
-        assert target.shape == (32, )
-        s_curr = torch.cat(
-            [self.resolve_lazy_frames(s) for (s, _, _, _, _) in batch])
-        assert s_curr.shape == (32, 4, 84, 84)
-
-        x_vals = self.online_network(s_curr)
-
-        x = x_vals.gather(
+        max_values = q_next.gather(
             1,
-            torch.tensor([a for (_, (a, _), _, _, _) in batch
-                          ]).unsqueeze(1)).squeeze(1)
+            torch.argmax(self.online_network(next_states).detach(),
+                         dim=1,
+                         keepdim=True)).squeeze(1)
 
-        assert x.shape == (32, )
+        assert max_values.shape == (32, 1)
+
+        target = rewards + (1 - done) * self.gamma * max_values
+
+        assert target.shape == (32, 1)
+
+        x_vals = self.online_network(states)
+
+        x = x_vals.gather(1, actions)
+
+        assert x.shape == (32, 1)
 
         loss = self.loss_func(x, target)
-        self.loss = loss.item()
 
         self.optimizer.zero_grad()
         loss.backward()
+
         for param in self.online_network.parameters():  # gradient clipping
             param.grad.data.clamp_(-1, 1)
+
         self.optimizer.step()
+
+        self.report(dict(loss=loss))

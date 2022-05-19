@@ -18,11 +18,10 @@ from typing import (
 )
 from utils.algorithm import AlgorithmInterface
 from utils.preprocess import PreprocessInterface
-from utils.common import ActionInfo, StepGeneric, EpisodeGeneric, Action, Reward
+from utils.common import ActionInfo, AllowedState, StepGeneric, EpisodeGeneric, Action, Reward
 
 O = TypeVar("O")
-# S = TypeVar("S", torch.Tensor, LazyFrames)
-S = TypeVar("S")
+S = TypeVar("S", bound=AllowedState)
 R = Reward
 
 

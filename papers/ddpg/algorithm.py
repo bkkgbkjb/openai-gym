@@ -144,7 +144,8 @@ class DDPG(AlgorithmInterface[State]):
 
         self.critic_target = self.critic.clone().no_grad()
 
-        self.replay_buffer = ReplayBuffer[State](int(1e6))
+        self.replay_buffer = ReplayBuffer[State]((self.n_states, ),
+                                                 (self.n_actions, ), int(1e6))
 
         self.noise_generator = OrnsteinUhlenbeckActionNoise(
             np.zeros(n_actions), sigma=0.2 * np.ones(n_actions)).reset()
@@ -164,7 +165,8 @@ class DDPG(AlgorithmInterface[State]):
 
     def train(self):
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
-            self.replay_buffer.sample(self.mini_batch_size))
+            self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
+            (self.n_actions, ))
 
         target_q_value = rewards + self.gamma * (
             1 - done) * self.critic_target(next_states,

@@ -1,9 +1,8 @@
 from abc import abstractmethod
 from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any
-from utils.common import Action, ActionInfo, Reward
+from utils.common import Action, ActionInfo, AllowedState, Reward
 
-
-S = TypeVar("S")
+S = TypeVar("S", bound=AllowedState)
 
 
 class AlgorithmInterface(Protocol[S]):
@@ -15,15 +14,13 @@ class AlgorithmInterface(Protocol[S]):
         raise NotImplementedError()
 
     @abstractmethod
-    def after_step(
-        self, sar: Tuple[S, ActionInfo, Reward], sa: Tuple[S, Optional[ActionInfo]]
-    ):
+    def after_step(self, sar: Tuple[S, ActionInfo, Reward],
+                   sa: Tuple[S, Optional[ActionInfo]]):
         raise NotImplementedError()
 
     @abstractmethod
-    def on_episode_termination(
-        self, sar: Tuple[List[S], List[ActionInfo], List[Reward]]
-    ):
+    def on_episode_termination(self, sar: Tuple[List[S], List[ActionInfo],
+                                                List[Reward]]):
         raise NotImplementedError()
 
     @abstractmethod

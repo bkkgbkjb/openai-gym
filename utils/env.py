@@ -28,15 +28,12 @@ class PreprocessObservation(gym.ObservationWrapper):
             dtype=np.float32,
         )
 
-        def squeeze_tensor(x: torch.Tensor):
-            return x.squeeze(0)
-
         self.transform = T.Compose([
             T.ToPILImage(),
             T.Resize((84, 84)),
             T.Grayscale(),
             T.ToTensor(),
-            T.Lambda(squeeze_tensor)
+            T.Lambda(lambda x: x.squeeze(0))
         ])
 
     def observation(self, observation):

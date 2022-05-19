@@ -118,7 +118,8 @@ class TD3(AlgorithmInterface[State]):
 
         self.critic_target2 = self.critic2.clone().no_grad()
 
-        self.replay_buffer = ReplayBuffer[State](int(1e6))
+        self.replay_buffer = ReplayBuffer[State]((self.n_states, ),
+                                                 (self.n_actions, ), int(1e6))
 
         self.noise_generator = lambda: np.random.normal(
             0, 0.1, size=self.n_actions)
@@ -138,7 +139,8 @@ class TD3(AlgorithmInterface[State]):
 
     def train(self):
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
-            self.replay_buffer.sample(self.mini_batch_size))
+            self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
+            (self.n_actions, ))
 
         noise = (torch.distributions.uniform.Uniform(
             -self.max_action * 0.2,

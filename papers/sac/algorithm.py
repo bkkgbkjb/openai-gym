@@ -154,7 +154,8 @@ class SAC(AlgorithmInterface[State]):
 
     def reset(self):
         self.times = 0
-        self.replay_memory = ReplayBuffer[State]()
+        self.replay_memory = ReplayBuffer[State]((self.n_state, ),
+                                                 (self.n_actions, ))
 
     def on_agent_reset(self):
         pass
@@ -185,7 +186,8 @@ class SAC(AlgorithmInterface[State]):
     def train(self):
 
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
-            self.replay_memory.sample(self.mini_batch_size))
+            self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
+            (self.n_actions, ))
 
         new_actions, new_log_probs, _ = self.policy.sample(states)
 
