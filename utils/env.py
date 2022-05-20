@@ -1,6 +1,9 @@
 import gym
 import math
 from typing import (
+    Callable,
+    Optional,
+    Tuple,
     List,
     Any,
     cast,
@@ -14,6 +17,7 @@ from torchvision import transforms as T
 import torch
 
 from utils.agent import Agent
+from utils.common import AllowedState
 
 
 class PreprocessObservation(gym.ObservationWrapper):
@@ -90,51 +94,38 @@ def glance(env: gym.Env, random_seed=0, repeats=3):
 
 
 O = TypeVar("O")
-S = TypeVar("S")
+S = TypeVar("S", bound=AllowedState)
 
 
 def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
 
     agent.reset()
 
-    agent.toggleEval(False)
-
     with tqdm(total=training_frames) as pbar:
         frames = 0
-        while frames < training_frames:
+        while frames <= training_frames:
             agent.reset()
-            i = 0
-            end = False
-            while not end and frames < training_frames:
+            (_, (_, _, a, _)) = agent.train()
 
-                (_, end) = agent.step()
-                i += 1
-
-            frames += i
-
-            pbar.update(i)
+            pbar.update(len(a))
+            frames += len(a)
 
     return agent
 
 
-def eval(agent: Agent[O, S], repeats=10) -> Agent[O, S]:
-    agent.toggleEval(True)
+def eval(agent: Agent[O, S], env: gym.Env, repeats=10) -> Agent[O, S]:
 
     for _ in range(repeats):
         agent.reset()
 
-        while True:
-
-            (_, s) = agent.step()
-
-            if s:
-                break
+        agent.eval(env)
 
     return agent
 
 
 def train_and_eval(
         agent: Agent[O, S],
+        eval_env: gym.Env,
         single_train_frames=int(1e4),
         eval_repeats=10,
         total_train_frames=int(1e6),
@@ -142,6 +133,32 @@ def train_and_eval(
 
     for _ in tqdm(range(math.ceil(total_train_frames / single_train_frames))):
         train(agent, single_train_frames)
-        eval(agent, eval_repeats)
+        eval(agent, eval_env, eval_repeats)
 
     return agent
+
+
+def make_train_and_eval_env(env_name: str,
+                            wrappers: List[Callable[[gym.Env], gym.Env]] = [],
+                            seed: int = 0) -> Tuple[gym.Env, gym.Env]:
+    train_env = gym.make(env_name)
+    train_env.seed(seed)
+    train_env.action_space.seed(seed)
+    train_env.observation_space.seed(seed)
+    train_env.reset()
+
+    # %%
+    for w in wrappers:
+        train_env = w(train_env)
+
+    eval_env = gym.make(env_name)
+    eval_env.seed(seed + 5)
+    eval_env.action_space.seed(seed + 5)
+    eval_env.observation_space.seed(seed + 5)
+    eval_env.reset()
+
+    # %%
+    for w in wrappers:
+        eval_env = w(eval_env)
+
+    return train_env, eval_env

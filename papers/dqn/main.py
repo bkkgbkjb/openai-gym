@@ -1,27 +1,29 @@
 # %%
 import setup
+from setup import RANDOM_SEED
 from algorithm import DQNAlgorithm, Preprocess
 from utils.agent import Agent
 import gym
 # from gym.wrappers.frame_stack import FrameStack
-from utils.env import PreprocessObservation, train_and_eval
+from utils.env import PreprocessObservation, make_train_and_eval_env, train_and_eval
 from utils.env_sb3 import SkipFrames, FrameStack
 from utils.reporter import get_reporter
 
 # %%
-env = gym.make("PongDeterministic-v4")
-env.seed()
-env.reset()
+# eval_env = SkipFrames(eval_env)
+# eval_env = PreprocessObservation(eval_env)
+# eval_env = FrameStack(eval_env, num_stack=4)
+wrappers = [
+    lambda env: SkipFrames(env), lambda env: PreprocessObservation(env),
+    lambda env: FrameStack(env, num_stack=4)
+]
+train_env, eval_env = make_train_and_eval_env("PongDeterministic-v4", wrappers,
+                                              RANDOM_SEED)
 
 # %%
-env = SkipFrames(env)
-env = PreprocessObservation(env)
-env = FrameStack(env, num_stack=4)
 
-# %%
-
-agent = Agent(env, DQNAlgorithm(env.action_space.n), Preprocess())
+agent = Agent(train_env, DQNAlgorithm(train_env.action_space.n), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent)
+train_and_eval(agent, eval_env, total_train_frames=int(3e6))

@@ -36,12 +36,11 @@ class Agent(Generic[O, S]):
         self.env = env
         self.algm = algm
         self.preprocess = preprocess
-        self.eval = False
         self.name: str = algm.name
         self.reset()
 
-    def get_current_state(self):
-        state = self.preprocess.get_current_state(self.observation_episode)
+    def get_current_state(self, obs_episode: List[O]):
+        state = self.preprocess.get_current_state(obs_episode)
         assert isinstance(state, torch.Tensor) or isinstance(
             state,
             LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
@@ -56,9 +55,7 @@ class Agent(Generic[O, S]):
         self.action_episode: List[ActionInfo] = []
         self.reward_episode: List[R] = []
 
-        o = cast(O, self.env.reset())
-        self.observation_episode.append(o)
-        self.state_episode.append(self.get_current_state())
+        self.eval_observation_episode: List[O] = []
 
         assert len(self.state_episode) == len(self.observation_episode)
 
@@ -70,7 +67,6 @@ class Agent(Generic[O, S]):
         self.algm.set_reporter(reporter)
 
     def toggleEval(self, newEval: bool):
-        self.eval = newEval
         self.algm.on_toggle_eval(newEval)
 
     def format_action(
@@ -79,6 +75,30 @@ class Agent(Generic[O, S]):
         if isinstance(a, tuple):
             return a
         return (a, dict())
+
+    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[O]]]:
+        assert len(self.eval_observation_episode) == 0
+        assert not self.end, "should reset before eval agnet"
+        self.toggleEval(True)
+
+        o = cast(O, env.reset())
+        self.eval_observation_episode.append(o)
+
+        s = False
+        rwd = 0.0
+
+        while not s:
+            actinfo = self.get_action(
+                self.get_current_state(self.eval_observation_episode))
+            act = actinfo[0]
+
+            (o, r, s, _) = env.step(
+                act[0] if isinstance(env.action_space, gym.spaces.Discrete) else act)
+            rwd += r
+            self.eval_observation_episode.append(o)
+
+        self.report({'eval_return': rwd})
+        return rwd, (self.eval_observation_episode, )
 
     def get_action(self, state: S) -> ActionInfo:
         actinfo = self.format_action(self.algm.take_action(state))
@@ -97,29 +117,40 @@ class Agent(Generic[O, S]):
 
         return actinfo
 
-    def step(self) -> Tuple[O, bool]:
-        assert not self.end, "cannot step on a ended agent"
+    def train(
+        self
+    ) -> Tuple[float, Tuple[List[O], List[S], List[ActionInfo], List[R]]]:
+        assert not self.end, "agent needs to be reset before training"
+        self.toggleEval(False)
 
-        actinfo = self.ready_act or self.get_action(self.state_episode[-1])
+        o = cast(O, self.env.reset())
+        self.observation_episode.append(o)
+        self.state_episode.append(
+            self.get_current_state(self.observation_episode))
 
-        act = actinfo[0]
-        (obs, rwd, stop,
-         _) = self.env.step(act[0] if isinstance(self.env.action_space, gym.
-                                                 spaces.Discrete) else act)
+        stop = False
 
-        self.action_episode.append(actinfo)
-        self.reward_episode.append(rwd)
+        while not stop:
 
-        obs = cast(O, obs)
-        self.observation_episode.append(obs)
-        self.state_episode.append(self.get_current_state())
+            actinfo = self.ready_act or self.get_action(self.state_episode[-1])
 
-        self.ready_act = (None
-                          if stop else self.get_action(self.state_episode[-1]))
+            act = actinfo[0]
+            (obs, rwd, stop, _) = self.env.step(act[0] if isinstance(
+                self.env.action_space, gym.spaces.Discrete) else act)
 
-        assert len(self.state_episode) == len(self.observation_episode)
+            self.action_episode.append(actinfo)
+            self.reward_episode.append(rwd)
 
-        if not self.eval:
+            obs = cast(O, obs)
+            self.observation_episode.append(obs)
+            self.state_episode.append(
+                self.get_current_state(self.observation_episode))
+
+            self.ready_act = (None if stop else self.get_action(
+                self.state_episode[-1]))
+
+            assert len(self.state_episode) == len(self.observation_episode)
+
             self.algm.after_step(
                 (
                     self.state_episode[-2],
@@ -132,22 +163,20 @@ class Agent(Generic[O, S]):
                 ),
             )
 
-        if stop:
-            assert len(self.action_episode) == len(self.reward_episode)
-            assert len(self.state_episode) == len(self.action_episode) + 1
+        assert len(self.state_episode) == len(self.observation_episode) == len(
+            self.action_episode) + 1 == len(self.reward_episode) + 1
 
-            self.end = True
+        self.end = True
 
-            if not self.eval:
-                self.algm.on_episode_termination(
-                    (self.state_episode, self.action_episode,
-                     self.reward_episode))
-            self.report({
-                "train_return" if not self.eval else "eval_return":
-                np.sum([r for r in self.reward_episode])
-            })
+        self.algm.on_episode_termination(
+            (self.state_episode, self.action_episode, self.reward_episode))
 
-        return (obs, stop)
+        total_rwd = np.sum([r for r in self.reward_episode])
+
+        self.report({"train_return": total_rwd})
+
+        return total_rwd, (self.observation_episode, self.state_episode,
+                           self.action_episode, self.reward_episode)
 
     def render(self, mode: str):
         self.env.render(mode)
