@@ -31,9 +31,6 @@ Action = int
 State = torch.Tensor
 Reward = int
 
-Transition = Transition[State, Action]
-Step = Step[State, ActionInfo[Action]]
-NotNoneStep = NotNoneStep[State, ActionInfo[Action]]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

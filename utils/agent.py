@@ -18,14 +18,13 @@ from typing import (
 )
 from utils.algorithm import AlgorithmInterface
 from utils.preprocess import PreprocessInterface
-from utils.common import ActionInfo, AllowedState, Step, EpisodeGeneric, Action, Reward
+from utils.common import Observation as O, ActionInfo, AllowedState, Step, EpisodeGeneric, Action, Reward
 
-O = TypeVar("O")
-S = TypeVar("S", bound=AllowedState)
+S = AllowedState
 R = Reward
 
 
-class Agent(Generic[O, S]):
+class Agent(Generic[O]):
 
     def __init__(
         self,

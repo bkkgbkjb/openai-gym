@@ -18,7 +18,6 @@ Action = np.ndarray
 State = Observation
 Reward = int
 
-Transition = Transition[State]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

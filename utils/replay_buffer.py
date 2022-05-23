@@ -20,11 +20,11 @@ class ReplayBuffer(Generic[S]):
                  state_shape: Tuple,
                  action_shape: Tuple,
                  capacity: int = int(1e6)):
-        self.buffer: Deque[Transition[S]] = deque(maxlen=capacity)
+        self.buffer: Deque[Transition] = deque(maxlen=capacity)
         self.state_shape = state_shape
         self.action_shape = action_shape
 
-    def append(self, transition: Transition[S]):
+    def append(self, transition: Transition):
         assert self.state_shape == transition[0].shape
         assert self.action_shape == transition[1][0].shape
         assert self.state_shape == transition[3].shape
@@ -48,19 +48,19 @@ class ReplayBuffer(Generic[S]):
     def len(self) -> int:
         return len(self.buffer)
 
-    def sample(self, size: int) -> List[Transition[S]]:
+    def sample(self, size: int) -> List[Transition]:
         assert self.len > 0
         idx = np.random.choice(len(self.buffer), size)
         l = list(self.buffer)
 
-        r: List[Transition[S]] = []
+        r: List[Transition] = []
         for i in idx:
             r.append(l[i])
 
         return r
 
     @staticmethod
-    def resolve(mini_batch: List[Transition[S]], state_shape: Tuple,
+    def resolve(mini_batch: List[Transition], state_shape: Tuple,
                 action_shape: Tuple) -> SARSA:
 
         l = len(mini_batch)
