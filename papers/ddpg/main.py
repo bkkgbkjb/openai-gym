@@ -6,20 +6,18 @@ from utils.agent import Agent
 import gym
 from algorithm import Observation
 from utils.env import train_and_eval
+from utils.env import PreprocessObservation, make_train_and_eval_env, train_and_eval
+
+# %%
+train_env, eval_env = make_train_and_eval_env("Walker2d-v2", [], RANDOM_SEED)
 
 # %%
 
-env = gym.make("Walker2d-v2")
-env.seed(RANDOM_SEED)
-env.action_space.seed(RANDOM_SEED)
-env.observation_space.seed(RANDOM_SEED)
-env.reset()
-
 agent = Agent(
-    env, DDPG(env.observation_space.shape[0], env.action_space.shape[0]), Preprocess()
-)
-
+    train_env,
+    DDPG(train_env.observation_space.shape[0],
+         train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent)
+train_and_eval(agent, eval_env)
