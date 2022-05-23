@@ -1,9 +1,9 @@
 import setup
 from utils.common import (
     ActionInfo,
-    StepGeneric,
-    TransitionGeneric,
-    NotNoneStepGeneric,
+    Step,
+    Transition,
+    NotNoneStep,
 )
 from torch import nn
 from collections import deque
@@ -30,9 +30,9 @@ Action = np.ndarray
 State = Observation
 Reward = float
 
-Transition = TransitionGeneric[State]
-Step = StepGeneric[State]
-NotNoneStep = NotNoneStepGeneric[State]
+Transition = Transition[State]
+Step = Step[State]
+NotNoneStep = NotNoneStep[State]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

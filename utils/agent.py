@@ -18,7 +18,7 @@ from typing import (
 )
 from utils.algorithm import AlgorithmInterface
 from utils.preprocess import PreprocessInterface
-from utils.common import ActionInfo, AllowedState, StepGeneric, EpisodeGeneric, Action, Reward
+from utils.common import ActionInfo, AllowedState, Step, EpisodeGeneric, Action, Reward
 
 O = TypeVar("O")
 S = TypeVar("S", bound=AllowedState)

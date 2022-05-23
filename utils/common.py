@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, TypeVar, Optional, List, Any, Union
+from typing import Dict, Tuple,  TypeVar, Optional, List, Any, Union
 import numpy as np
 from utils.env_sb3 import LazyFrames
 import torch
@@ -10,14 +10,25 @@ Reward = float
 
 AllowedState = Union[torch.Tensor, LazyFrames]
 
-OS = TypeVar("OS", bound=AllowedState)
-StepGeneric = Tuple[OS, Optional[ActionInfo], Optional[Reward]]
+S = TypeVar('S')
+A = TypeVar('A')
+R = TypeVar('R')
+BaseStep = Tuple[S, A, R]
 
-NOS = TypeVar("NOS", bound=AllowedState)
-NotNoneStepGeneric = Tuple[NOS, ActionInfo, Reward]
 
-OE = TypeVar("OE", bound=AllowedState)
-EpisodeGeneric = List[StepGeneric[OE]]
+Step = BaseStep[AllowedState,
+                                    Optional[ActionInfo], Optional[Reward]]
 
-TS = TypeVar("TS", bound=AllowedState)
-TransitionGeneric = Tuple[TS, ActionInfo, Reward, TS, Optional[ActionInfo]]
+
+NotNoneStep = BaseStep[AllowedState, ActionInfo, Reward]
+
+
+AllNoneStep = BaseStep[Optional[AllowedState],
+                                     Optional[ActionInfo], Optional[Reward]]
+
+ES = TypeVar("ES", bound=Union[Step, NotNoneStep, AllNoneStep])
+EpisodeGeneric = List[ES]
+
+Transition = Tuple[AllowedState, ActionInfo, Reward, AllowedState, Optional[ActionInfo]]
+
+Observation = TypeVar('Observation')

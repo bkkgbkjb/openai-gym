@@ -1,10 +1,10 @@
 import setup
 from utils.common import (
     ActionInfo,
-    StepGeneric,
+    Step,
     EpisodeGeneric,
-    TransitionGeneric,
-    NotNoneStepGeneric,
+    Transition,
+    NotNoneStep,
 )
 from torch import nn
 import math
@@ -31,9 +31,9 @@ Action = int
 State = torch.Tensor
 Reward = int
 
-Transition = TransitionGeneric[State, Action]
-Step = StepGeneric[State, ActionInfo[Action]]
-NotNoneStep = NotNoneStepGeneric[State, ActionInfo[Action]]
+Transition = Transition[State, Action]
+Step = Step[State, ActionInfo[Action]]
+NotNoneStep = NotNoneStep[State, ActionInfo[Action]]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

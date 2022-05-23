@@ -1,5 +1,5 @@
 import setup
-from utils.common import ActionInfo, TransitionGeneric
+from utils.common import ActionInfo, Transition
 from torch import nn
 import math
 from collections import deque
@@ -18,7 +18,7 @@ Action = np.ndarray
 State = Observation
 Reward = int
 
-Transition = TransitionGeneric[State]
+Transition = Transition[State]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

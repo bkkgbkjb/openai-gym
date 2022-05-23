@@ -3,7 +3,7 @@ from typing import Deque, Generic, Optional, TypeVar, Tuple, List, cast, Union
 import numpy as np
 import torch
 
-from utils.common import AllowedState, TransitionGeneric
+from utils.common import AllowedState, Transition
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -20,11 +20,11 @@ class ReplayBuffer(Generic[S]):
                  state_shape: Tuple,
                  action_shape: Tuple,
                  capacity: int = int(1e6)):
-        self.buffer: Deque[TransitionGeneric[S]] = deque(maxlen=capacity)
+        self.buffer: Deque[Transition[S]] = deque(maxlen=capacity)
         self.state_shape = state_shape
         self.action_shape = action_shape
 
-    def append(self, transition: TransitionGeneric[S]):
+    def append(self, transition: Transition[S]):
         assert self.state_shape == transition[0].shape
         assert self.action_shape == transition[1][0].shape
         assert self.state_shape == transition[3].shape
@@ -48,19 +48,19 @@ class ReplayBuffer(Generic[S]):
     def len(self) -> int:
         return len(self.buffer)
 
-    def sample(self, size: int) -> List[TransitionGeneric[S]]:
+    def sample(self, size: int) -> List[Transition[S]]:
         assert self.len > 0
         idx = np.random.choice(len(self.buffer), size)
         l = list(self.buffer)
 
-        r: List[TransitionGeneric[S]] = []
+        r: List[Transition[S]] = []
         for i in idx:
             r.append(l[i])
 
         return r
 
     @staticmethod
-    def resolve(mini_batch: List[TransitionGeneric[S]], state_shape: Tuple,
+    def resolve(mini_batch: List[Transition[S]], state_shape: Tuple,
                 action_shape: Tuple) -> SARSA:
 
         l = len(mini_batch)

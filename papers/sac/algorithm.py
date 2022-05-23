@@ -1,10 +1,10 @@
 import setup
 from utils.common import (
     ActionInfo,
-    StepGeneric,
+    Step,
     EpisodeGeneric,
-    TransitionGeneric,
-    NotNoneStepGeneric,
+    Transition,
+    NotNoneStep,
 )
 from torch import nn
 from collections import deque
@@ -25,9 +25,9 @@ Action = torch.Tensor
 State = Observation
 Reward = int
 
-Transition = TransitionGeneric[State]
-Step = StepGeneric[State]
-NotNoneStep = NotNoneStepGeneric[State]
+Transition = Transition[State]
+Step = Step[State]
+NotNoneStep = NotNoneStep[State]
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
