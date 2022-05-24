@@ -28,7 +28,7 @@ class ReplayBuffer(Generic[S]):
         assert self.state_shape == transition[0].shape
         assert self.action_shape == transition[1][0].shape
         assert self.state_shape == transition[3].shape
-        if transition[4] is not None:
+        if transition[4] is not None and isinstance(transition[4], tuple):
             assert transition[4][0].shape == self.action_shape
 
         self.buffer.append(transition)

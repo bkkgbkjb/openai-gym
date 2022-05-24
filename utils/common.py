@@ -1,4 +1,4 @@
-from typing import Dict, Tuple,  TypeVar, Optional, List, Any, Union
+from typing import Dict, Tuple, TypeVar, Optional, List, Any, Union
 import numpy as np
 from utils.env_sb3 import LazyFrames
 import torch
@@ -15,20 +15,17 @@ A = TypeVar('A')
 R = TypeVar('R')
 BaseStep = Tuple[S, A, R]
 
-
-Step = BaseStep[AllowedState,
-                                    Optional[ActionInfo], Optional[Reward]]
-
+Step = BaseStep[AllowedState, Optional[ActionInfo], Optional[Reward]]
 
 NotNoneStep = BaseStep[AllowedState, ActionInfo, Reward]
 
-
-AllNoneStep = BaseStep[Optional[AllowedState],
-                                     Optional[ActionInfo], Optional[Reward]]
+AllNoneStep = BaseStep[Optional[AllowedState], Optional[ActionInfo],
+                       Optional[Reward]]
 
 ES = TypeVar("ES", bound=Union[Step, NotNoneStep, AllNoneStep])
 EpisodeGeneric = List[ES]
 
-Transition = Tuple[AllowedState, ActionInfo, Reward, AllowedState, Optional[ActionInfo]]
+Transition = Tuple[AllowedState, ActionInfo, Reward, AllowedState,
+                   Union[Optional[ActionInfo], bool]]
 
 Observation = TypeVar('Observation')

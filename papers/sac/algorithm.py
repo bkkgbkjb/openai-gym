@@ -1,10 +1,7 @@
 import setup
 from utils.common import (
     ActionInfo,
-    Step,
-    EpisodeGeneric,
     Transition,
-    NotNoneStep,
 )
 from torch import nn
 from collections import deque
@@ -12,6 +9,7 @@ import torch
 from utils.preprocess import Preprocess
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
+from typing import Union
 from utils.nets import NeuralNetworks, layer_init
 
 from typing import List, Tuple, Any, Optional, Callable, Dict
@@ -24,7 +22,6 @@ Action = torch.Tensor
 
 State = Observation
 Reward = int
-
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -166,13 +163,9 @@ class SAC(Algorithm):
                                                 List[Reward]]):
         pass
 
-    def after_step(
-        self,
-        sar: Tuple[State, ActionInfo, Reward],
-        sa: Tuple[State, Optional[ActionInfo]],
-    ):
-        (s, a, r) = sar
-        (sn, an) = sa
+    def after_step(self, transition: Transition):
+        (s, a, r, sn, an) = transition
+        assert isinstance(an, tuple) or an is None
         self.replay_memory.append((s, a, r, sn, an))
 
         if self.replay_memory.len >= self.start_traininig_size:

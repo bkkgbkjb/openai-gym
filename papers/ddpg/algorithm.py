@@ -1,9 +1,7 @@
 import setup
 from utils.common import (
     ActionInfo,
-    Step,
     Transition,
-    NotNoneStep,
 )
 from torch import nn
 import math
@@ -30,7 +28,6 @@ Action = np.ndarray
 
 State = Observation
 Reward = float
-
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -209,11 +206,9 @@ class DDPG(Algorithm):
 
     def after_step(
         self,
-        sar: Tuple[State, ActionInfo, Reward],
-        sa: Tuple[State, Optional[ActionInfo]],
-    ):
-        (s, a, r) = sar
-        (sn, an) = sa
+        transition: Transition):
+        (s, a, r, sn, an) = transition
+        assert isinstance(an, tuple) or an is None
         self.replay_buffer.append((s, a, r, sn, an))
 
         if self.replay_buffer.len >= math.ceil(

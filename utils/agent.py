@@ -18,7 +18,8 @@ from typing import (
 )
 from utils.algorithm import Algorithm
 from utils.preprocess import Preprocess
-from utils.common import Observation as O, ActionInfo, AllowedState, Step, EpisodeGeneric, Action, Reward
+from utils.common import Observation as O, ActionInfo, AllowedState, Action, Reward
+from torch.utils.data import DataLoader
 
 S = AllowedState
 R = Reward
@@ -38,7 +39,7 @@ class Agent(Generic[O]):
         self.name: str = algm.name
         self.reset()
 
-    def get_current_state(self, obs_episode: List[O]):
+    def get_current_state(self, obs_episode: List[O]) -> AllowedState:
         state = self.preprocess.get_current_state(obs_episode)
         assert isinstance(state, torch.Tensor) or isinstance(
             state,
@@ -91,8 +92,9 @@ class Agent(Generic[O]):
                 self.get_current_state(self.eval_observation_episode))
             act = actinfo[0]
 
-            (o, r, s, _) = env.step(
-                act[0] if isinstance(env.action_space, gym.spaces.Discrete) else act)
+            (o, r, s,
+             _) = env.step(act[0] if isinstance(env.action_space, gym.spaces.
+                                                Discrete) else act)
             rwd += r
             self.eval_observation_episode.append(o)
 
@@ -150,17 +152,13 @@ class Agent(Generic[O]):
 
             assert len(self.state_episode) == len(self.observation_episode)
 
-            self.algm.after_step(
-                (
-                    self.state_episode[-2],
-                    self.action_episode[-1],
-                    self.reward_episode[-1],
-                ),
-                (
-                    self.state_episode[-1],
-                    self.ready_act,
-                ),
-            )
+            self.algm.after_step((
+                self.state_episode[-2],
+                self.action_episode[-1],
+                self.reward_episode[-1],
+                self.state_episode[-1],
+                self.ready_act,
+            ))
 
         assert len(self.state_episode) == len(self.observation_episode) == len(
             self.action_episode) + 1 == len(self.reward_episode) + 1
@@ -177,9 +175,114 @@ class Agent(Generic[O]):
         return total_rwd, (self.observation_episode, self.state_episode,
                            self.action_episode, self.reward_episode)
 
-    def render(self, mode: str):
-        self.env.render(mode)
-
     def close(self):
         self.reset()
         self.env.close()
+
+
+class OfflineAgent(Generic[O]):
+
+    def __init__(self, dataloader: DataLoader, algm: Algorithm,
+                 preprocess: Preprocess[O]):
+        self.dataloader = dataloader
+        self.algm = algm
+        self.preprocess = preprocess
+        self.name: str = algm.name
+        self.reset()
+
+        self.data_iter = iter(self.dataloader)
+
+    def reset(self):
+        self.preprocess.on_agent_reset()
+        self.algm.on_agent_reset()
+        self.data_iter = iter(self.dataloader)
+        self.eval_observation_episode: List[O] = []
+
+    def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
+        self.report = reporter
+        self.algm.set_reporter(reporter)
+
+    def toggleEval(self, newEval: bool):
+        self.algm.on_toggle_eval(newEval)
+
+    def train(self) -> int:
+        self.toggleEval(False)
+        transition = next(self.data_iter, None)
+        if transition is None:
+            return 0
+
+        (states, actions, rewards, next_states, dones) = transition
+        _s: List[AllowedState] = []
+        _a: List[ActionInfo] = []
+        _r: List[Reward] = []
+        for (s, a, r, sn, done) in zip(states, actions, rewards, next_states,
+                                       dones):
+
+            self.algm.after_step((s, (a, dict()), r, sn, done))
+            _s.append(s)
+            _a.append((a, dict()))
+            _r.append(r)
+
+            if done:
+                _s.append(sn)
+                self.algm.on_episode_termination((_s, _a, _r))
+                _s = []
+                _a = []
+                _r = []
+
+        return states.size(0)
+
+    def format_action(
+            self, a: Union[Action,
+                           ActionInfo]) -> Tuple[Action, Dict[str, Any]]:
+        if isinstance(a, tuple):
+            return a
+        return (a, dict())
+
+    def get_current_state(self, obs_episode: List[O]) -> AllowedState:
+        state = self.preprocess.get_current_state(obs_episode)
+        assert isinstance(state, torch.Tensor) or isinstance(
+            state,
+            LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
+        return state
+
+    def get_action(self, state: S) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(state))
+        act = actinfo[0]
+
+        action_space = self.env.action_space
+
+        assert isinstance(action_space, gym.spaces.Discrete) or isinstance(
+            action_space, gym.spaces.Box), "目前只能处理Discrete和Box两种action_space"
+
+        if isinstance(action_space, gym.spaces.Discrete):
+            assert act.shape == (1, )
+
+        if isinstance(action_space, gym.spaces.Box):
+            assert act.shape == action_space.shape
+
+        return actinfo
+
+    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[O]]]:
+        assert len(self.eval_observation_episode) == 0
+        self.toggleEval(True)
+
+        o = cast(O, env.reset())
+        self.eval_observation_episode.append(o)
+
+        s = False
+        rwd = 0.0
+
+        while not s:
+            actinfo = self.get_action(
+                self.get_current_state(self.eval_observation_episode))
+            act = actinfo[0]
+
+            (o, r, s,
+             _) = env.step(act[0] if isinstance(env.action_space, gym.spaces.
+                                                Discrete) else act)
+            rwd += r
+            self.eval_observation_episode.append(o)
+
+        self.report({'eval_return': rwd})
+        return rwd, (self.eval_observation_episode, )

@@ -18,7 +18,6 @@ Action = np.ndarray
 State = Observation
 Reward = int
 
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -119,13 +118,9 @@ class DQNAlgorithm(Algorithm):
             maxi = torch.argmax(act_vals)
             return np.asarray([maxi.item()], dtype=np.int64)
 
-    def after_step(
-        self,
-        sar: Tuple[State, ActionInfo, Reward],
-        sa: Tuple[State, Optional[ActionInfo]],
-    ):
-        (s, a, r) = sar
-        (sn, an) = sa
+    def after_step(self, transition: Transition):
+        (s, a, r, sn, an) = transition
+        assert isinstance(an, tuple) or an is None
         self.replay_memory.append((s, a, r, sn, an))
 
         if self.times != 0 and self.times % (self.update_times) == 0:

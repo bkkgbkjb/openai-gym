@@ -1,9 +1,7 @@
 import setup
 from utils.common import (
     ActionInfo,
-    Step,
     Transition,
-    NotNoneStep,
 )
 from torch import nn
 from collections import deque
@@ -29,7 +27,6 @@ Action = np.ndarray
 
 State = Observation
 Reward = float
-
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -201,13 +198,9 @@ class TD3(Algorithm):
                                                 List[Reward]]):
         pass
 
-    def after_step(
-        self,
-        sar: Tuple[State, ActionInfo, Reward],
-        sa: Tuple[State, Optional[ActionInfo]],
-    ):
-        (s, a, r) = sar
-        (sn, an) = sa
+    def after_step(self, transition: Transition):
+        (s, a, r, sn, an) = transition
+        assert isinstance(an, tuple) or an is None
         self.replay_buffer.append((s, a, r, sn, an))
 
         if self.times >= self.start_timestamp:

@@ -1,6 +1,6 @@
 from abc import abstractmethod
-from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any
-from utils.common import Action, ActionInfo, AllowedState as S, Reward
+from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any, Union
+from utils.common import Action, ActionInfo, AllowedState as S, NotNoneStep, Reward, Transition
 
 
 class Algorithm:
@@ -12,8 +12,7 @@ class Algorithm:
         raise NotImplementedError()
 
     @abstractmethod
-    def after_step(self, sar: Tuple[S, ActionInfo, Reward],
-                   sa: Tuple[S, Optional[ActionInfo]]):
+    def after_step(self, transition: Transition):
         raise NotImplementedError()
 
     @abstractmethod
@@ -30,4 +29,4 @@ class Algorithm:
         raise NotImplementedError()
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        raise NotImplementedError()
+        pass

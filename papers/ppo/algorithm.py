@@ -2,9 +2,8 @@ import setup
 from utils.common import (
     ActionInfo,
     Step,
-    EpisodeGeneric,
-    Transition,
     NotNoneStep,
+    Transition,
 )
 from torch import nn
 import math
@@ -31,7 +30,6 @@ Action = int
 State = torch.Tensor
 Reward = int
 
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -42,6 +40,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class ActorCritic(nn.Module):
+
     def __init__(self, n_actions: int):
         super().__init__()
 
@@ -61,9 +60,8 @@ class ActorCritic(nn.Module):
             # nn.Softmax(dim=1),
         ).to(DEVICE)
 
-        self.actor = nn.Sequential(layer_init(nn.Linear(512, n_actions))).to(
-            DEVICE
-        )
+        self.actor = nn.Sequential(layer_init(nn.Linear(512,
+                                                        n_actions))).to(DEVICE)
         self.critic = layer_init(nn.Linear(512, 1), std=1).to(DEVICE)
 
     def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -78,6 +76,7 @@ class ActorCritic(nn.Module):
 
 
 class PPO(Algorithm[State, Action]):
+
     def __init__(
         self,
         n_actions: int,
@@ -98,8 +97,9 @@ class PPO(Algorithm[State, Action]):
         self.gae_lambda = .95
 
         self.gamma = gamma
-        self.optimzer = torch.optim.Adam(
-            self.network.parameters(), 2.5e-4, eps=1e-5)
+        self.optimzer = torch.optim.Adam(self.network.parameters(),
+                                         2.5e-4,
+                                         eps=1e-5)
 
         self.sigma = sigma
         self.c1 = c1
@@ -114,7 +114,7 @@ class PPO(Algorithm[State, Action]):
 
     def on_agent_reset(self):
         pass
-    
+
     def on_toggle_eval(self, isEval: bool):
         pass
 
@@ -130,7 +130,10 @@ class PPO(Algorithm[State, Action]):
 
         return (
             cast(int, act.item()),
-            {"log_prob": dist.log_prob(act), "value": value},
+            {
+                "log_prob": dist.log_prob(act),
+                "value": value
+            },
         )
 
     def append_step(
@@ -154,14 +157,10 @@ class PPO(Algorithm[State, Action]):
 
         self.memory.extend([(s, a, r), (sn, an, None)])
 
-    def after_step(
-        self,
-        sar: Tuple[State, ActionInfo[Action], Reward],
-        sa: Tuple[State, Optional[ActionInfo[Action]]],
-    ):
+    def after_step(self, transition: Transition):
         self.times += 1
-        (s, a, r) = sar
-        (sn, an) = sa
+        (s, a, r, sn, an) = transition
+        assert isinstance(an, tuple) or an is None
         self.append_step(s, a, r, sn, an)
 
         if self.times != 0 and len(self.memory) >= 1024:
@@ -171,12 +170,12 @@ class PPO(Algorithm[State, Action]):
     @property
     def no_stop_step(self) -> Iterable[NotNoneStep]:
 
-        return (
-            (s, a, cast(Reward, r)) for (s, a, r) in self.memory[:-1] if a is not None
-        )
+        return ((s, a, cast(Reward, r)) for (s, a, r) in self.memory[:-1]
+                if a is not None)
 
     @torch.no_grad()
-    def compute_advantages_and_returns_gae(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute_advantages_and_returns_gae(
+            self) -> Tuple[torch.Tensor, torch.Tensor]:
 
         values = [i["value"].item() for (_, (_, i), _) in self.no_stop_step]
 
@@ -199,13 +198,13 @@ class PPO(Algorithm[State, Action]):
                 assert r is not None
 
                 delta = r + (0 if next_is_stop else self.gamma *
-                             next_value) - values[-(i+1)]
+                             next_value) - values[-(i + 1)]
                 advs[-(i+1)] = delta + \
                     (0 if next_is_stop else self.gamma *
                      self.gae_lambda * lastgaelambda)
                 next_is_stop = False
-                lastgaelambda = advs[-(i+1)]
-                next_value = values[-(i+1)]
+                lastgaelambda = advs[-(i + 1)]
+                next_value = values[-(i + 1)]
                 i += 1
 
         values = torch.tensor(values, dtype=torch.float32)
@@ -214,7 +213,8 @@ class PPO(Algorithm[State, Action]):
         return advs, advs + values
 
     @torch.no_grad()
-    def compute_advantages_and_returns(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute_advantages_and_returns(
+            self) -> Tuple[torch.Tensor, torch.Tensor]:
 
         values = [i["value"].item() for (_, (_, i), _) in self.no_stop_step]
 
@@ -235,11 +235,8 @@ class PPO(Algorithm[State, Action]):
                 next_value = 0
             else:
                 assert r is not None
-                returns[-(i + 1)] = (
-                    r + 0
-                    if next_is_stop
-                    else self.gamma * next_value
-                )
+                returns[-(i + 1)] = (r + 0 if next_is_stop else self.gamma *
+                                     next_value)
                 next_is_stop = False
                 next_value = returns[-(i + 1)]
                 i += 1
@@ -267,32 +264,32 @@ class PPO(Algorithm[State, Action]):
 
                 L = self.batch_size
 
-                states = torch.cat([resolve_lazy_frames(s)
-                                   for (s, _, _) in batch])
+                states = torch.cat(
+                    [resolve_lazy_frames(s) for (s, _, _) in batch])
 
                 assert states.shape == (L, 4, 84, 84)
 
                 old_acts = torch.tensor([a for (_, (a, _), _) in batch])
 
-                assert old_acts.shape == (L,)
+                assert old_acts.shape == (L, )
 
                 (act_probs, new_vals) = self.network(states)
                 new_vals = new_vals.squeeze(1)
                 dists = Categorical(logits=act_probs)
 
                 entropy: torch.Tensor = dists.entropy()
-                assert entropy.shape == (L,)
+                assert entropy.shape == (L, )
                 assert entropy.requires_grad
 
                 entropy = entropy.mean()
 
                 new_log_prob = dists.log_prob(old_acts)
-                assert new_log_prob.shape == (L,)
+                assert new_log_prob.shape == (L, )
 
-                old_log_probs = torch.cat([i["log_prob"]
-                                          for (_, (_, i), _) in batch])
+                old_log_probs = torch.cat(
+                    [i["log_prob"] for (_, (_, i), _) in batch])
 
-                assert old_log_probs.shape == (L,)
+                assert old_log_probs.shape == (L, )
                 assert not old_log_probs.requires_grad
 
                 ratios: torch.Tensor = (new_log_prob - old_log_probs).exp()
@@ -304,26 +301,26 @@ class PPO(Algorithm[State, Action]):
                     torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs,
                 )
 
-                assert policy_loss.shape == (L,)
+                assert policy_loss.shape == (L, )
                 assert policy_loss.requires_grad
 
                 policy_loss = policy_loss.mean()
 
-                v_loss_unclipped = ((new_vals - rets) ** 2)
+                v_loss_unclipped = ((new_vals - rets)**2)
 
                 old_values = torch.tensor(
                     [i['value'].item() for (_, (_, i), _) in batch])
 
-                assert old_values.shape == (L,)
+                assert old_values.shape == (L, )
 
                 v_clipped = old_values + \
                     torch.clamp(new_vals - old_values, -self.sigma, self.sigma)
-                v_loss_clipped = (v_clipped - rets) ** 2
+                v_loss_clipped = (v_clipped - rets)**2
 
                 v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
                 value_loss = v_loss_max / 2
 
-                assert value_loss.shape == (L,)
+                assert value_loss.shape == (L, )
 
                 value_loss = value_loss.mean()
 
@@ -342,9 +339,9 @@ class PPO(Algorithm[State, Action]):
                 nn.utils.clip_grad_norm_(self.network.parameters(), 1)
                 self.optimzer.step()
 
-    def on_episode_termination(
-        self, sar: Tuple[List[State], List[ActionInfo[Action]], List[Reward]]
-    ):
+    def on_episode_termination(self, sar: Tuple[List[State],
+                                                List[ActionInfo[Action]],
+                                                List[Reward]]):
         (s, a, r) = sar
         assert len(s) == len(a) + 1
         assert len(s) == len(r) + 1
@@ -352,6 +349,7 @@ class PPO(Algorithm[State, Action]):
 
 
 class RandomAlgorithm(Algorithm[State, Action]):
+
     def __init__(self, n_actions: int):
         self.name = "random"
         self.n_actions = n_actions
@@ -386,7 +384,8 @@ class RandomAlgorithm(Algorithm[State, Action]):
     ):
         pass
 
-    def on_episode_termination(self, sar: Tuple[List[State], List[Action], List[Reward]]):
+    def on_episode_termination(self, sar: Tuple[List[State], List[Action],
+                                                List[Reward]]):
         (s, a, r) = sar
         assert len(s) == len(a) + 1
         assert len(s) == len(r) + 1
@@ -394,6 +393,7 @@ class RandomAlgorithm(Algorithm[State, Action]):
 
 
 class Preprocess(Preprocess[Observation, Action, State]):
+
     def __init__(self):
         pass
 
