@@ -9,8 +9,8 @@ from torch import nn
 import math
 import torch
 from utils.nets import NeuralNetworks
-from utils.preprocess import PreprocessInterface
-from utils.algorithm import AlgorithmInterface
+from utils.preprocess import Preprocess
+from utils.algorithm import Algorithm
 
 from typing import (
     List,
@@ -35,7 +35,7 @@ Reward = float
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(PreprocessInterface[Observation, State]):
+class Preprocess(Preprocess[Observation]):
 
     def __init__(self):
         pass
@@ -116,7 +116,7 @@ class OrnsteinUhlenbeckActionNoise:
         return self
 
 
-class DDPG(AlgorithmInterface[State]):
+class DDPG(Algorithm):
 
     def __init__(self, n_states: int, n_actions: int):
         self.name = "ddpg"

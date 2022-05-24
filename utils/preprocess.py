@@ -1,13 +1,12 @@
 from abc import abstractmethod
 from typing import Protocol, TypeVar, List
 
-from utils.common import AllowedState
+from utils.common import AllowedState as S
 
 O = TypeVar("O")
-S = TypeVar("S", covariant=True, bound=AllowedState)
 
 
-class PreprocessInterface(Protocol[O, S]):
+class Preprocess(Protocol[O]):
 
     @abstractmethod
     def get_current_state(self, h: List[O]) -> S:

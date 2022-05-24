@@ -9,8 +9,8 @@ from torch import nn
 from collections import deque
 import torch
 from utils.nets import NeuralNetworks
-from utils.preprocess import PreprocessInterface
-from utils.algorithm import AlgorithmInterface
+from utils.preprocess import Preprocess
+from utils.algorithm import Algorithm
 
 from typing import (
     List,
@@ -34,7 +34,7 @@ Reward = float
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(PreprocessInterface[Observation, State]):
+class Preprocess(Preprocess[Observation]):
 
     def __init__(self):
         pass
@@ -84,7 +84,7 @@ class Critic(NeuralNetworks):
         return self.net(torch.cat([state, action], 1))
 
 
-class TD3(AlgorithmInterface[State]):
+class TD3(Algorithm):
 
     def __init__(self, n_states: int, n_actions: int) -> None:
         self.name = "td3"

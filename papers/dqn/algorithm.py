@@ -5,8 +5,8 @@ import math
 from collections import deque
 import torch
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
-from utils.preprocess import PreprocessInterface
-from utils.algorithm import AlgorithmInterface
+from utils.preprocess import Preprocess
+from utils.algorithm import Algorithm
 from typing import List, Tuple, Optional, cast, Callable, Dict, Any
 import numpy as np
 from utils.nets import NeuralNetworks, layer_init
@@ -22,7 +22,7 @@ Reward = int
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(PreprocessInterface[Observation, State]):
+class Preprocess(Preprocess[Observation]):
 
     def __init__(self):
         pass
@@ -61,7 +61,7 @@ class QNetwork(NeuralNetworks):
         return rlt
 
 
-class DQNAlgorithm(AlgorithmInterface[State]):
+class DQNAlgorithm(Algorithm):
 
     def __init__(self, n_actions: int, gamma: float = 0.99):
         self.name = "dqn"
@@ -187,7 +187,7 @@ class DQNAlgorithm(AlgorithmInterface[State]):
         pass
 
 
-class DDQNAlgorithm(DQNAlgorithm, AlgorithmInterface[State]):
+class DDQNAlgorithm(DQNAlgorithm, Algorithm):
 
     def __init__(self, n_actions: int, gamma: float = 0.99):
         super().__init__(n_actions, gamma)

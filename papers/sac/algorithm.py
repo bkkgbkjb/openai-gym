@@ -9,8 +9,8 @@ from utils.common import (
 from torch import nn
 from collections import deque
 import torch
-from utils.preprocess import PreprocessInterface
-from utils.algorithm import AlgorithmInterface
+from utils.preprocess import Preprocess
+from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from utils.nets import NeuralNetworks, layer_init
 
@@ -108,7 +108,7 @@ class PaiFunction(NeuralNetworks):
         return act, log_prob, mean
 
 
-class SAC(AlgorithmInterface[State]):
+class SAC(Algorithm):
 
     def __init__(self, n_state: int, n_actions: int):
         self.name = "sac"
@@ -239,7 +239,7 @@ class SAC(AlgorithmInterface[State]):
             ))
 
 
-class Preprocess(PreprocessInterface[Observation, State]):
+class Preprocess(Preprocess[Observation]):
 
     def __init__(self):
         pass

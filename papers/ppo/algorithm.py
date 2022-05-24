@@ -10,8 +10,8 @@ from torch import nn
 import math
 from collections import deque
 import torch
-from utils.preprocess import PreprocessInterface
-from utils.algorithm import AlgorithmInterface
+from utils.preprocess import Preprocess
+from utils.algorithm import Algorithm
 import plotly.graph_objects as go
 from torch.distributions import Categorical
 from tqdm.autonotebook import tqdm
@@ -77,7 +77,7 @@ class ActorCritic(nn.Module):
         return (log_action_probs.cpu(), value.cpu())
 
 
-class PPO(AlgorithmInterface[State, Action]):
+class PPO(Algorithm[State, Action]):
     def __init__(
         self,
         n_actions: int,
@@ -351,7 +351,7 @@ class PPO(AlgorithmInterface[State, Action]):
         pass
 
 
-class RandomAlgorithm(AlgorithmInterface[State, Action]):
+class RandomAlgorithm(Algorithm[State, Action]):
     def __init__(self, n_actions: int):
         self.name = "random"
         self.n_actions = n_actions
@@ -393,7 +393,7 @@ class RandomAlgorithm(AlgorithmInterface[State, Action]):
         pass
 
 
-class Preprocess(PreprocessInterface[Observation, Action, State]):
+class Preprocess(Preprocess[Observation, Action, State]):
     def __init__(self):
         pass
 

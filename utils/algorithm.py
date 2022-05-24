@@ -1,11 +1,9 @@
 from abc import abstractmethod
 from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any
-from utils.common import Action, ActionInfo, AllowedState, Reward
-
-S = TypeVar("S", bound=AllowedState)
+from utils.common import Action, ActionInfo, AllowedState as S, Reward
 
 
-class AlgorithmInterface(Protocol[S]):
+class Algorithm:
 
     name: str
 

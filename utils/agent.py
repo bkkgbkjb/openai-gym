@@ -16,8 +16,8 @@ from typing import (
     Union,
     TypeVar,
 )
-from utils.algorithm import AlgorithmInterface
-from utils.preprocess import PreprocessInterface
+from utils.algorithm import Algorithm
+from utils.preprocess import Preprocess
 from utils.common import Observation as O, ActionInfo, AllowedState, Step, EpisodeGeneric, Action, Reward
 
 S = AllowedState
@@ -29,8 +29,8 @@ class Agent(Generic[O]):
     def __init__(
         self,
         env: gym.Env,
-        algm: AlgorithmInterface[S],
-        preprocess: PreprocessInterface[O, S],
+        algm: Algorithm,
+        preprocess: Preprocess[O],
     ):
         self.env = env
         self.algm = algm
