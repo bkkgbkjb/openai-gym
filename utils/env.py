@@ -10,7 +10,7 @@ from typing import (
     TypeVar,
 )
 from tqdm import tqdm
-from os import times
+from time import sleep
 from gym.spaces import Box
 import numpy as np
 from torchvision import transforms as T
@@ -82,7 +82,7 @@ def glance(env: gym.Env, random_seed=0, repeats=3):
         while not s:
             env.render(mode="human")
 
-            times.sleep(100)
+            sleep(1/60)
             (_, rwd, stop, _) = env.step(env.action_space.sample())
             t += 1
 
@@ -97,7 +97,7 @@ O = TypeVar("O")
 S = TypeVar("S", bound=AllowedState)
 
 
-def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
+def train(agent: Agent[O], training_frames=int(1e6)) -> Agent[O]:
 
     agent.reset()
 
@@ -113,7 +113,7 @@ def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
     return agent
 
 
-def eval(agent: Agent[O, S], env: gym.Env, repeats=10) -> Agent[O, S]:
+def eval(agent: Agent[O], env: gym.Env, repeats=10) -> Agent[O]:
 
     for _ in range(repeats):
         agent.reset()
@@ -124,12 +124,12 @@ def eval(agent: Agent[O, S], env: gym.Env, repeats=10) -> Agent[O, S]:
 
 
 def train_and_eval(
-        agent: Agent[O, S],
+        agent: Agent[O],
         eval_env: gym.Env,
         single_train_frames=int(1e4),
         eval_repeats=10,
         total_train_frames=int(1e6),
-) -> Agent[O, S]:
+) -> Agent[O]:
 
     for _ in tqdm(range(math.ceil(total_train_frames / single_train_frames))):
         train(agent, single_train_frames)
