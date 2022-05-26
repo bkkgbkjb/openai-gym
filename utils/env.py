@@ -17,7 +17,8 @@ from torchvision import transforms as T
 import torch
 
 from utils.agent import Agent, OfflineAgent
-from utils.common import AllAgent, AllowedState
+from utils.agent import AllAgent
+from utils.common import AllowedState
 
 
 class PreprocessObservation(gym.ObservationWrapper):

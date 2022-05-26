@@ -1,5 +1,5 @@
 import setup
-from algorithm import SAC, Preprocess
+from algorithm import NewSAC, Preprocess
 from utils.agent import Agent
 import gym
 from setup import RANDOM_SEED
@@ -13,8 +13,8 @@ train_env, eval_env = make_train_and_eval_env("Walker2d-v2", [], RANDOM_SEED)
 
 agent = Agent(
     train_env,
-    SAC(train_env.observation_space.shape[0],
-         train_env.action_space.shape[0]), Preprocess())
+    NewSAC(train_env.observation_space.shape[0],
+           train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 

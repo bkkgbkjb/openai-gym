@@ -4,6 +4,7 @@ import gym
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 from typing import (
     Any,
+    TypeVar,
     Generic,
     Literal,
     List,
@@ -289,3 +290,7 @@ class OfflineAgent(Generic[O]):
 
         self.report({'eval_return': rwd})
         return rwd, (self.eval_observation_episode, )
+    
+
+O = TypeVar('O')
+AllAgent = Union[Agent[O], OfflineAgent[O]]

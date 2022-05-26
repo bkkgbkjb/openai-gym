@@ -232,6 +232,149 @@ class SAC(Algorithm):
             ))
 
 
+class NewSAC(Algorithm):
+
+    def __init__(self, n_state: int, n_actions: int):
+        self.name = "new-sac"
+        self.n_actions = n_actions
+        self.n_state = n_state
+
+        self.gamma = 0.99
+
+        self.tau = 5e-3
+
+        self.start_traininig_size = int(1e4)
+        self.mini_batch_size = 256
+
+        self.policy = PaiFunction(self.n_state, self.n_actions)
+
+        self.q1 = QFunction(self.n_state, self.n_actions)
+        self.q2 = QFunction(self.n_state, self.n_actions)
+
+        self.q1_target = self.q1.clone().no_grad()
+        self.q2_target = self.q2.clone().no_grad()
+
+        self.q1_loss = nn.MSELoss()
+        self.q2_loss = nn.MSELoss()
+
+        self.log_alpha = torch.tensor([0.1], requires_grad=True, device=DEVICE)
+        assert self.log_alpha.requires_grad
+        self.target_entropy = -n_actions
+
+        self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), 3e-4)
+        self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), 3e-4)
+
+        self.log_alpha_optimizer = torch.optim.Adam(params=[self.log_alpha], lr=1e-4)
+
+        self.p_optimizer = torch.optim.Adam(self.policy.parameters(), 3e-4)
+
+        self.reset()
+
+    @property
+    def alpha(self):
+        return self.log_alpha.exp().detach()
+
+    def on_toggle_eval(self, isEval: bool):
+        pass
+
+    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
+        self.report = reporter
+
+    def reset(self):
+        self.times = 0
+        self.replay_memory = ReplayBuffer[State]((self.n_state, ),
+                                                 (self.n_actions, ))
+
+    def on_agent_reset(self):
+        pass
+
+    @torch.no_grad()
+    def take_action(self, state: State) -> Action:
+        action, _, _ = self.policy.sample(state.unsqueeze(0))
+        return action.detach().cpu().squeeze(0).numpy()
+
+    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
+                                                List[Reward]]):
+        pass
+
+    def after_step(self, transition: Transition):
+        (s, a, r, sn, an) = transition
+        assert isinstance(an, tuple) or an is None
+        self.replay_memory.append((s, a, r, sn, an))
+
+        if self.replay_memory.len >= self.start_traininig_size:
+            self.train()
+
+        self.times += 1
+
+    def train(self):
+
+        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+            self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
+            (self.n_actions, ))
+
+        new_actions, new_log_probs, _ = self.policy.sample(states)
+        next_actions, next_actions_log_probs, _ = self.policy.sample(
+            next_states)
+
+        # Training Q Function
+        q1_target = self.q1_target(next_states, next_actions)
+        q2_target = self.q2_target(next_states, next_actions)
+
+        q_target_next = torch.min(
+            q1_target, q2_target) - self.alpha * next_actions_log_probs
+
+        target_q_val = (rewards + self.gamma *
+                        (1 - done) * q_target_next).detach()
+
+        predicted_q1 = self.q1(states, actions)
+        predicted_q2 = self.q2(states, actions)
+        # target_val = self.offline_v(next_states)
+        # target_q_val = (rewards + (1 - done) * self.gamma * target_val)
+
+        q_val_loss1 = self.q1_loss(predicted_q1, target_q_val)
+        q_val_loss2 = self.q2_loss(predicted_q2, target_q_val)
+
+        self.q1_optimizer.zero_grad()
+        q_val_loss1.backward()
+        self.q1_optimizer.step()
+
+        self.q2_optimizer.zero_grad()
+        q_val_loss2.backward()
+        self.q2_optimizer.step()
+
+        # Training P Function
+        policy_loss = (self.alpha * new_log_probs -
+                       torch.min(self.q1(states, new_actions),
+                                 self.q2(states, new_actions))).mean()
+
+        self.p_optimizer.zero_grad()
+        policy_loss.backward()
+        self.p_optimizer.step()
+
+        # Training self.alpha
+        alpha_loss = -(self.log_alpha.exp() *
+                       (new_log_probs + self.target_entropy).detach()).mean()
+        self.log_alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self.log_alpha_optimizer.step()
+
+        # # soft update old_v net
+        # self.offline_v.soft_update_to(self.online_v, self.tau)
+        # soft update target Q
+        self.q1_target.soft_update_to(self.q1, self.tau)
+        self.q2_target.soft_update_to(self.q2, self.tau)
+
+        self.report(
+            dict(
+                # value_loss=value_loss,
+                alpha_loss=alpha_loss,
+                policy_loss=policy_loss,
+                q_loss1=q_val_loss1,
+                q_loss2=q_val_loss2,
+            ))
+
+
 class Preprocess(Preprocess[Observation]):
 
     def __init__(self):
