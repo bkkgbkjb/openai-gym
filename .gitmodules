@@ -4,3 +4,6 @@
 [submodule "d4rl"]
 	path = d4rl
 	url = https://github.com/rail-berkeley/d4rl.git
+[submodule "sac-example"]
+	path = sac-example
+	url = https://github.com/denisyarats/pytorch_sac.git

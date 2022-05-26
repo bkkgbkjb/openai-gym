@@ -93,7 +93,10 @@ class ReplayBuffer(Generic[S]):
         assert next_states.shape == ((l, ) + state_shape)
 
         done = torch.as_tensor(
-            [1 if an is None else 0 for (_, _, _, _, an) in mini_batch],
+            [
+                1 if (an is None or an == False) else 0
+                for (_, _, _, _, an) in mini_batch
+            ],
             dtype=torch.int8,
         ).unsqueeze(1)
 

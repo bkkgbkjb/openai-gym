@@ -1,5 +1,6 @@
 from typing import Dict, Tuple, TypeVar, Optional, List, Any, Union
 import numpy as np
+from utils.agent import Agent, OfflineAgent
 from utils.env_sb3 import LazyFrames
 import torch
 
@@ -29,3 +30,6 @@ Transition = Tuple[AllowedState, ActionInfo, Reward, AllowedState,
                    Union[Optional[ActionInfo], bool]]
 
 Observation = TypeVar('Observation')
+
+O = TypeVar('O')
+AllAgent = Union[Agent[O], OfflineAgent[O]]

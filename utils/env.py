@@ -16,8 +16,8 @@ import numpy as np
 from torchvision import transforms as T
 import torch
 
-from utils.agent import Agent
-from utils.common import AllowedState
+from utils.agent import Agent, OfflineAgent
+from utils.common import AllAgent, AllowedState
 
 
 class PreprocessObservation(gym.ObservationWrapper):
@@ -82,7 +82,7 @@ def glance(env: gym.Env, random_seed=0, repeats=3):
         while not s:
             env.render(mode="human")
 
-            sleep(1/60)
+            sleep(1 / 60)
             (_, rwd, stop, _) = env.step(env.action_space.sample())
             t += 1
 
@@ -113,7 +113,26 @@ def train(agent: Agent[O], training_frames=int(1e6)) -> Agent[O]:
     return agent
 
 
-def eval(agent: Agent[O], env: gym.Env, repeats=10) -> Agent[O]:
+def offline_train(
+    agent: OfflineAgent[O], training_frames=int(1e6)) -> OfflineAgent[O]:
+
+    agent.reset()
+
+    with tqdm(total=training_frames) as pbar:
+        frames = 0
+        l = None
+
+        while frames <= training_frames and l != 0:
+            agent.reset()
+            l = agent.train()
+
+            pbar.update(l)
+            frames += l
+
+    return agent
+
+
+def eval(agent: AllAgent[O], env: gym.Env, repeats=10) -> AllAgent[O]:
 
     for _ in range(repeats):
         agent.reset()
@@ -130,9 +149,26 @@ def train_and_eval(
         eval_repeats=10,
         total_train_frames=int(1e6),
 ) -> Agent[O]:
+    s = math.ceil(total_train_frames / single_train_frames)
 
-    for _ in tqdm(range(math.ceil(total_train_frames / single_train_frames))):
+    for _ in tqdm(range(s)):
         train(agent, single_train_frames)
+        eval(agent, eval_env, eval_repeats)
+
+    return agent
+
+
+def offline_train_and_eval(
+    agent: OfflineAgent[O],
+    eval_env: gym.Env,
+    single_train_frames=int(1e4),
+    eval_repeats=10,
+    total_train_frames=int(1e6)) -> OfflineAgent[O]:
+
+    s = math.ceil(total_train_frames / single_train_frames)
+
+    for _ in tqdm(range(s)):
+        offline_train(agent, single_train_frames)
         eval(agent, eval_env, eval_repeats)
 
     return agent

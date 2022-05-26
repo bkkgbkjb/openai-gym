@@ -195,8 +195,10 @@ class OfflineAgent(Generic[O]):
     def reset(self):
         self.preprocess.on_agent_reset()
         self.algm.on_agent_reset()
-        self.data_iter = iter(self.dataloader)
         self.eval_observation_episode: List[O] = []
+
+    def reset_iter(self):
+        self.data_iter = iter(self.dataloader)
 
     def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
@@ -218,7 +220,7 @@ class OfflineAgent(Generic[O]):
         for (s, a, r, sn, done) in zip(states, actions, rewards, next_states,
                                        dones):
 
-            self.algm.after_step((s, (a, dict()), r, sn, done))
+            self.algm.after_step((s, (a.numpy(), dict()), r.item(), sn, done.item() == 1))
             _s.append(s)
             _a.append((a, dict()))
             _r.append(r)
@@ -265,6 +267,7 @@ class OfflineAgent(Generic[O]):
 
     def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[O]]]:
         assert len(self.eval_observation_episode) == 0
+        self.env = env
         self.toggleEval(True)
 
         o = cast(O, env.reset())
