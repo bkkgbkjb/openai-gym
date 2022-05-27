@@ -1,6 +1,6 @@
-[submodule "cql-example"]
-	path = cql-example
-	url = https://github.com/BY571/CQL.git
 [submodule "d4rl"]
 	path = d4rl
 	url = https://github.com/rail-berkeley/d4rl.git
+[submodule "tianshou"]
+	path = tianshou
+	url = https://github.com/thu-ml/tianshou.git

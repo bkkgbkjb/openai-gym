@@ -108,37 +108,49 @@ class PaiFunction(NeuralNetworks):
 class OfflineSAC(Algorithm):
 
     def __init__(self, n_state: int, n_actions: int):
-        self.name = "cql-sac"
+        self.name = "offline-sac"
         self.n_actions = n_actions
         self.n_state = n_state
 
         self.gamma = 0.99
 
-        self.alpha = 1.0
-        self.tau = 1e-2
+        self.tau = 5e-3
 
         self.start_traininig_size = int(1e4)
         self.mini_batch_size = 256
-
-        self.online_v = VFunction(self.n_state)
-        self.offline_v = self.online_v.clone().no_grad()
 
         self.policy = PaiFunction(self.n_state, self.n_actions)
 
         self.q1 = QFunction(self.n_state, self.n_actions)
         self.q2 = QFunction(self.n_state, self.n_actions)
 
-        self.v_loss = nn.MSELoss()
+        self.q1_target = self.q1.clone().no_grad()
+        self.q2_target = self.q2.clone().no_grad()
+
         self.q1_loss = nn.MSELoss()
         self.q2_loss = nn.MSELoss()
+
+        self.log_alpha = torch.tensor([0.1], requires_grad=True, device=DEVICE)
+        assert self.log_alpha.requires_grad
+        self.target_entropy = -n_actions
 
         self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), 3e-4)
         self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), 3e-4)
 
-        self.v_optimizer = torch.optim.Adam(self.online_v.parameters(), 3e-4)
+        self.log_alpha_optimizer = torch.optim.Adam(params=[self.log_alpha],
+                                                    lr=3e-4)
+
         self.p_optimizer = torch.optim.Adam(self.policy.parameters(), 3e-4)
 
+        self.num_repeat_actions = 10
+        self.temperature = 1.0
+        self.cql_weight = 1.0
+
         self.reset()
+
+    @property
+    def alpha(self):
+        return self.log_alpha.exp().detach()
 
     def on_toggle_eval(self, isEval: bool):
         pass
@@ -174,59 +186,124 @@ class OfflineSAC(Algorithm):
 
         self.times += 1
 
+    def calc_pi_values(self, states: torch.Tensor, pred_states: torch.Tensor):
+        acts, log_pis, _ = self.policy.sample(states)
+
+        q1 = self.q1(pred_states, acts)
+        q2 = self.q2(pred_states, acts)
+
+        return q1 - log_pis.detach(), q2 - log_pis.detach()
+
+    def calc_random_values(self, states: torch.Tensor, actions: torch.Tensor):
+        random_value1 = self.q1(states, actions)
+        random_log_prob1 = np.log(0.5**actions.shape[-1])
+
+        random_value2 = self.q2(states, actions)
+        random_log_prob2 = np.log(0.5**actions.shape[-1])
+
+        return random_value1 - random_log_prob1, random_value2 - random_log_prob2
+
     def train(self):
 
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
             self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
             (self.n_actions, ))
 
-        new_actions, new_log_probs, _ = self.policy.sample(states)
-
-        # Training Q Function
-        predicted_q1 = self.q1(states, actions)
-        predicted_q2 = self.q2(states, actions)
-        target_val = self.offline_v(next_states)
-        target_q_val = (rewards +
-                        (1 - done) * self.gamma * target_val).detach()
-
-        q_val_loss1 = self.q1_loss(predicted_q1, target_q_val)
-        q_val_loss2 = self.q2_loss(predicted_q2, target_q_val)
-
-        self.q1_optimizer.zero_grad()
-        q_val_loss1.backward()
-        self.q1_optimizer.step()
-
-        self.q2_optimizer.zero_grad()
-        q_val_loss2.backward()
-        self.q2_optimizer.step()
-
-        # Training V Function
-        predicted_val = self.online_v(states)
-        predicted_new_q_value = torch.min(self.q1(states, new_actions),
-                                          self.q2(states, new_actions))
-
-        target_value_func = (predicted_new_q_value -
-                             self.alpha * new_log_probs).detach()
-
-        value_loss = self.v_loss(predicted_val, target_value_func)
-
-        self.v_optimizer.zero_grad()
-        value_loss.backward()
-        self.v_optimizer.step()
+        next_actions, next_actions_log_probs, _ = self.policy.sample(
+            next_states)
 
         # Training P Function
+        new_actions, new_log_probs, _ = self.policy.sample(states)
         policy_loss = (self.alpha * new_log_probs -
-                       predicted_new_q_value).mean()
+                       torch.min(self.q1(states, new_actions),
+                                 self.q2(states, new_actions))).mean()
+
         self.p_optimizer.zero_grad()
         policy_loss.backward()
         self.p_optimizer.step()
 
-        # soft update old_v net
-        self.offline_v.soft_update_to(self.online_v, self.tau)
+        # Training self.alpha
+        alpha_loss = -(self.log_alpha.exp() *
+                       (new_log_probs + self.target_entropy).detach()).mean()
+        self.log_alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self.log_alpha_optimizer.step()
+
+        # Training Q Function
+        q1_target = self.q1_target(next_states, next_actions)
+        q2_target = self.q2_target(next_states, next_actions)
+
+        q_target_next = torch.min(
+            q1_target, q2_target) - self.alpha * next_actions_log_probs
+
+        target_q_val = (rewards + self.gamma *
+                        (1 - done) * q_target_next).detach()
+
+        predicted_q1 = self.q1(states, actions)
+        predicted_q2 = self.q2(states, actions)
+
+        q_val_loss1 = self.q1_loss(predicted_q1, target_q_val)
+        q_val_loss2 = self.q2_loss(predicted_q2, target_q_val)
+
+        # CQL addon
+        random_actions = torch.FloatTensor(
+            self.mini_batch_size * self.num_repeat_actions,
+            actions.shape[-1]).uniform_(-1, 1).to(DEVICE)
+
+        obs_len = len(states.shape)
+        repeat_size = [1, self.num_repeat_actions] + [1] * (obs_len - 1)
+        view_size = [self.mini_batch_size * self.num_repeat_actions] + list(
+            states.shape[1:])
+        tmp_obs = states.unsqueeze(1).repeat(*repeat_size).view(*view_size)
+        tmp_obs_next = next_states.unsqueeze(1).repeat(*repeat_size).view(
+            *view_size)
+
+        current_pi_value1, current_pi_value2 = self.calc_pi_values(
+            tmp_obs, tmp_obs)
+        next_pi_value1, next_pi_value2 = self.calc_pi_values(
+            tmp_obs_next, tmp_obs)
+
+        random_value1, random_value2 = self.calc_random_values(
+            tmp_obs, random_actions)
+
+        for value in [
+                current_pi_value1, current_pi_value2, next_pi_value1,
+                next_pi_value2, random_value1, random_value2
+        ]:
+            value.reshape(self.mini_batch_size, self.num_repeat_actions, 1)
+
+        # cat q values
+        cat_q1 = torch.cat([random_value1, current_pi_value1, next_pi_value1],
+                           1)
+        cat_q2 = torch.cat([random_value2, current_pi_value2, next_pi_value2],
+                           1)
+        # shape: (batch_size, 3 * num_repeat, 1)
+
+        cql1_scaled_loss = \
+            torch.logsumexp(cat_q1 / self.temperature, dim=1).mean() * \
+            self.cql_weight * self.temperature - predicted_q1.mean() * \
+            self.cql_weight
+        cql2_scaled_loss = \
+            torch.logsumexp(cat_q2 / self.temperature, dim=1).mean() * \
+            self.cql_weight * self.temperature - predicted_q2.mean() * \
+            self.cql_weight
+
+        self.q1_optimizer.zero_grad()
+        (q_val_loss1 - cql1_scaled_loss).backward(retain_graph=True)
+        self.q1_optimizer.step()
+
+        self.q2_optimizer.zero_grad()
+        (q_val_loss2 - cql2_scaled_loss).backward()
+        self.q2_optimizer.step()
+
+        self.q1_target.soft_update_to(self.q1, self.tau)
+        self.q2_target.soft_update_to(self.q2, self.tau)
 
         self.report(
             dict(
-                value_loss=value_loss,
+                # value_loss=value_loss,
+                alpha=self.alpha,
+                alpha_loss=alpha_loss,
                 policy_loss=policy_loss,
                 q_loss1=q_val_loss1,
                 q_loss2=q_val_loss2,
