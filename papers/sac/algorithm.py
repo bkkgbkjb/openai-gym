@@ -264,7 +264,8 @@ class NewSAC(Algorithm):
         self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), 3e-4)
         self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), 3e-4)
 
-        self.log_alpha_optimizer = torch.optim.Adam(params=[self.log_alpha], lr=1e-4)
+        self.log_alpha_optimizer = torch.optim.Adam(params=[self.log_alpha],
+                                                    lr=3e-4)
 
         self.p_optimizer = torch.optim.Adam(self.policy.parameters(), 3e-4)
 
@@ -313,7 +314,6 @@ class NewSAC(Algorithm):
             self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
             (self.n_actions, ))
 
-        new_actions, new_log_probs, _ = self.policy.sample(states)
         next_actions, next_actions_log_probs, _ = self.policy.sample(
             next_states)
 
@@ -344,6 +344,7 @@ class NewSAC(Algorithm):
         self.q2_optimizer.step()
 
         # Training P Function
+        new_actions, new_log_probs, _ = self.policy.sample(states)
         policy_loss = (self.alpha * new_log_probs -
                        torch.min(self.q1(states, new_actions),
                                  self.q2(states, new_actions))).mean()
@@ -368,6 +369,7 @@ class NewSAC(Algorithm):
         self.report(
             dict(
                 # value_loss=value_loss,
+                alpha=self.alpha,
                 alpha_loss=alpha_loss,
                 policy_loss=policy_loss,
                 q_loss1=q_val_loss1,
