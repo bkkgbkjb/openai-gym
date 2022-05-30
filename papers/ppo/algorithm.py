@@ -21,7 +21,7 @@ from gym.spaces import Box
 from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable, Dict
 import gym
 import numpy.typing as npt
-from utils.env import PreprocessObservation, FrameStack, resolve_lazy_frames
+from utils.env_sb3 import PreprocessObservation, FrameStack, resolve_lazy_frames
 import numpy as np
 
 Observation = torch.Tensor

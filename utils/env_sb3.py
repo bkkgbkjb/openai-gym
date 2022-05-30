@@ -375,3 +375,47 @@ def resolve_lazy_frames(lazy_frames: LazyFrames) -> torch.Tensor:
 
     assert rlt.size(0) == len(lazy_frames)
     return rlt
+
+class ToTensorEnv(gym.ObservationWrapper):
+
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+
+        (h, w, c) = env.observation_space.shape
+
+        self.observation_space = Box(low=0,
+                                     high=1,
+                                     dtype=np.float32,
+                                     shape=(c, h, w))
+
+        self.transform = T.ToTensor()
+
+    def observation(self, observation):
+        observation = self.transform(observation)
+        assert observation.shape == self.observation_space.shape
+        return observation
+
+class PreprocessObservation(gym.ObservationWrapper):
+
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+
+        self.observation_space = Box(
+            low=0,
+            high=1,
+            shape=(84, 84),
+            dtype=np.float32,
+        )
+
+        self.transform = T.Compose([
+            T.ToPILImage(),
+            T.Resize((84, 84)),
+            T.Grayscale(),
+            T.ToTensor(),
+            T.Lambda(lambda x: x.squeeze(0))
+        ])
+
+    def observation(self, observation):
+        observation = self.transform(observation)
+        assert observation.shape == self.observation_space.shape
+        return observation

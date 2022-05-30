@@ -18,56 +18,13 @@ import torch
 
 from utils.agent import Agent, OfflineAgent
 from utils.agent import AllAgent
-from utils.common import AllowedState
+from utils.common import Action, AllowedState, Observation as O
 
 
-class PreprocessObservation(gym.ObservationWrapper):
 
-    def __init__(self, env: gym.Env):
-        super().__init__(env)
-
-        self.observation_space = Box(
-            low=0,
-            high=1,
-            shape=(84, 84),
-            dtype=np.float32,
-        )
-
-        self.transform = T.Compose([
-            T.ToPILImage(),
-            T.Resize((84, 84)),
-            T.Grayscale(),
-            T.ToTensor(),
-            T.Lambda(lambda x: x.squeeze(0))
-        ])
-
-    def observation(self, observation):
-        observation = self.transform(observation)
-        assert observation.shape == self.observation_space.shape
-        return observation
-
-
-class ToTensorEnv(gym.ObservationWrapper):
-
-    def __init__(self, env: gym.Env):
-        super().__init__(env)
-
-        (h, w, c) = env.observation_space.shape
-
-        self.observation_space = Box(low=0,
-                                     high=1,
-                                     dtype=np.float32,
-                                     shape=(c, h, w))
-
-        self.transform = T.ToTensor()
-
-    def observation(self, observation):
-        observation = self.transform(observation)
-        assert observation.shape == self.observation_space.shape
-        return observation
-
-
-def glance(env: gym.Env, random_seed=0, repeats=3):
+def glance(env: gym.Env[O, Action],
+           random_seed=0,
+           repeats=3) -> gym.Env[O, Action]:
     env.seed(random_seed)
     env.action_space.seed(random_seed)
     env.observation_space.seed(random_seed)
@@ -92,10 +49,7 @@ def glance(env: gym.Env, random_seed=0, repeats=3):
             if stop:
                 print(f"rwd is: {r}, total steps: {t}")
                 break
-
-
-O = TypeVar("O")
-S = TypeVar("S", bound=AllowedState)
+    return env
 
 
 def train(agent: Agent[O], training_frames=int(1e6)) -> Agent[O]:
@@ -115,15 +69,14 @@ def train(agent: Agent[O], training_frames=int(1e6)) -> Agent[O]:
 
 
 def offline_train(
-    agent: OfflineAgent[O], training_frames=int(1e6)) -> OfflineAgent[O]:
+    agent: OfflineAgent[O], single_train_frames=int(1e6)) -> OfflineAgent[O]:
 
     agent.reset()
 
-    with tqdm(total=training_frames) as pbar:
+    with tqdm(total=single_train_frames) as pbar:
         frames = 0
-        l = None
 
-        while frames <= training_frames and l != 0:
+        while frames <= single_train_frames:
             agent.reset()
             l = agent.train()
 
@@ -133,7 +86,9 @@ def offline_train(
     return agent
 
 
-def eval(agent: AllAgent[O], env: gym.Env, repeats=10) -> AllAgent[O]:
+def eval(agent: AllAgent[O],
+         env: gym.Env[O, Action],
+         repeats=10) -> AllAgent[O]:
 
     for _ in range(repeats):
         agent.reset()
@@ -145,7 +100,7 @@ def eval(agent: AllAgent[O], env: gym.Env, repeats=10) -> AllAgent[O]:
 
 def train_and_eval(
         agent: Agent[O],
-        eval_env: gym.Env,
+        eval_env: gym.Env[O, Action],
         single_train_frames=int(1e4),
         eval_repeats=10,
         total_train_frames=int(1e6),
@@ -161,7 +116,7 @@ def train_and_eval(
 
 def offline_train_and_eval(
     agent: OfflineAgent[O],
-    eval_env: gym.Env,
+    eval_env: gym.Env[O, Action],
     single_train_frames=int(1e4),
     eval_repeats=10,
     total_train_frames=int(1e6)) -> OfflineAgent[O]:
@@ -175,9 +130,10 @@ def offline_train_and_eval(
     return agent
 
 
-def make_train_and_eval_env(env_name: str,
-                            wrappers: List[Callable[[gym.Env], gym.Env]] = [],
-                            seed: int = 0) -> Tuple[gym.Env, gym.Env]:
+def make_train_and_eval_env(
+        env_name: str,
+        wrappers: List[Callable[[gym.Env], gym.Env]] = [],
+        seed: int = 0) -> Tuple[gym.Env[O, Action], gym.Env[O, Action]]:
     train_env = gym.make(env_name)
     train_env.seed(seed)
     train_env.action_space.seed(seed)

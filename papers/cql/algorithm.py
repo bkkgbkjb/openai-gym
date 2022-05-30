@@ -11,8 +11,9 @@ from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from typing import Union
 from utils.nets import NeuralNetworks, layer_init
+from torch.utils.data import DataLoader
 
-from typing import List, Tuple, Any, Optional, Callable, Dict
+from typing import List, Tuple, Any, Optional, Callable, Dict, cast
 import numpy as np
 
 from utils.replay_buffer import ReplayBuffer
@@ -105,10 +106,10 @@ class PaiFunction(NeuralNetworks):
         return act, log_prob, mean
 
 
-class OfflineSAC(Algorithm):
+class CQL_SAC(Algorithm):
 
     def __init__(self, n_state: int, n_actions: int):
-        self.name = "offline-sac"
+        self.name = "cql-sac"
         self.n_actions = n_actions
         self.n_state = n_state
 
@@ -117,7 +118,6 @@ class OfflineSAC(Algorithm):
         self.tau = 5e-3
 
         self.start_traininig_size = int(1e4)
-        self.mini_batch_size = 256
 
         self.policy = PaiFunction(self.n_state, self.n_actions)
 
@@ -148,20 +148,32 @@ class OfflineSAC(Algorithm):
 
         self.reset()
 
+    def reset(self):
+        self.times = 0
+        self.replay_memory = ReplayBuffer[State]((self.n_state, ),
+                                                 (self.n_actions, ), int(1e8))
+
+    def on_init(self, info: Dict[str, Any]):
+        assert "dataloader" in info
+        self.dataloader: DataLoader = info['dataloader']
+        self.mini_batch_size = cast(int, self.dataloader.batch_size)
+        assert self.mini_batch_size == 256
+
+        for (states, actions, rewards, next_states, dones) in self.dataloader:
+            for (s, a, r, sn, done) in zip(states, actions, rewards,
+                                           next_states, dones):
+                self.replay_memory.append(
+                    (s, (a.numpy(), dict()), r.item(), sn, done.item() == 1))
+
     @property
     def alpha(self):
-        return self.log_alpha.exp().detach()
+        return self.log_alpha.exp()
 
     def on_toggle_eval(self, isEval: bool):
         pass
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
-
-    def reset(self):
-        self.times = 0
-        self.replay_memory = ReplayBuffer[State]((self.n_state, ),
-                                                 (self.n_actions, ))
 
     def on_agent_reset(self):
         pass
@@ -176,15 +188,11 @@ class OfflineSAC(Algorithm):
         pass
 
     def after_step(self, transition: Transition):
-        (s, a, r, sn, done) = transition
-        # assert isinstance(an, tuple) or an is None
-        assert isinstance(done, bool)
-        self.replay_memory.append((s, a, r, sn, done))
-
-        if self.replay_memory.len >= self.start_traininig_size:
-            self.train()
-
         self.times += 1
+
+    def manual_train(self):
+        self.train()
+        return self.mini_batch_size
 
     def calc_pi_values(self, states: torch.Tensor, pred_states: torch.Tensor):
         acts, log_pis, _ = self.policy.sample(states)
@@ -209,12 +217,9 @@ class OfflineSAC(Algorithm):
             self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
             (self.n_actions, ))
 
-        next_actions, next_actions_log_probs, _ = self.policy.sample(
-            next_states)
-
         # Training P Function
         new_actions, new_log_probs, _ = self.policy.sample(states)
-        policy_loss = (self.alpha * new_log_probs -
+        policy_loss = (self.alpha.detach() * new_log_probs -
                        torch.min(self.q1(states, new_actions),
                                  self.q2(states, new_actions))).mean()
 
@@ -223,18 +228,22 @@ class OfflineSAC(Algorithm):
         self.p_optimizer.step()
 
         # Training self.alpha
-        alpha_loss = -(self.log_alpha.exp() *
+        alpha_loss = -(self.alpha *
                        (new_log_probs + self.target_entropy).detach()).mean()
         self.log_alpha_optimizer.zero_grad()
         alpha_loss.backward()
         self.log_alpha_optimizer.step()
 
         # Training Q Function
+        next_actions, next_actions_log_probs, _ = self.policy.sample(
+            next_states)
+
         q1_target = self.q1_target(next_states, next_actions)
         q2_target = self.q2_target(next_states, next_actions)
 
         q_target_next = torch.min(
-            q1_target, q2_target) - self.alpha * next_actions_log_probs
+            q1_target,
+            q2_target) - self.alpha.detach() * next_actions_log_probs
 
         target_q_val = (rewards + self.gamma *
                         (1 - done) * q_target_next).detach()
@@ -251,9 +260,11 @@ class OfflineSAC(Algorithm):
             actions.shape[-1]).uniform_(-1, 1).to(DEVICE)
 
         obs_len = len(states.shape)
+
         repeat_size = [1, self.num_repeat_actions] + [1] * (obs_len - 1)
         view_size = [self.mini_batch_size * self.num_repeat_actions] + list(
             states.shape[1:])
+
         tmp_obs = states.unsqueeze(1).repeat(*repeat_size).view(*view_size)
         tmp_obs_next = next_states.unsqueeze(1).repeat(*repeat_size).view(
             *view_size)
@@ -266,11 +277,23 @@ class OfflineSAC(Algorithm):
         random_value1, random_value2 = self.calc_random_values(
             tmp_obs, random_actions)
 
-        for value in [
-                current_pi_value1, current_pi_value2, next_pi_value1,
-                next_pi_value2, random_value1, random_value2
-        ]:
-            value.reshape(self.mini_batch_size, self.num_repeat_actions, 1)
+        current_pi_value1 = current_pi_value1.reshape(self.mini_batch_size,
+                                                      self.num_repeat_actions,
+                                                      1)
+        current_pi_value2 = current_pi_value2.reshape(self.mini_batch_size,
+                                                      self.num_repeat_actions,
+                                                      1)
+
+        next_pi_value1 = next_pi_value1.reshape(self.mini_batch_size,
+                                                self.num_repeat_actions, 1)
+        next_pi_value2 = next_pi_value2.reshape(self.mini_batch_size,
+                                                self.num_repeat_actions, 1)
+
+        random_value1 = random_value1.reshape(self.mini_batch_size,
+                                              self.num_repeat_actions, 1)
+
+        random_value2 = random_value2.reshape(self.mini_batch_size,
+                                              self.num_repeat_actions, 1)
 
         # cat q values
         cat_q1 = torch.cat([random_value1, current_pi_value1, next_pi_value1],
@@ -279,21 +302,26 @@ class OfflineSAC(Algorithm):
                            1)
         # shape: (batch_size, 3 * num_repeat, 1)
 
+        assert cat_q1.shape == (self.mini_batch_size,
+                                3 * self.num_repeat_actions, 1)
+        assert cat_q2.shape == (self.mini_batch_size,
+                                3 * self.num_repeat_actions, 1)
+
         cql1_scaled_loss = \
-            torch.logsumexp(cat_q1 / self.temperature, dim=1).mean() * \
-            self.cql_weight * self.temperature - predicted_q1.mean() * \
+            (torch.logsumexp(cat_q1 / self.temperature, dim=1).mean() * \
+            self.cql_weight * self.temperature - predicted_q1.mean()) * \
             self.cql_weight
         cql2_scaled_loss = \
-            torch.logsumexp(cat_q2 / self.temperature, dim=1).mean() * \
-            self.cql_weight * self.temperature - predicted_q2.mean() * \
+            (torch.logsumexp(cat_q2 / self.temperature, dim=1).mean() * \
+            self.cql_weight * self.temperature - predicted_q2.mean()) * \
             self.cql_weight
 
         self.q1_optimizer.zero_grad()
-        (q_val_loss1 - cql1_scaled_loss).backward(retain_graph=True)
+        (q_val_loss1 + cql1_scaled_loss).backward(retain_graph=True)
         self.q1_optimizer.step()
 
         self.q2_optimizer.zero_grad()
-        (q_val_loss2 - cql2_scaled_loss).backward()
+        (q_val_loss2 + cql2_scaled_loss).backward()
         self.q2_optimizer.step()
 
         self.q1_target.soft_update_to(self.q1, self.tau)

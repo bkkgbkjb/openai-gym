@@ -94,7 +94,7 @@ class ReplayBuffer(Generic[S]):
 
         done = torch.as_tensor(
             [
-                1 if (an is None or an == False) else 0
+                1 if (an is None or an == True) else 0
                 for (_, _, _, _, an) in mini_batch
             ],
             dtype=torch.int8,

@@ -7,26 +7,29 @@ class Algorithm:
 
     name: str
 
+    def on_init(self, info: Dict[str, Any]):
+        pass
+
     @abstractmethod
     def take_action(self, state: S) -> Union[ActionInfo, Action]:
         raise NotImplementedError()
-
+    
     @abstractmethod
-    def after_step(self, transition: Transition):
+    def manual_train(self):
         raise NotImplementedError()
 
-    @abstractmethod
+    def after_step(self, transition: Transition):
+        pass
+
     def on_episode_termination(self, sar: Tuple[List[S], List[ActionInfo],
                                                 List[Reward]]):
-        raise NotImplementedError()
+        pass
 
-    @abstractmethod
     def on_agent_reset(self):
-        raise NotImplementedError()
+        pass
 
-    @abstractmethod
     def on_toggle_eval(self, isEval: bool):
-        raise NotImplementedError()
+        pass
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         pass

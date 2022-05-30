@@ -8,7 +8,7 @@ from tqdm import tqdm
 from utils.agent import Agent
 from typing import Dict, List, Any
 import gym
-from utils.env import PreprocessObservation, FrameStack, ToTensorEnv
+from utils.env_sb3 import PreprocessObservation, FrameStack, ToTensorEnv
 from utils.env_sb3 import WarpFrame, MaxAndSkipEnv, NoopResetEnv, EpisodicLifeEnv
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter

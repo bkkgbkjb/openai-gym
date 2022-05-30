@@ -30,7 +30,7 @@ class Agent(Generic[O]):
 
     def __init__(
         self,
-        env: gym.Env,
+        env: gym.Env[O, Action],
         algm: Algorithm,
         preprocess: Preprocess[O],
     ):
@@ -38,6 +38,7 @@ class Agent(Generic[O]):
         self.algm = algm
         self.preprocess = preprocess
         self.name: str = algm.name
+        self.algm.on_init({'env': self.env})
         self.reset()
 
     def get_current_state(self, obs_episode: List[O]) -> AllowedState:
@@ -189,6 +190,7 @@ class OfflineAgent(Generic[O]):
         self.algm = algm
         self.preprocess = preprocess
         self.name: str = algm.name
+        self.algm.on_init({'dataloader': dataloader})
         self.reset()
 
         self.data_iter = iter(self.dataloader)
@@ -197,9 +199,6 @@ class OfflineAgent(Generic[O]):
         self.preprocess.on_agent_reset()
         self.algm.on_agent_reset()
         self.eval_observation_episode: List[O] = []
-
-    def reset_iter(self):
-        self.data_iter = iter(self.dataloader)
 
     def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
@@ -210,30 +209,7 @@ class OfflineAgent(Generic[O]):
 
     def train(self) -> int:
         self.toggleEval(False)
-        transition = next(self.data_iter, None)
-        if transition is None:
-            return 0
-
-        (states, actions, rewards, next_states, dones) = transition
-        _s: List[AllowedState] = []
-        _a: List[ActionInfo] = []
-        _r: List[Reward] = []
-        for (s, a, r, sn, done) in zip(states, actions, rewards, next_states,
-                                       dones):
-
-            self.algm.after_step((s, (a.numpy(), dict()), r.item(), sn, done.item() == 1))
-            _s.append(s)
-            _a.append((a, dict()))
-            _r.append(r)
-
-            if done:
-                _s.append(sn)
-                self.algm.on_episode_termination((_s, _a, _r))
-                _s = []
-                _a = []
-                _r = []
-
-        return states.size(0)
+        return self.algm.manual_train()
 
     def format_action(
             self, a: Union[Action,
@@ -286,11 +262,11 @@ class OfflineAgent(Generic[O]):
              _) = env.step(act[0] if isinstance(env.action_space, gym.spaces.
                                                 Discrete) else act)
             rwd += r
-            self.eval_observation_episode.append(o)
+            self.eval_observation_episode.append(cast(O, o))
 
         self.report({'eval_return': rwd})
         return rwd, (self.eval_observation_episode, )
-    
 
-O = TypeVar('O')
-AllAgent = Union[Agent[O], OfflineAgent[O]]
+
+AO = TypeVar('AO')
+AllAgent = Union[Agent[AO], OfflineAgent[AO]]

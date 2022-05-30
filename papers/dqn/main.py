@@ -5,8 +5,8 @@ from algorithm import DQNAlgorithm, Preprocess
 from utils.agent import Agent
 import gym
 # from gym.wrappers.frame_stack import FrameStack
-from utils.env import PreprocessObservation, make_train_and_eval_env, train_and_eval
-from utils.env_sb3 import SkipFrames, FrameStack
+from utils.env import make_train_and_eval_env, train_and_eval
+from utils.env_sb3 import SkipFrames, FrameStack, PreprocessObservation
 from utils.reporter import get_reporter
 
 # %%

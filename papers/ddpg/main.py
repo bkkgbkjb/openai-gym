@@ -6,7 +6,7 @@ from utils.agent import Agent
 import gym
 from algorithm import Observation
 from utils.env import train_and_eval
-from utils.env import PreprocessObservation, make_train_and_eval_env, train_and_eval
+from utils.env import make_train_and_eval_env, train_and_eval
 
 # %%
 train_env, eval_env = make_train_and_eval_env("Walker2d-v2", [], RANDOM_SEED)
