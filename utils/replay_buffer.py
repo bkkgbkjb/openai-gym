@@ -19,7 +19,7 @@ class ReplayBuffer(Generic[S]):
     def __init__(self,
                  state_shape: Tuple,
                  action_shape: Tuple,
-                 capacity: int = int(1e6)):
+                 capacity: Optional[int] = int(1e6)):
         self.buffer: Deque[Transition] = deque(maxlen=capacity)
         self.state_shape = state_shape
         self.action_shape = action_shape
@@ -40,8 +40,7 @@ class ReplayBuffer(Generic[S]):
         return self
 
     @property
-    def size(self) -> int:
-        assert self.buffer.maxlen is not None
+    def size(self) -> Optional[int]:
         return self.buffer.maxlen
 
     @property
@@ -51,7 +50,8 @@ class ReplayBuffer(Generic[S]):
     def sample(self, size: int) -> List[Transition]:
         assert self.len > 0
         idx = np.random.choice(len(self.buffer), size)
-        l = list(self.buffer)
+        # l = list(self.buffer)
+        l = self.buffer
 
         r: List[Transition] = []
         for i in idx:
@@ -69,6 +69,7 @@ class ReplayBuffer(Generic[S]):
             for (s, _, _, _, _) in mini_batch
         ])
         assert states.shape == ((l, ) + state_shape)
+        assert not states.requires_grad
 
         actions = torch.stack([
             torch.from_numpy(a).type(torch.float32)
@@ -77,6 +78,7 @@ class ReplayBuffer(Generic[S]):
         ])
 
         assert actions.shape == ((l, ) + action_shape)
+        assert not states.requires_grad
 
         rewards = torch.stack([
             torch.tensor(r, dtype=torch.float32)
@@ -84,6 +86,7 @@ class ReplayBuffer(Generic[S]):
         ]).unsqueeze(1)
 
         assert rewards.shape == (l, 1)
+        assert not rewards.requires_grad
 
         next_states = torch.stack([
             sn if isinstance(sn, torch.Tensor) else resolve_lazy_frames(sn)
@@ -91,6 +94,7 @@ class ReplayBuffer(Generic[S]):
         ])
 
         assert next_states.shape == ((l, ) + state_shape)
+        assert not next_states.requires_grad
 
         done = torch.as_tensor(
             [
@@ -101,6 +105,7 @@ class ReplayBuffer(Generic[S]):
         ).unsqueeze(1)
 
         assert done.shape == (l, 1)
+        assert not done.requires_grad
 
         return (
             states.to(DEVICE),

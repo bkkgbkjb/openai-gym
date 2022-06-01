@@ -151,7 +151,7 @@ class CQL_SAC(Algorithm):
     def reset(self):
         self.times = 0
         self.replay_memory = ReplayBuffer[State]((self.n_state, ),
-                                                 (self.n_actions, ), int(1e8))
+                                                 (self.n_actions, ), None)
 
     def on_init(self, info: Dict[str, Any]):
         assert "dataloader" in info
@@ -169,23 +169,13 @@ class CQL_SAC(Algorithm):
     def alpha(self):
         return self.log_alpha.exp()
 
-    def on_toggle_eval(self, isEval: bool):
-        pass
-
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
-
-    def on_agent_reset(self):
-        pass
 
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         action, _, _ = self.policy.sample(state.unsqueeze(0))
-        return action.detach().cpu().squeeze(0).numpy()
-
-    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
-                                                List[Reward]]):
-        pass
+        return action.cpu().squeeze(0).numpy()
 
     def after_step(self, transition: Transition):
         self.times += 1

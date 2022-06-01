@@ -178,9 +178,6 @@ class TD3(Algorithm):
         self.times = 0
         self.replay_buffer.clear()
 
-    def on_agent_reset(self):
-        pass
-
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         if self.times <= self.start_timestamp:
@@ -193,10 +190,6 @@ class TD3(Algorithm):
             noise = self.noise_generator()
             act += torch.from_numpy(noise)
         return act.squeeze(0).numpy().clip(-self.max_action, self.max_action)
-
-    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
-                                                List[Reward]]):
-        pass
 
     def after_step(self, transition: Transition):
         (s, a, r, sn, an) = transition

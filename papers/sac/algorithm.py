@@ -140,9 +140,6 @@ class SAC(Algorithm):
 
         self.reset()
 
-    def on_toggle_eval(self, isEval: bool):
-        pass
-
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
 
@@ -151,17 +148,10 @@ class SAC(Algorithm):
         self.replay_memory = ReplayBuffer[State]((self.n_state, ),
                                                  (self.n_actions, ))
 
-    def on_agent_reset(self):
-        pass
-
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.detach().cpu().squeeze(0).numpy()
-
-    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
-                                                List[Reward]]):
-        pass
 
     def after_step(self, transition: Transition):
         (s, a, r, sn, an) = transition
@@ -275,9 +265,6 @@ class NewSAC(Algorithm):
     def alpha(self):
         return self.log_alpha.exp().detach()
 
-    def on_toggle_eval(self, isEval: bool):
-        pass
-
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
 
@@ -286,17 +273,10 @@ class NewSAC(Algorithm):
         self.replay_memory = ReplayBuffer[State]((self.n_state, ),
                                                  (self.n_actions, ))
 
-    def on_agent_reset(self):
-        pass
-
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.detach().cpu().squeeze(0).numpy()
-
-    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
-                                                List[Reward]]):
-        pass
 
     def after_step(self, transition: Transition):
         (s, a, r, sn, an) = transition

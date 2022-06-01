@@ -18,10 +18,18 @@ class NeuralNetworks(nn.Module):
         for c, t in zip(self.parameters(), target.parameters()):
             c.data.copy_(c.data * (1 - tau) + t.data * tau)
         return self
+    
+    # 继承了的方法，不需要挂载
+    # def eval(self):
+    #     self.eval()
+    #     return self
+    
+    # def train(self):
+    #     self.train()
+    #     return self
 
     def no_grad(self):
-        for p in self.parameters():
-            p.requires_grad = False
+        self.requires_grad_(False)
         return self
 
     def clone(self):

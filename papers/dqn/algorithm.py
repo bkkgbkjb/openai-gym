@@ -89,9 +89,6 @@ class DQNAlgorithm(Algorithm):
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
 
-    def on_agent_reset(self):
-        pass
-
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 

@@ -1,6 +1,6 @@
 import setup
 import torch
-from algorithm import CQL_SAC, Preprocess
+from algorithm import BCQ, Preprocess
 from utils.agent import Agent, OfflineAgent
 import gym
 from setup import RANDOM_SEED
@@ -29,12 +29,12 @@ dataloader = DataLoader(
 
 agent = OfflineAgent(
     dataloader,
-    CQL_SAC(train_env.observation_space.shape[0],
+    BCQ(train_env.observation_space.shape[0],
                train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
 offline_train_and_eval(agent,
                        eval_env,
-                       single_train_frames=300 * 256,
-                       total_train_frames=1000 * 300 * 256)
+                       single_train_frames=100 * 100,
+                       total_train_frames=100 * 3000 * 100)

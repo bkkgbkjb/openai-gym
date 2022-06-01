@@ -187,9 +187,6 @@ class DDPG(Algorithm):
         self.replay_buffer.clear()
         self.noise_generator.reset()
 
-    def on_agent_reset(self):
-        pass
-
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         self.actor.eval()
@@ -204,12 +201,12 @@ class DDPG(Algorithm):
                                                 List[Reward]]):
         self.noise_generator.reset()
 
-    def after_step(
-        self,
-        transition: Transition):
+    def after_step(self, transition: Transition):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
         self.replay_buffer.append((s, a, r, sn, an))
+
+        assert self.replay_buffer.size is not None
 
         if self.replay_buffer.len >= math.ceil(
                 self.start_train_ratio * self.replay_buffer.size):
