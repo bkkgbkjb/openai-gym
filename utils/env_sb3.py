@@ -1,6 +1,7 @@
 # following code is manually copied from stable-baseline3, as it depends on an older version of gym, but I don't want to solve this version conflict
 
 import gym
+from torchvision import transforms as T
 import numpy as np
 from gym import spaces
 from collections import deque

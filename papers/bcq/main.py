@@ -36,5 +36,5 @@ agent.set_algm_reporter(get_reporter(agent.name))
 
 offline_train_and_eval(agent,
                        eval_env,
-                       single_train_frames=100 * 100,
-                       total_train_frames=100 * 3000 * 100)
+                       single_train_frames=300 * 100,
+                       total_train_frames=1000 * 300 * 100)

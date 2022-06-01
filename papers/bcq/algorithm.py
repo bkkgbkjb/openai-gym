@@ -152,15 +152,15 @@ class BCQ(Algorithm):
     def reset(self):
         self.times = 0
         self.replay_buffer = ReplayBuffer((self.state_dim, ),
-                                          (self.action_dim, ), int(1e8))
+                                          (self.action_dim, ), None)
 
     @torch.no_grad()
     def take_action(self, state: S) -> Union[ActionInfo, Action]:
-        # s = state.unsqueeze(0).repeat_interleave(100, 0).to(DEVICE)
-        state = torch.FloatTensor(state.reshape(1,-1).cpu()).repeat(100,1).to(DEVICE)
+        s = state.unsqueeze(0).repeat_interleave(100, 0).to(DEVICE)
+        # state = torch.FloatTensor(state.reshape(1,-1).cpu()).repeat(100,1).to(DEVICE)
 
-        a = self.actor(state, self.vae.decode(state))
-        q1 = self.q1(state, a)
+        a = self.actor(s, self.vae.decode(s))
+        q1 = self.q1(s, a)
         act = a[q1.argmax(0)].squeeze(0).cpu().numpy()
         return act
 
@@ -202,7 +202,7 @@ class BCQ(Algorithm):
             q_target = self.lmbda * torch.min(q1_target, q2_target) + (
                 1.0 - self.lmbda) * torch.max(q1_target, q2_target)
 
-            q_target = q_target.reshape(100, -1).max(1)[0].reshape(-1, 1)
+            q_target = q_target.reshape(100, -1).max(1)[0].unsqueeze(1)
 
             assert q_target.shape == (100, 1)
 
