@@ -13,7 +13,7 @@ class Algorithm:
     @abstractmethod
     def take_action(self, state: S) -> Union[ActionInfo, Action]:
         raise NotImplementedError()
-    
+
     @abstractmethod
     def manual_train(self):
         raise NotImplementedError()
@@ -32,4 +32,8 @@ class Algorithm:
         pass
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        pass
+        self.reporter = reporter
+
+    def report(self, info: Dict[str, Any]):
+        if self.reporter:
+            self.reporter(info)

@@ -9,7 +9,7 @@ from utils.env import offline_train_and_eval, make_train_and_eval_env
 from torch.utils.data import TensorDataset, DataLoader
 
 # %%
-train_env, eval_env = make_train_and_eval_env("walker2d-medium-v2", [],
+train_env, eval_env = make_train_and_eval_env("walker2d-random-v2", [],
                                               RANDOM_SEED)
 
 dataset = train_env.get_dataset()

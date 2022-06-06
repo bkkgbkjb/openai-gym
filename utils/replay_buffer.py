@@ -11,10 +11,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
               torch.Tensor]
 
-S = TypeVar("S", bound=AllowedState)
 
-
-class ReplayBuffer(Generic[S]):
+class ReplayBuffer:
 
     def __init__(self,
                  state_shape: Tuple,

@@ -239,6 +239,3 @@ class BCQ(Algorithm):
             dict(q_loss=q_loss, vae_loss=vae_loss, actor_loss=actor_loss))
 
         return 100
-
-    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.report = reporter

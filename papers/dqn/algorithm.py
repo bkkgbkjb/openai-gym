@@ -86,9 +86,6 @@ class DQNAlgorithm(Algorithm):
         self.update_times = 4
         self.eval = False
 
-    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.report = reporter
-
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 

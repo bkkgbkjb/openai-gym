@@ -140,9 +140,6 @@ class SAC(Algorithm):
 
         self.reset()
 
-    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.report = reporter
-
     def reset(self):
         self.times = 0
         self.replay_memory = ReplayBuffer[State]((self.n_state, ),
@@ -264,9 +261,6 @@ class NewSAC(Algorithm):
     @property
     def alpha(self):
         return self.log_alpha.exp().detach()
-
-    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.report = reporter
 
     def reset(self):
         self.times = 0

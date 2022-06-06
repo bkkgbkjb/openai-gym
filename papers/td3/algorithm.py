@@ -128,9 +128,6 @@ class TD3(Algorithm):
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
-    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.report = reporter
-
     def train(self):
         (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),

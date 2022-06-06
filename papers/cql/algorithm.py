@@ -169,9 +169,6 @@ class CQL_SAC(Algorithm):
     def alpha(self):
         return self.log_alpha.exp()
 
-    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
-        self.report = reporter
-
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         action, _, _ = self.policy.sample(state.unsqueeze(0))
