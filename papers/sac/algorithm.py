@@ -2,6 +2,8 @@ import setup
 from utils.common import (
     ActionInfo,
     Transition,
+    TransitionTuple,
+    resolve_transitions,
 )
 from torch import nn
 from collections import deque
@@ -142,18 +144,17 @@ class SAC(Algorithm):
 
     def reset(self):
         self.times = 0
-        self.replay_memory = ReplayBuffer[State]((self.n_state, ),
-                                                 (self.n_actions, ))
+        self.replay_memory = ReplayBuffer((self.n_state, ), (self.n_actions, ))
 
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.detach().cpu().squeeze(0).numpy()
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
-        self.replay_memory.append((s, a, r, sn, an))
+        self.replay_memory.append(Transition((s, a, r, sn, an)))
 
         if self.replay_memory.len >= self.start_traininig_size:
             self.train()
@@ -162,7 +163,7 @@ class SAC(Algorithm):
 
     def train(self):
 
-        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+        (states, actions, rewards, next_states, done) = resolve_transitions(
             self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
             (self.n_actions, ))
 
@@ -264,18 +265,17 @@ class NewSAC(Algorithm):
 
     def reset(self):
         self.times = 0
-        self.replay_memory = ReplayBuffer[State]((self.n_state, ),
-                                                 (self.n_actions, ))
+        self.replay_memory = ReplayBuffer((self.n_state, ), (self.n_actions, ))
 
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.detach().cpu().squeeze(0).numpy()
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
-        self.replay_memory.append((s, a, r, sn, an))
+        self.replay_memory.append(Transition((s, a, r, sn, an)))
 
         if self.replay_memory.len >= self.start_traininig_size:
             self.train()
@@ -284,7 +284,7 @@ class NewSAC(Algorithm):
 
     def train(self):
 
-        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+        (states, actions, rewards, next_states, done) = resolve_transitions(
             self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
             (self.n_actions, ))
 

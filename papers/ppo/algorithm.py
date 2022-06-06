@@ -4,6 +4,7 @@ from utils.common import (
     Step,
     NotNoneStep,
     Transition,
+    TransitionTuple,
 )
 from torch import nn
 import math
@@ -101,7 +102,8 @@ class PPO(Algorithm):
     @torch.no_grad()
     def take_action(self, state: LazyFrames) -> ActionInfo:
 
-        (log_act_probs, value) = self.network(resolve_lazy_frames(state).unsqueeze(0))
+        (log_act_probs,
+         value) = self.network(resolve_lazy_frames(state).unsqueeze(0))
         dist = Categorical(logits=log_act_probs)
         act = dist.sample()
 
@@ -134,7 +136,7 @@ class PPO(Algorithm):
 
         self.memory.extend([(s, a, r), (sn, an, None)])
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple):
         (s, a, r, sn, an) = transition
 
         assert isinstance(an, tuple) or an is None
@@ -232,91 +234,94 @@ class PPO(Algorithm):
         memory = list(self.non_stop_step)
 
         for _ in range(self.epoch):
-            # for _ in range(math.ceil(len(self.memory) / self.batch_size)):
-            batch_index = np.random.choice(len(memory), self.batch_size)
+            for _ in range(math.ceil(len(self.memory) / self.batch_size)):
+                batch_index = np.random.choice(len(memory), self.batch_size)
 
-            batch: List[NotNoneStep] = []
-            for i in batch_index:
-                batch.append(memory[i])
+                batch: List[NotNoneStep] = []
+                for i in batch_index:
+                    batch.append(memory[i])
 
-            advs = advantages[batch_index]
-            advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-            rets = returns[batch_index]
+                advs = advantages[batch_index]
+                advs = (advs - advs.mean()) / (advs.std() + 1e-8)
+                rets = returns[batch_index]
 
-            L = self.batch_size
+                L = self.batch_size
 
-            states = torch.stack([resolve_lazy_frames(s) for (s, _, _) in batch])
+                states = torch.stack(
+                    [resolve_lazy_frames(s) for (s, _, _) in batch])
 
-            assert states.shape == (L, 4, 84, 84)
+                assert states.shape == (L, 4, 84, 84)
 
-            old_acts = torch.tensor([a for (_, (a, _), _) in batch]).squeeze(1)
+                old_acts = torch.tensor([a for (_, (a, _), _) in batch
+                                         ]).squeeze(1)
 
-            assert old_acts.shape == (L, )
+                assert old_acts.shape == (L, )
 
-            (act_probs, new_vals) = self.network(states)
-            new_vals = new_vals.squeeze(1)
-            dists = Categorical(logits=act_probs)
+                (act_probs, new_vals) = self.network(states)
+                new_vals = new_vals.squeeze(1)
+                dists = Categorical(logits=act_probs)
 
-            entropy: torch.Tensor = dists.entropy()
-            assert entropy.shape == (L, )
-            assert entropy.requires_grad
+                entropy: torch.Tensor = dists.entropy()
+                assert entropy.shape == (L, )
+                assert entropy.requires_grad
 
-            entropy = entropy.mean()
+                entropy = entropy.mean()
 
-            new_log_prob = dists.log_prob(old_acts)
-            assert new_log_prob.shape == (L, )
+                new_log_prob = dists.log_prob(old_acts)
+                assert new_log_prob.shape == (L, )
 
-            old_log_probs = torch.cat(
-                [i["log_prob"] for (_, (_, i), _) in batch])
+                old_log_probs = torch.cat(
+                    [i["log_prob"] for (_, (_, i), _) in batch])
 
-            assert old_log_probs.shape == (L, )
-            assert not old_log_probs.requires_grad
+                assert old_log_probs.shape == (L, )
+                assert not old_log_probs.requires_grad
 
-            ratios: torch.Tensor = (new_log_prob - old_log_probs).exp()
+                ratios: torch.Tensor = (new_log_prob - old_log_probs).exp()
 
-            assert ratios.requires_grad
+                assert ratios.requires_grad
 
-            policy_loss = torch.min(
-                ratios * advs,
-                torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs,
-            )
+                policy_loss = torch.min(
+                    ratios * advs,
+                    torch.clamp(ratios, 1 - self.sigma, 1 + self.sigma) * advs,
+                )
 
-            assert policy_loss.shape == (L, )
-            assert policy_loss.requires_grad
+                assert policy_loss.shape == (L, )
+                assert policy_loss.requires_grad
 
-            policy_loss = policy_loss.mean()
+                policy_loss = policy_loss.mean()
 
-            v_loss_unclipped = ((new_vals - rets)**2)
+                v_loss_unclipped = ((new_vals - rets)**2)
 
-            old_values = torch.tensor([i['value'] for (_, (_, i), _) in batch])
+                old_values = torch.tensor(
+                    [i['value'] for (_, (_, i), _) in batch])
 
-            assert old_values.shape == (L, )
+                assert old_values.shape == (L, )
 
-            v_clipped = old_values + \
-                torch.clamp(new_vals - old_values, -self.sigma, self.sigma)
-            v_loss_clipped = (v_clipped - rets)**2
+                v_clipped = old_values + \
+                    torch.clamp(new_vals - old_values, -self.sigma, self.sigma)
+                v_loss_clipped = (v_clipped - rets)**2
 
-            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-            value_loss = v_loss_max / 2
+                v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                value_loss = v_loss_max / 2
 
-            assert value_loss.shape == (L, )
+                assert value_loss.shape == (L, )
 
-            value_loss = value_loss.mean()
+                value_loss = value_loss.mean()
 
-            target = -policy_loss - self.c2 * entropy + self.c1 * value_loss
-            # assert target.shape == (L,)
+                target = -policy_loss - self.c2 * entropy + self.c1 * value_loss
+                # assert target.shape == (L,)
 
-            self.report({
-                'target': target,
-                'value_loss': value_loss,
-                'policy_loss': policy_loss,
-                'entropy': entropy
-            })
+                self.report({
+                    'target': target,
+                    'value_loss': value_loss,
+                    'policy_loss': policy_loss,
+                    'entropy': entropy
+                })
 
-            self.optimzer.zero_grad()
-            target.backward()
-            nn.utils.clip_grad_norm_(self.network.parameters(), 1)
-            self.optimzer.step()
+                self.optimzer.zero_grad()
+                target.backward()
+                nn.utils.clip_grad_norm_(self.network.parameters(), 1)
+                self.optimzer.step()
 
 
 class Preprocess(Preprocess[Observation]):

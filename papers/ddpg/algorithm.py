@@ -2,6 +2,8 @@ import setup
 from utils.common import (
     ActionInfo,
     Transition,
+    TransitionTuple,
+    resolve_transitions
 )
 from torch import nn
 import math
@@ -138,7 +140,7 @@ class DDPG(Algorithm):
 
         self.critic_target = self.critic.clone().no_grad()
 
-        self.replay_buffer = ReplayBuffer[State]((self.n_states, ),
+        self.replay_buffer = ReplayBuffer((self.n_states, ),
                                                  (self.n_actions, ), int(1e6))
 
         self.noise_generator = OrnsteinUhlenbeckActionNoise(
@@ -155,7 +157,7 @@ class DDPG(Algorithm):
         self.eval = isEval
 
     def train(self):
-        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+        (states, actions, rewards, next_states, done) = resolve_transitions(
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
 
@@ -198,10 +200,10 @@ class DDPG(Algorithm):
                                                 List[Reward]]):
         self.noise_generator.reset()
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
-        self.replay_buffer.append((s, a, r, sn, an))
+        self.replay_buffer.append(Transition((s, a, r, sn, an)))
 
         assert self.replay_buffer.size is not None
 

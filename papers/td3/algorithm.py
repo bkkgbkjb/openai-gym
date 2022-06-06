@@ -2,6 +2,8 @@ import setup
 from utils.common import (
     ActionInfo,
     Transition,
+    TransitionTuple,
+    resolve_transitions,
 )
 from torch import nn
 from collections import deque
@@ -112,8 +114,8 @@ class TD3(Algorithm):
 
         self.critic_target2 = self.critic2.clone().no_grad()
 
-        self.replay_buffer = ReplayBuffer[State]((self.n_states, ),
-                                                 (self.n_actions, ), int(1e6))
+        self.replay_buffer = ReplayBuffer((self.n_states, ),
+                                          (self.n_actions, ), int(1e6))
 
         self.noise_generator = lambda: np.random.normal(
             0, 0.1, size=self.n_actions)
@@ -129,7 +131,7 @@ class TD3(Algorithm):
         self.eval = isEval
 
     def train(self):
-        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+        (states, actions, rewards, next_states, done) = resolve_transitions(
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
 
@@ -188,10 +190,10 @@ class TD3(Algorithm):
             act += torch.from_numpy(noise)
         return act.squeeze(0).numpy().clip(-self.max_action, self.max_action)
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
-        self.replay_buffer.append((s, a, r, sn, an))
+        self.replay_buffer.append(Transition((s, a, r, sn, an)))
 
         if self.times >= self.start_timestamp:
             self.train()

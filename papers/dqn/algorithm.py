@@ -1,5 +1,5 @@
 import setup
-from utils.common import ActionInfo, Transition
+from utils.common import ActionInfo, Transition, TransitionTuple, resolve_transitions
 from torch import nn
 import math
 from collections import deque
@@ -78,7 +78,7 @@ class DQNAlgorithm(Algorithm):
 
         self.update_target = 250
 
-        self.replay_memory = ReplayBuffer[State]((4, 84, 84), (1, ), int(2e5))
+        self.replay_memory = ReplayBuffer((4, 84, 84), (1, ), int(2e5))
 
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()
@@ -112,10 +112,10 @@ class DQNAlgorithm(Algorithm):
             maxi = torch.argmax(act_vals)
             return np.asarray([maxi.item()], dtype=np.int64)
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
-        self.replay_memory.append((s, a, r, sn, an))
+        self.replay_memory.append(Transition((s, a, r, sn, an)))
 
         if self.times != 0 and self.times % (self.update_times) == 0:
 
@@ -134,7 +134,7 @@ class DQNAlgorithm(Algorithm):
 
     def train(self):
 
-        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+        (states, actions, rewards, next_states, done) = resolve_transitions(
             self.replay_memory.sample(self.batch_size), (4, 84, 84), (1, ))
 
         q_next = self.target_network(next_states)
@@ -184,7 +184,7 @@ class DDQNAlgorithm(DQNAlgorithm, Algorithm):
         self.name = "ddqn"
 
     def train(self):
-        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+        (states, actions, rewards, next_states, done) = resolve_transitions(
             self.replay_memory.sample(self.batch_size), (4, 84, 84), (1, ))
 
         q_next = self.target_network(next_states)

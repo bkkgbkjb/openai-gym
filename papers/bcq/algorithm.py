@@ -1,9 +1,6 @@
 import setup
-from utils.common import (
-    ActionInfo,
-    AllowedState,
-    Transition,
-)
+from utils.common import (ActionInfo, AllowedState, Transition,
+                          resolve_transitions)
 from torch import nn
 from collections import deque
 import torch
@@ -47,9 +44,10 @@ class Actor(NeuralNetworks):
 
     def __init__(self, state_dim: int, action_dim: int, phi=0.05):
         super(Actor, self).__init__()
-        self.net = nn.Sequential(nn.Linear(state_dim + action_dim, 400),
-                                 nn.ReLU(), nn.Linear(400, 300), nn.ReLU(),
-                                 nn.Linear(300, action_dim), nn.Tanh())
+        self.net = nn.Sequential(
+            layer_init(nn.Linear(state_dim + action_dim, 400)), nn.ReLU(),
+            layer_init(nn.Linear(400, 300)), nn.ReLU(),
+            layer_init(nn.Linear(300, action_dim)), nn.Tanh())
         self.phi = phi
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
@@ -62,11 +60,11 @@ class Critic(NeuralNetworks):
     def __init__(self, state_dim: int, action_dim: int):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(state_dim + action_dim, 400),
+            layer_init(nn.Linear(state_dim + action_dim, 400)),
             nn.ReLU(),
-            nn.Linear(400, 300),
+            layer_init(nn.Linear(400, 300)),
             nn.ReLU(),
-            nn.Linear(300, 1),
+            layer_init(nn.Linear(300, 1)),
         )
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
@@ -78,15 +76,17 @@ class VAE(NeuralNetworks):
 
     def __init__(self, state_dim: int, action_dim: int, latent_dim: int):
         super(VAE, self).__init__()
-        self.encoder = nn.Sequential(nn.Linear(state_dim + action_dim, 750),
-                                     nn.ReLU(), nn.Linear(750, 750), nn.ReLU())
+        self.encoder = nn.Sequential(
+            layer_init(nn.Linear(state_dim + action_dim, 750)), nn.ReLU(),
+            layer_init(nn.Linear(750, 750)), nn.ReLU())
 
         self.mean = nn.Linear(750, latent_dim)
         self.log_std = nn.Linear(750, latent_dim)
 
-        self.decoder = nn.Sequential(nn.Linear(state_dim + latent_dim, 750),
-                                     nn.ReLU(), nn.Linear(750, 750), nn.ReLU(),
-                                     nn.Linear(750, action_dim), nn.Tanh())
+        self.decoder = nn.Sequential(
+            layer_init(nn.Linear(state_dim + latent_dim, 750)), nn.ReLU(),
+            layer_init(nn.Linear(750, 750)), nn.ReLU(),
+            layer_init(nn.Linear(750, action_dim)), nn.Tanh())
 
         self.latent_dim = latent_dim
 
@@ -172,13 +172,14 @@ class BCQ(Algorithm):
             for (s, a, r, sn, done) in zip(states, actions, rewards,
                                            next_states, dones):
                 self.replay_buffer.append(
-                    (s, (a.numpy(), dict()), r.item(), sn, done.item() == 1))
+                    Transition((s, (a.numpy(), dict()), r.item(), sn,
+                                done.item() == 1)))
 
     def manual_train(self):
 
         (states, actions, rewards, next_states,
-         done) = ReplayBuffer.resolve(self.replay_buffer.sample(100),
-                                      (self.state_dim, ), (self.action_dim, ))
+         done) = resolve_transitions(self.replay_buffer.sample(100),
+                                     (self.state_dim, ), (self.action_dim, ))
 
         recon, mean, std = self.vae(states, actions)
         recon_loss = self.recon_loss(recon, actions)

@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any, Union
-from utils.common import Action, ActionInfo, AllowedState as S, NotNoneStep, Reward, Transition
+from utils.common import Action, ActionInfo, AllowedState as S, NotNoneStep, Reward, Transition, TransitionTuple
 
 
 class Algorithm:
@@ -18,7 +18,7 @@ class Algorithm:
     def manual_train(self):
         raise NotImplementedError()
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple):
         pass
 
     def on_episode_termination(self, sar: Tuple[List[S], List[ActionInfo],

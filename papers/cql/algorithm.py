@@ -1,8 +1,5 @@
 import setup
-from utils.common import (
-    ActionInfo,
-    Transition,
-)
+from utils.common import (ActionInfo, Transition, resolve_transitions)
 from torch import nn
 from collections import deque
 import torch
@@ -150,8 +147,8 @@ class CQL_SAC(Algorithm):
 
     def reset(self):
         self.times = 0
-        self.replay_memory = ReplayBuffer[State]((self.n_state, ),
-                                                 (self.n_actions, ), None)
+        self.replay_memory = ReplayBuffer((self.n_state, ), (self.n_actions, ),
+                                          None)
 
     def on_init(self, info: Dict[str, Any]):
         assert "dataloader" in info
@@ -163,7 +160,8 @@ class CQL_SAC(Algorithm):
             for (s, a, r, sn, done) in zip(states, actions, rewards,
                                            next_states, dones):
                 self.replay_memory.append(
-                    (s, (a.numpy(), dict()), r.item(), sn, done.item() == 1))
+                    Transition((s, (a.numpy(), dict()), r.item(), sn,
+                                done.item() == 1)))
 
     @property
     def alpha(self):
@@ -200,7 +198,7 @@ class CQL_SAC(Algorithm):
 
     def train(self):
 
-        (states, actions, rewards, next_states, done) = ReplayBuffer.resolve(
+        (states, actions, rewards, next_states, done) = resolve_transitions(
             self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
             (self.n_actions, ))
 
