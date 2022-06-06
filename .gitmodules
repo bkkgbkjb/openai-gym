@@ -4,6 +4,3 @@
 [submodule "tianshou"]
 	path = tianshou
 	url = https://github.com/thu-ml/tianshou.git
-[submodule "bcq_example"]
-	path = bcq_example
-	url = https://github.com/sfujim/BCQ.git
