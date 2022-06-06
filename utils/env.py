@@ -5,6 +5,7 @@ from typing import (
     Optional,
     Tuple,
     List,
+    Union,
     Any,
     cast,
     TypeVar,
@@ -18,8 +19,11 @@ import torch
 
 from utils.agent import Agent, OfflineAgent
 from utils.agent import AllAgent
-from utils.common import Action, AllowedState, Observation as O
+from utils.common import Action
+from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 
+O = TypeVar('O')
+S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
 
 
 def glance(env: gym.Env[O, Action],
@@ -52,7 +56,7 @@ def glance(env: gym.Env[O, Action],
     return env
 
 
-def train(agent: Agent[O], training_frames=int(1e6)) -> Agent[O]:
+def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
 
     agent.reset()
 
@@ -69,7 +73,8 @@ def train(agent: Agent[O], training_frames=int(1e6)) -> Agent[O]:
 
 
 def offline_train(
-    agent: OfflineAgent[O], single_train_frames=int(1e6)) -> OfflineAgent[O]:
+    agent: OfflineAgent[O, S],
+    single_train_frames=int(1e6)) -> OfflineAgent[O, S]:
 
     agent.reset()
 
@@ -86,9 +91,9 @@ def offline_train(
     return agent
 
 
-def eval(agent: AllAgent[O],
+def eval(agent: AllAgent[O, S],
          env: gym.Env[O, Action],
-         repeats=10) -> AllAgent[O]:
+         repeats=10) -> AllAgent[O, S]:
 
     for _ in range(repeats):
         agent.reset()
@@ -99,12 +104,12 @@ def eval(agent: AllAgent[O],
 
 
 def train_and_eval(
-        agent: Agent[O],
+        agent: Agent[O, S],
         eval_env: gym.Env[O, Action],
         single_train_frames=int(1e4),
         eval_repeats=10,
         total_train_frames=int(1e6),
-) -> Agent[O]:
+) -> Agent[O, S]:
     s = math.ceil(total_train_frames / single_train_frames)
 
     for _ in tqdm(range(s)):
@@ -115,11 +120,11 @@ def train_and_eval(
 
 
 def offline_train_and_eval(
-    agent: OfflineAgent[O],
+    agent: OfflineAgent[O, S],
     eval_env: gym.Env[O, Action],
     single_train_frames=int(1e4),
     eval_repeats=10,
-    total_train_frames=int(1e6)) -> OfflineAgent[O]:
+    total_train_frames=int(1e6)) -> OfflineAgent[O, S]:
 
     s = math.ceil(total_train_frames / single_train_frames)
 

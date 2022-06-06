@@ -3,7 +3,7 @@ from typing import Deque, Generic, Optional, TypeVar, Tuple, List, cast, Union
 import numpy as np
 import torch
 
-from utils.common import AllowedState, Transition
+from utils.common import Transition
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

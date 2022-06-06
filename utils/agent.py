@@ -19,20 +19,22 @@ from typing import (
 )
 from utils.algorithm import Algorithm
 from utils.preprocess import Preprocess
-from utils.common import Observation as O, ActionInfo, AllowedState, Action, Reward
+from utils.common import ActionInfo, Action, Reward
 from torch.utils.data import DataLoader
 
-S = AllowedState
 R = Reward
 
+S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
+O = TypeVar("O")
 
-class Agent(Generic[O]):
+
+class Agent(Generic[O, S]):
 
     def __init__(
         self,
         env: gym.Env[O, Action],
-        algm: Algorithm,
-        preprocess: Preprocess[O],
+        algm: Algorithm[S],
+        preprocess: Preprocess[O, S],
     ):
         self.env = env
         self.algm = algm
@@ -41,7 +43,7 @@ class Agent(Generic[O]):
         self.algm.on_init({'env': self.env})
         self.reset()
 
-    def get_current_state(self, obs_episode: List[O]) -> AllowedState:
+    def get_current_state(self, obs_episode: List[O]) -> S:
         state = self.preprocess.get_current_state(obs_episode)
         assert isinstance(state, torch.Tensor) or isinstance(
             state,
@@ -182,10 +184,10 @@ class Agent(Generic[O]):
         self.env.close()
 
 
-class OfflineAgent(Generic[O]):
+class OfflineAgent(Generic[O, S]):
 
-    def __init__(self, dataloader: DataLoader, algm: Algorithm,
-                 preprocess: Preprocess[O]):
+    def __init__(self, dataloader: DataLoader, algm: Algorithm[S],
+                 preprocess: Preprocess[O, S]):
         self.dataloader = dataloader
         self.algm = algm
         self.preprocess = preprocess
@@ -218,7 +220,7 @@ class OfflineAgent(Generic[O]):
             return a
         return (a, dict())
 
-    def get_current_state(self, obs_episode: List[O]) -> AllowedState:
+    def get_current_state(self, obs_episode: List[O]) -> S:
         state = self.preprocess.get_current_state(obs_episode)
         assert isinstance(state, torch.Tensor) or isinstance(
             state,
@@ -269,4 +271,5 @@ class OfflineAgent(Generic[O]):
 
 
 AO = TypeVar('AO')
-AllAgent = Union[Agent[AO], OfflineAgent[AO]]
+AS = TypeVar('AS', bound=Union[torch.Tensor, LazyFrames])
+AllAgent = Union[Agent[AO, AS], OfflineAgent[AO, AS]]

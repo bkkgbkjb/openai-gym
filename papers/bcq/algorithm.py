@@ -1,6 +1,5 @@
 import setup
-from utils.common import (ActionInfo, AllowedState, Transition,
-                          resolve_transitions)
+from utils.common import (ActionInfo, Transition, resolve_transitions)
 from torch import nn
 from collections import deque
 import torch
@@ -25,7 +24,7 @@ Reward = int
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[O]):
+class Preprocess(Preprocess[O, S]):
 
     def __init__(self):
         pass
@@ -110,7 +109,7 @@ class VAE(NeuralNetworks):
         return a
 
 
-class BCQ(Algorithm):
+class BCQ(Algorithm[S]):
 
     def __init__(self, state_dim: int, action_dim: int):
         self.name = 'bcq'

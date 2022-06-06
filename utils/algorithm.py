@@ -1,9 +1,13 @@
 from abc import abstractmethod
-from typing import Callable, Dict, Optional, Protocol, Tuple, TypeVar, List, Union, Any, Union
-from utils.common import Action, ActionInfo, AllowedState as S, NotNoneStep, Reward, Transition, TransitionTuple
+from typing import Callable, Dict, Generic, Optional, Protocol, Tuple, TypeVar, List, Union, Any, Union
+from utils.common import Action, ActionInfo, AllowedStates, NotNoneStep, Reward, Transition, TransitionTuple
+from utils.env_sb3 import LazyFrames, resolve_lazy_frames
+import torch
+
+S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
 
 
-class Algorithm:
+class Algorithm(Generic[S]):
 
     name: str
 
@@ -18,7 +22,7 @@ class Algorithm:
     def manual_train(self):
         raise NotImplementedError()
 
-    def after_step(self, transition: TransitionTuple):
+    def after_step(self, transition: TransitionTuple[S]):
         pass
 
     def on_episode_termination(self, sar: Tuple[List[S], List[ActionInfo],

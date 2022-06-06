@@ -107,7 +107,7 @@ class PaiFunction(NeuralNetworks):
         return act, log_prob, mean
 
 
-class SAC(Algorithm):
+class SAC(Algorithm[State]):
 
     def __init__(self, n_state: int, n_actions: int):
         self.name = "sac"
@@ -151,7 +151,7 @@ class SAC(Algorithm):
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.detach().cpu().squeeze(0).numpy()
 
-    def after_step(self, transition: TransitionTuple):
+    def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
         self.replay_memory.append(Transition((s, a, r, sn, an)))
@@ -272,7 +272,7 @@ class NewSAC(Algorithm):
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.detach().cpu().squeeze(0).numpy()
 
-    def after_step(self, transition: TransitionTuple):
+    def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
         self.replay_memory.append(Transition((s, a, r, sn, an)))
@@ -351,7 +351,7 @@ class NewSAC(Algorithm):
             ))
 
 
-class Preprocess(Preprocess[Observation]):
+class Preprocess(Preprocess[Observation, State]):
 
     def __init__(self):
         pass

@@ -33,7 +33,7 @@ Reward = float
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[Observation]):
+class Preprocess(Preprocess[Observation, State]):
 
     def __init__(self):
         pass
@@ -83,7 +83,7 @@ class Critic(NeuralNetworks):
         return self.net(torch.cat([state, action], 1))
 
 
-class TD3(Algorithm):
+class TD3(Algorithm[State]):
 
     def __init__(self, n_states: int, n_actions: int) -> None:
         self.name = "td3"
@@ -190,7 +190,7 @@ class TD3(Algorithm):
             act += torch.from_numpy(noise)
         return act.squeeze(0).numpy().clip(-self.max_action, self.max_action)
 
-    def after_step(self, transition: TransitionTuple):
+    def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
         self.replay_buffer.append(Transition((s, a, r, sn, an)))

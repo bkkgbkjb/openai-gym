@@ -68,7 +68,7 @@ class ActorCritic(NeuralNetworks):
         return (log_action_probs.cpu(), value.cpu())
 
 
-class PPO(Algorithm):
+class PPO(Algorithm[State]):
 
     def __init__(
         self,
@@ -136,7 +136,7 @@ class PPO(Algorithm):
 
         self.memory.extend([(s, a, r), (sn, an, None)])
 
-    def after_step(self, transition: TransitionTuple):
+    def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition
 
         assert isinstance(an, tuple) or an is None
@@ -324,7 +324,7 @@ class PPO(Algorithm):
                 self.optimzer.step()
 
 
-class Preprocess(Preprocess[Observation]):
+class Preprocess(Preprocess[Observation, State]):
 
     def __init__(self):
         pass

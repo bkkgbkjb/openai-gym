@@ -1,29 +1,29 @@
-from typing import Dict, Tuple, TypeVar, Optional, List, Any, Union, cast
+from typing import Dict, Generic, Tuple, TypeVar, Optional, List, Any, Union, cast
 import numpy as np
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 import torch
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-Observation = TypeVar('Observation')
-
 Action = np.ndarray
 ActionInfo = Tuple[Action, Dict[str, Any]]
 
 Reward = float
 
-AllowedState = Union[torch.Tensor, LazyFrames]
+AllowedStates = TypeVar('AllowedStates', bound=Union[torch.Tensor, LazyFrames])
 
-S = TypeVar('S')
+AllAllowedStates = TypeVar('AllAllowedStates',
+                           bound=Union[torch.Tensor, Optional[torch.Tensor],
+                                       LazyFrames, Optional[LazyFrames]])
 A = TypeVar('A')
 R = TypeVar('R')
-BaseStep = Tuple[S, A, R]
+BaseStep = Tuple[AllAllowedStates, A, R]
 
-Step = BaseStep[AllowedState, Optional[ActionInfo], Optional[Reward]]
+Step = BaseStep[AllowedStates, Optional[ActionInfo], Optional[Reward]]
 
-NotNoneStep = BaseStep[AllowedState, ActionInfo, Reward]
+NotNoneStep = BaseStep[AllowedStates, ActionInfo, Reward]
 
-AllNoneStep = BaseStep[Optional[AllowedState], Optional[ActionInfo],
+AllNoneStep = BaseStep[AllAllowedStates, Optional[ActionInfo],
                        Optional[Reward]]
 
 ES = TypeVar("ES", bound=Union[Step, NotNoneStep, AllNoneStep])
@@ -32,13 +32,13 @@ EpisodeGeneric = List[ES]
 SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
               torch.Tensor]
 
-TransitionTuple = Tuple[AllowedState, ActionInfo, Reward, AllowedState,
+TransitionTuple = Tuple[AllowedStates, ActionInfo, Reward, AllowedStates,
                         Union[Optional[ActionInfo], bool]]
 
 
-class Transition:
+class Transition(Generic[AllowedStates]):
 
-    def __init__(self, sarsa: TransitionTuple):
+    def __init__(self, sarsa: TransitionTuple[AllowedStates]):
         (s, a, r, sn, an) = sarsa
 
         assert an is None or isinstance(an, bool) or isinstance(an, tuple)
@@ -53,15 +53,15 @@ class Transition:
         self.an = an
 
         assert self.s.shape == self.sn.shape
-        assert isinstance(self.an,
-                          tuple) and self.a[0].shape == self.an[0].shape
+        if isinstance(self.an, tuple):
+            assert self.a[0].shape == self.an[0].shape
 
-    def as_tuple(self) -> TransitionTuple:
+    def as_tuple(self) -> TransitionTuple[AllowedStates]:
         return (self.s, self.a, self.r, self.sn, self.an)
 
 
-def resolve_transitions(trs: List[Transition], state_shape: Tuple,
-                        action_shape: Tuple) -> SARSA:
+def resolve_transitions(trs: List[Transition[AllowedStates]],
+                        state_shape: Tuple, action_shape: Tuple) -> SARSA:
     l = len(trs)
     trs_tuples = [trs.as_tuple() for trs in trs]
 

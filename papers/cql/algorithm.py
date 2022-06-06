@@ -1,5 +1,5 @@
 import setup
-from utils.common import (ActionInfo, Transition, resolve_transitions)
+from utils.common import (ActionInfo, Transition, TransitionTuple, resolve_transitions)
 from torch import nn
 from collections import deque
 import torch
@@ -103,7 +103,7 @@ class PaiFunction(NeuralNetworks):
         return act, log_prob, mean
 
 
-class CQL_SAC(Algorithm):
+class CQL_SAC(Algorithm[State]):
 
     def __init__(self, n_state: int, n_actions: int):
         self.name = "cql-sac"
@@ -172,7 +172,7 @@ class CQL_SAC(Algorithm):
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.cpu().squeeze(0).numpy()
 
-    def after_step(self, transition: Transition):
+    def after_step(self, transition: TransitionTuple[State]):
         self.times += 1
 
     def manual_train(self):
@@ -323,7 +323,7 @@ class CQL_SAC(Algorithm):
             ))
 
 
-class Preprocess(Preprocess[Observation]):
+class Preprocess(Preprocess[Observation, State]):
 
     def __init__(self):
         pass

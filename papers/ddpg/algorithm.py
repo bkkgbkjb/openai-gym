@@ -34,7 +34,7 @@ Reward = float
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[Observation]):
+class Preprocess(Preprocess[Observation, State]):
 
     def __init__(self):
         pass
@@ -115,7 +115,7 @@ class OrnsteinUhlenbeckActionNoise:
         return self
 
 
-class DDPG(Algorithm):
+class DDPG(Algorithm[State]):
 
     def __init__(self, n_states: int, n_actions: int):
         self.name = "ddpg"
@@ -200,7 +200,7 @@ class DDPG(Algorithm):
                                                 List[Reward]]):
         self.noise_generator.reset()
 
-    def after_step(self, transition: TransitionTuple):
+    def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
         self.replay_buffer.append(Transition((s, a, r, sn, an)))

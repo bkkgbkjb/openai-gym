@@ -21,7 +21,7 @@ Reward = int
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[Observation]):
+class Preprocess(Preprocess[Observation, State]):
 
     def __init__(self):
         pass
@@ -60,7 +60,7 @@ class QNetwork(NeuralNetworks):
         return rlt
 
 
-class DQNAlgorithm(Algorithm):
+class DQNAlgorithm(Algorithm[State]):
 
     def __init__(self, n_actions: int, gamma: float = 0.99):
         self.name = "dqn"
@@ -112,7 +112,7 @@ class DQNAlgorithm(Algorithm):
             maxi = torch.argmax(act_vals)
             return np.asarray([maxi.item()], dtype=np.int64)
 
-    def after_step(self, transition: TransitionTuple):
+    def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition
         assert isinstance(an, tuple) or an is None
         self.replay_memory.append(Transition((s, a, r, sn, an)))
@@ -176,7 +176,7 @@ class DQNAlgorithm(Algorithm):
         pass
 
 
-class DDQNAlgorithm(DQNAlgorithm, Algorithm):
+class DDQNAlgorithm(DQNAlgorithm, Algorithm[State]):
 
     def __init__(self, n_actions: int, gamma: float = 0.99):
         super().__init__(n_actions, gamma)
