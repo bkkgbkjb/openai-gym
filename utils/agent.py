@@ -24,17 +24,17 @@ from torch.utils.data import DataLoader
 
 R = Reward
 
-S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
-O = TypeVar("O")
+AS = TypeVar('AS', bound=Union[torch.Tensor, LazyFrames])
+AO = TypeVar("AO")
 
 
-class Agent(Generic[O, S]):
+class Agent(Generic[AO, AS]):
 
     def __init__(
         self,
-        env: gym.Env[O, Action],
-        algm: Algorithm[S],
-        preprocess: Preprocess[O, S],
+        env: gym.Env[AO, Action],
+        algm: Algorithm[AS],
+        preprocess: Preprocess[AO, AS],
     ):
         self.env = env
         self.algm = algm
@@ -43,7 +43,7 @@ class Agent(Generic[O, S]):
         self.algm.on_init({'env': self.env})
         self.reset()
 
-    def get_current_state(self, obs_episode: List[O]) -> S:
+    def get_current_state(self, obs_episode: List[AO]) -> AS:
         state = self.preprocess.get_current_state(obs_episode)
         assert isinstance(state, torch.Tensor) or isinstance(
             state,
@@ -54,12 +54,12 @@ class Agent(Generic[O, S]):
         self.ready_act: Optional[ActionInfo] = None
         self.end = False
 
-        self.observation_episode: List[O] = []
-        self.state_episode: List[S] = []
+        self.observation_episode: List[AO] = []
+        self.state_episode: List[AS] = []
         self.action_episode: List[ActionInfo] = []
         self.reward_episode: List[R] = []
 
-        self.eval_observation_episode: List[O] = []
+        self.eval_observation_episode: List[AO] = []
 
         assert len(self.state_episode) == len(self.observation_episode)
 
@@ -80,12 +80,12 @@ class Agent(Generic[O, S]):
             return a
         return (a, dict())
 
-    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[O]]]:
+    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[AO]]]:
         assert len(self.eval_observation_episode) == 0
         assert not self.end, "should reset before eval agnet"
         self.toggleEval(True)
 
-        o = cast(O, env.reset())
+        o = cast(AO, env.reset())
         self.eval_observation_episode.append(o)
 
         s = False
@@ -105,7 +105,7 @@ class Agent(Generic[O, S]):
         self.report({'eval_return': rwd})
         return rwd, (self.eval_observation_episode, )
 
-    def get_action(self, state: S) -> ActionInfo:
+    def get_action(self, state: AS) -> ActionInfo:
         actinfo = self.format_action(self.algm.take_action(state))
         act = actinfo[0]
 
@@ -124,11 +124,11 @@ class Agent(Generic[O, S]):
 
     def train(
         self
-    ) -> Tuple[float, Tuple[List[O], List[S], List[ActionInfo], List[R]]]:
+    ) -> Tuple[float, Tuple[List[AO], List[AS], List[ActionInfo], List[R]]]:
         assert not self.end, "agent needs to be reset before training"
         self.toggleEval(False)
 
-        o = cast(O, self.env.reset())
+        o = cast(AO, self.env.reset())
         self.observation_episode.append(o)
         self.state_episode.append(
             self.get_current_state(self.observation_episode))
@@ -146,7 +146,7 @@ class Agent(Generic[O, S]):
             self.action_episode.append(actinfo)
             self.reward_episode.append(rwd)
 
-            obs = cast(O, obs)
+            obs = cast(AO, obs)
             self.observation_episode.append(obs)
             self.state_episode.append(
                 self.get_current_state(self.observation_episode))
@@ -184,10 +184,14 @@ class Agent(Generic[O, S]):
         self.env.close()
 
 
-class OfflineAgent(Generic[O, S]):
+OS = TypeVar('OS', bound=Union[torch.Tensor, LazyFrames])
+OO = TypeVar("OO")
 
-    def __init__(self, dataloader: DataLoader, algm: Algorithm[S],
-                 preprocess: Preprocess[O, S]):
+
+class OfflineAgent(Generic[OO, OS]):
+
+    def __init__(self, dataloader: DataLoader, algm: Algorithm[OS],
+                 preprocess: Preprocess[OO, OS]):
         self.dataloader = dataloader
         self.algm = algm
         self.preprocess = preprocess
@@ -200,7 +204,7 @@ class OfflineAgent(Generic[O, S]):
     def reset(self):
         self.preprocess.on_agent_reset()
         self.algm.on_agent_reset()
-        self.eval_observation_episode: List[O] = []
+        self.eval_observation_episode: List[OO] = []
 
     def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
@@ -220,14 +224,14 @@ class OfflineAgent(Generic[O, S]):
             return a
         return (a, dict())
 
-    def get_current_state(self, obs_episode: List[O]) -> S:
+    def get_current_state(self, obs_episode: List[OO]) -> OS:
         state = self.preprocess.get_current_state(obs_episode)
         assert isinstance(state, torch.Tensor) or isinstance(
             state,
             LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
         return state
 
-    def get_action(self, state: S) -> ActionInfo:
+    def get_action(self, state: OS) -> ActionInfo:
         actinfo = self.format_action(self.algm.take_action(state))
         act = actinfo[0]
 
@@ -244,12 +248,12 @@ class OfflineAgent(Generic[O, S]):
 
         return actinfo
 
-    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[O]]]:
+    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[OO]]]:
         assert len(self.eval_observation_episode) == 0
         self.env = env
         self.toggleEval(True)
 
-        o = cast(O, env.reset())
+        o = cast(OO, env.reset())
         self.eval_observation_episode.append(o)
 
         s = False
@@ -264,12 +268,12 @@ class OfflineAgent(Generic[O, S]):
              _) = env.step(act[0] if isinstance(env.action_space, gym.spaces.
                                                 Discrete) else act)
             rwd += r
-            self.eval_observation_episode.append(cast(O, o))
+            self.eval_observation_episode.append(cast(OO, o))
 
         self.report({'eval_return': rwd})
         return rwd, (self.eval_observation_episode, )
 
 
-AO = TypeVar('AO')
-AS = TypeVar('AS', bound=Union[torch.Tensor, LazyFrames])
-AllAgent = Union[Agent[AO, AS], OfflineAgent[AO, AS]]
+AAO = TypeVar('AAO')
+AAS = TypeVar('AAS', bound=Union[torch.Tensor, LazyFrames])
+AllAgent = Union[Agent[AAO, AAS], OfflineAgent[AAO, AAS]]
