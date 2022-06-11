@@ -22,4 +22,4 @@ agent = Agent(train_env, PPO(train_env.action_space.n), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent, eval_env, total_train_frames=int(10e6))
+train_and_eval(agent, eval_env, total_train_frames=int(5e6))

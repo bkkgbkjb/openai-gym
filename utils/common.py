@@ -1,4 +1,7 @@
-from typing import Dict, Generic, Tuple, TypeVar, Optional, List, Any, Union, cast
+import numpy as np
+from typing import Dict, Generic, Iterable, Tuple, TypeVar, Optional, List, Any, Union, cast
+from typing_extensions import Self
+import math
 import numpy as np
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 import torch
@@ -35,7 +38,7 @@ SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
               torch.Tensor]
 
 TTS = TypeVar('TTS', bound=AllowedStates)
-TransitionTuple = Tuple[TTS, ActionInfo, Reward, AllowedStates,
+TransitionTuple = Tuple[TTS, ActionInfo, Reward, TTS,
                         Union[Optional[ActionInfo], bool]]
 
 TS = TypeVar("TS", bound=AllowedStates)
@@ -122,3 +125,156 @@ def resolve_transitions(trs: List[Transition[RTS]], state_shape: Tuple,
         next_states.to(DEVICE),
         done.to(DEVICE),
     )
+
+
+EPS = TypeVar('EPS', bound=AllowedStates)
+
+
+class Episodes(Generic[EPS]):
+
+    def __init__(self):
+        self._steps: List[Tuple[Step[EPS], Dict[str, Any]]] = []
+        self.returns_computed = False
+        self.advantage_computed = False
+        self.gae_computed = False
+
+    @property
+    def len(self) -> int:
+        return len(self._steps) - 1
+
+    @property
+    def steps(self) -> List[Tuple[Step[EPS], Dict[str, Any]]]:
+        ((_, la, lr), _) = self._steps[-2]
+        assert la is not None
+        assert lr is not None and not math.isnan(lr)
+
+        return self._steps[:-1]
+
+    @property
+    def pure_steps(self) -> List[Step[EPS]]:
+        return [s for (s, _) in self.steps]
+
+    @property
+    def non_stop_steps(self) -> List[Tuple[NotNoneStep[EPS], Dict[str, Any]]]:
+        return [((s, a, cast(Reward, r)), info)
+                for ((s, a, r), info) in self.steps if a is not None]
+
+    def append_step(self, step: Step[EPS]) -> Self:
+        (_, a, r) = step
+        if a is None:
+            assert r is None
+
+        if len(self._steps) > 0:
+            ((_, la, _), _) = self._steps[-1]
+            if la is None:
+                assert a is not None
+
+        self._steps.append((step, dict()))
+
+        return self
+
+    def append_transition(self, transition: Transition[EPS]) -> Self:
+        (s, a, r, sn, an) = transition.as_tuple()
+        end = False
+
+        if an is None or an == True:
+            end = True
+
+        if len(self._steps) == 0:
+            self._steps.extend([((s, a, r), dict()),
+                                ((sn, None, None if end else float('nan')),
+                                 dict())])
+            return self
+
+        ((ls, la, lr), li) = self._steps[-1]
+
+        if lr is not None:
+            assert math.isnan(lr)
+
+        if lr is not None and math.isnan(lr):
+            assert la is None
+            self._steps[-1] = ((ls, a, r), li)
+            self._steps.append(
+                ((sn, None, None if end else float('nan')), dict()))
+            return self
+
+        self._steps.extend([((s, a, r), dict()),
+                            ((sn, None, None if end else float('nan')), dict())
+                            ])
+
+        return self
+
+    def clear(self) -> Self:
+        self._steps = []
+        self.advantage_computed = False
+        self.returns_computed = False
+        self.gae_computed = False
+        return self
+
+    def sample(self,
+               batch_size: int) -> List[Tuple[Step[EPS], Dict[str, Any]]]:
+        idx = np.random.choice(self.len, batch_size)
+        b = []
+        for i in idx:
+            b.append(self.steps[i])
+
+        return b
+
+    def sample_non_stop(
+            self,
+            batch_size: int) -> List[Tuple[NotNoneStep[EPS], Dict[str, Any]]]:
+        idx = np.random.choice(len(self.non_stop_steps), batch_size)
+        b = []
+        for i in idx:
+            b.append(self.non_stop_steps[i])
+
+        return b
+
+    def compute_returns(self, gamma: float = 0.99):
+        if self.returns_computed:
+            return
+
+        steps = self.steps
+        l = self.len
+
+        returns = [float('nan') for _ in range(l)]
+
+        ((_, a, _), _) = steps[-1]
+
+        next_is_stop = a is None
+
+        next_value = 0 if next_is_stop else a[1]['value']
+        returns[-1] = next_value
+
+        for j in reversed(range(l - 1)):
+            ((_, a, r), _) = steps[j]
+            if a is None:
+                assert not next_is_stop
+                next_is_stop = True
+                next_value = 0
+                returns[j] = 0
+            else:
+                assert r is not None
+                returns[j] = (r + (0 if next_is_stop else gamma * next_value))
+                next_is_stop = False
+                next_value = returns[j]
+
+        for i, r in enumerate(returns):
+            steps[i][1]['return'] = r
+
+        self.returns_computed = True
+
+    def compute_advantages(self, gamma: float = 0.99):
+        if self.advantage_computed:
+            return
+
+        self.compute_returns(gamma)
+        steps = self.steps
+        l = self.len
+
+        for i in range(l):
+            ((_, a, _), i) = steps[i]
+            i['advantage'] = i['return'] - (a[1]['value']
+                                            if a is not None else 0)
+
+        self.advantage_computed = True
