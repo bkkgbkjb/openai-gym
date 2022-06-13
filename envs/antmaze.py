@@ -19,7 +19,7 @@ def every_five_episode(episode_id: int) -> bool:
     return record
 
 
-train_env, eval_env = make_train_and_eval_env("Ant-v3", [
+train_env, eval_env = make_train_and_eval_env("AntUMaze-v0", [
     lambda env, kind: RecordVideo(
         env, 'vlog', episode_trigger=lambda episode_id: episode_id % 5 == 0)
     if kind == 'eval' else env
