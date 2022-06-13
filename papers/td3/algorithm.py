@@ -125,7 +125,7 @@ class TD3(Algorithm[State]):
         self.times = 0
         self.eval = False
         self.max_action = 1.0
-        self.start_timestamp = int(25e3)
+        self.start_timestamp = int(10e3)
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
@@ -135,9 +135,7 @@ class TD3(Algorithm[State]):
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
 
-        noise = (torch.distributions.uniform.Uniform(
-            -self.max_action * 0.2,
-            self.max_action * 0.2).sample(actions.shape).to(DEVICE))
+        noise = (torch.randn_like(actions) * 0.2).clamp(-0.5, 0.5)
 
         next_actions = (self.actor_target(next_states) + noise).clamp(
             -self.max_action, self.max_action)
@@ -150,8 +148,8 @@ class TD3(Algorithm[State]):
 
         current_Q1 = self.critic1(states, actions)
         current_Q2 = self.critic2(states, actions)
-        critic_loss = self.critic1_loss(
-            current_Q1, target_Q) + self.critic2_loss(current_Q2, target_Q)
+        critic_loss = (self.critic1_loss(current_Q1, target_Q) +
+                       self.critic2_loss(current_Q2, target_Q)) / 2
 
         self.critic1_optimizer.zero_grad()
         self.critic2_optimizer.zero_grad()
@@ -171,6 +169,8 @@ class TD3(Algorithm[State]):
             self.critic_target1.soft_update_to(self.critic1, self.tau)
             self.critic_target2.soft_update_to(self.critic2, self.tau)
 
+            self.actor_target.soft_update_to(self.actor, self.tau)
+
             self.report(dict(actor_loss=actor_loss))
 
     def reset(self):
@@ -184,11 +184,12 @@ class TD3(Algorithm[State]):
                                      self.max_action,
                                      size=self.n_actions)
 
-        act = self.actor(state).cpu()
+        act = self.actor(state.unsqueeze(0)).cpu().numpy()
         if not self.eval:
             noise = self.noise_generator()
-            act += torch.from_numpy(noise)
-        return act.squeeze(0).numpy().clip(-self.max_action, self.max_action)
+            # act += torch.from_numpy(noise)
+            act += noise
+        return act.squeeze(0).clip(-self.max_action, self.max_action)
 
     def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition
