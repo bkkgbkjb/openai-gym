@@ -11,18 +11,12 @@ from utils.env_sb3 import RecordVideo
 
 j = 0
 
-
-def every_five_episode(episode_id: int) -> bool:
-    global j
-    record = j % 5 == 0
-    j += 1
-    return record
-
-
-train_env, eval_env = make_train_and_eval_env("AntUMaze-v0", [
+train_env, eval_env = make_train_and_eval_env("Ant-v3", [
     lambda env, kind: RecordVideo(
-        env, 'vlog', episode_trigger=lambda episode_id: episode_id % 5 == 0, name_prefix='sac-not-work-on-ant-maze')
-    if kind == 'eval' else env
+        env,
+        'vlog/sac-on-ant',
+        episode_trigger=lambda episode_id: episode_id % 5 == 0,
+        name_prefix='sac-on-ant') if kind == 'eval' else env
 ], RANDOM_SEED)
 
 # %%
@@ -34,4 +28,4 @@ agent = Agent(
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent, eval_env)
+train_and_eval(agent, eval_env, total_train_frames=int(3e6))
