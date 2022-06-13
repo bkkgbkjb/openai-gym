@@ -2,6 +2,7 @@ import gym
 import math
 from typing import (
     Callable,
+    Literal,
     Optional,
     Tuple,
     List,
@@ -27,8 +28,11 @@ S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
 
 
 def glance(env: gym.Env[O, Action],
+           render: Union[Literal['rgb_array'], Literal['none'],
+                         Literal['human']] = 'none',
            random_seed=0,
            repeats=3) -> gym.Env[O, Action]:
+    assert render in ['rgb_array', 'none', 'human']
     env.seed(random_seed)
     env.action_space.seed(random_seed)
     env.observation_space.seed(random_seed)
@@ -42,9 +46,10 @@ def glance(env: gym.Env[O, Action],
         t = 0
 
         while not s:
-            env.render(mode="human")
+            if render != 'none':
+                env.render(mode=render)
+                sleep(1 / 60)
 
-            sleep(1 / 60)
             (_, rwd, stop, _) = env.step(env.action_space.sample())
             t += 1
 
@@ -137,7 +142,9 @@ def offline_train_and_eval(
 
 def make_train_and_eval_env(
         env_name: str,
-        wrappers: List[Callable[[gym.Env], gym.Env]] = [],
+        wrappers: List[
+            Callable[[gym.Env, Union[Literal['train'], Literal['eval']]],
+                     gym.Env]] = [],
         seed: int = 0) -> Tuple[gym.Env[O, Action], gym.Env[O, Action]]:
     train_env = gym.make(env_name)
     train_env.seed(seed)
@@ -147,7 +154,7 @@ def make_train_and_eval_env(
 
     # %%
     for w in wrappers:
-        train_env = w(train_env)
+        train_env = w(train_env, 'train')
 
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 5)
@@ -157,6 +164,6 @@ def make_train_and_eval_env(
 
     # %%
     for w in wrappers:
-        eval_env = w(eval_env)
+        eval_env = w(eval_env, 'eval')
 
     return train_env, eval_env

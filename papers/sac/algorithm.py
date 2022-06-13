@@ -56,9 +56,12 @@ class QFunction(NeuralNetworks):
             layer_init(nn.Linear(256, 1)),
         ).to(DEVICE)
 
+        self.n_state = n_state
+        self.n_action = n_action
+
     def forward(self, s: State, a: Action) -> torch.Tensor:
-        assert s.size(1) == 17
-        assert a.size(1) == 6
+        assert s.size(1) == self.n_state
+        assert a.size(1) == self.n_action
         return self.net(torch.cat([s.to(DEVICE), a.to(DEVICE)], 1))
 
 
@@ -73,18 +76,20 @@ class PaiFunction(NeuralNetworks):
             nn.ReLU(),
         ).to(DEVICE)
 
+        self.n_state = n_state
+        self.n_action = n_action
         self.mean = layer_init(nn.Linear(256, n_action)).to(DEVICE)
         self.std = layer_init(nn.Linear(256, n_action)).to(DEVICE)
 
     def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
-        assert s.size(1) == 17
+        assert s.size(1) == self.n_state
         x = self.net(s.to(DEVICE))
         mean = self.mean(x)
         log_std = self.std(x)
         log_std = torch.clamp(log_std, min=-20, max=2)
 
-        assert mean.shape == (s.size(0), 6)
-        assert log_std.shape == (s.size(0), 6)
+        assert mean.shape == (s.size(0), self.n_action)
+        assert log_std.shape == (s.size(0), self.n_action)
 
         return mean, log_std
 
@@ -93,14 +98,14 @@ class PaiFunction(NeuralNetworks):
         std = log_std.exp()
         normal = Normal(mean, std)
         raw_act = normal.rsample()
-        assert raw_act.shape == (s.size(0), 6)
+        assert raw_act.shape == (s.size(0), self.n_action)
         act = torch.tanh(raw_act)
 
         raw_log_prob = normal.log_prob(raw_act)
-        assert raw_log_prob.shape == (s.size(0), 6)
+        assert raw_log_prob.shape == (s.size(0), self.n_action)
 
         mod_log_prob = (1 - act.pow(2) + 1e-6).log()
-        assert mod_log_prob.shape == (s.size(0), 6)
+        assert mod_log_prob.shape == (s.size(0), self.n_action)
         log_prob = (raw_log_prob - mod_log_prob).sum(1, keepdim=True)
 
         mean = torch.tanh(mean)
