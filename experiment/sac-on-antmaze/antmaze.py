@@ -21,7 +21,7 @@ def every_five_episode(episode_id: int) -> bool:
 
 train_env, eval_env = make_train_and_eval_env("AntUMaze-v0", [
     lambda env, kind: RecordVideo(
-        env, 'vlog', episode_trigger=lambda episode_id: episode_id % 5 == 0, name_prefix='sac-not-work-on-ant-maze')
+        env, 'vlog/sac-on-antmaze', episode_trigger=lambda episode_id: episode_id % 5 == 0, name_prefix='sac-on-ant-maze')
     if kind == 'eval' else env
 ], RANDOM_SEED)
 

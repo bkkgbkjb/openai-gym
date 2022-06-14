@@ -29,7 +29,7 @@ S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
 
 def glance(env: gym.Env[O, Action],
            render: Union[Literal['rgb_array'], Literal['none'],
-                         Literal['human']] = 'none',
+                         Literal['human']] = 'human',
            random_seed=0,
            repeats=3) -> gym.Env[O, Action]:
     assert render in ['rgb_array', 'none', 'human']
