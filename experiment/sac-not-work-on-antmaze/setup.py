@@ -1,6 +1,6 @@
 from sys import path as spath
 from os import path as opath
-spath.append(opath.dirname(opath.abspath(__file__)) + "/..")
+spath.append(opath.dirname(opath.abspath(__file__)) + "/../../")
 
 import numpy as np
 import torch
