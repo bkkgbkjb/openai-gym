@@ -50,7 +50,10 @@ class Preprocess(Preprocess[Observation, State]):
 
 class Actor(NeuralNetworks):
 
-    def __init__(self, n_states: int, n_actions: int):
+    def __init__(self,
+                 n_states: int,
+                 n_actions: int,
+                 action_scale: float = 1.0):
         super(Actor, self).__init__()
 
         self.net = nn.Sequential(
@@ -62,8 +65,10 @@ class Actor(NeuralNetworks):
             nn.Tanh(),
         ).to(DEVICE)
 
+        self.action_scale = action_scale
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        return self.action_scale * self.net(x)
 
 
 class Critic(NeuralNetworks):
@@ -85,7 +90,10 @@ class Critic(NeuralNetworks):
 
 class TD3(Algorithm[State]):
 
-    def __init__(self, n_states: int, n_actions: int) -> None:
+    def __init__(self,
+                 n_states: int,
+                 n_actions: int,
+                 action_scale: float = 1.0) -> None:
         self.name = "td3"
         self.n_actions = n_actions
         self.n_states = n_states
@@ -93,7 +101,9 @@ class TD3(Algorithm[State]):
         self.gamma = 0.99
         self.tau = 5e-3
 
-        self.actor = Actor(self.n_states, self.n_actions)
+        self.action_scale = action_scale
+
+        self.actor = Actor(self.n_states, self.n_actions, self.action_scale)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
                                                 lr=3e-4)
         self.actor_loss = nn.MSELoss()
@@ -118,13 +128,12 @@ class TD3(Algorithm[State]):
                                           (self.n_actions, ), int(1e6))
 
         self.noise_generator = lambda: np.random.normal(
-            0, 0.1, size=self.n_actions)
+            0, 0.1 * self.action_scale, size=self.n_actions)
 
         self.mini_batch_size = 256
 
         self.times = 0
         self.eval = False
-        self.max_action = 1.0
         self.start_timestamp = int(10e3)
 
     def on_toggle_eval(self, isEval: bool):
@@ -135,10 +144,11 @@ class TD3(Algorithm[State]):
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
 
-        noise = (torch.randn_like(actions) * 0.2).clamp(-0.5, 0.5)
+        noise = (torch.randn_like(actions) * 0.2 * self.action_scale).clamp(
+            -self.action_scale / 2, self.action_scale / 2)
 
         next_actions = (self.actor_target(next_states) + noise).clamp(
-            -self.max_action, self.max_action)
+            -self.action_scale, self.action_scale)
 
         target_Q1 = self.critic_target1(next_states, next_actions)
         target_Q2 = self.critic_target2(next_states, next_actions)
@@ -180,16 +190,15 @@ class TD3(Algorithm[State]):
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         if self.times <= self.start_timestamp:
-            return np.random.uniform(-self.max_action,
-                                     self.max_action,
+            return np.random.uniform(-self.action_scale,
+                                     self.action_scale,
                                      size=self.n_actions)
 
         act = self.actor(state.unsqueeze(0)).cpu().numpy()
         if not self.eval:
             noise = self.noise_generator()
-            # act += torch.from_numpy(noise)
             act += noise
-        return act.squeeze(0).clip(-self.max_action, self.max_action)
+        return act.squeeze(0).clip(-self.action_scale, self.action_scale)
 
     def after_step(self, transition: TransitionTuple[State]):
         (s, a, r, sn, an) = transition

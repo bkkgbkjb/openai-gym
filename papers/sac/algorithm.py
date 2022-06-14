@@ -67,7 +67,7 @@ class QFunction(NeuralNetworks):
 
 class PaiFunction(NeuralNetworks):
 
-    def __init__(self, n_state: int, n_action):
+    def __init__(self, n_state: int, n_action: int, action_scale: float = 1.0):
         super().__init__()
         self.net = nn.Sequential(
             layer_init(nn.Linear(n_state, 256)),
@@ -76,10 +76,12 @@ class PaiFunction(NeuralNetworks):
             nn.ReLU(),
         ).to(DEVICE)
 
-        self.n_state = n_state
-        self.n_action = n_action
         self.mean = layer_init(nn.Linear(256, n_action)).to(DEVICE)
         self.std = layer_init(nn.Linear(256, n_action)).to(DEVICE)
+
+        self.n_state = n_state
+        self.n_action = n_action
+        self.action_scale = action_scale
 
     def forward(self, s: State) -> Tuple[torch.Tensor, torch.Tensor]:
         assert s.size(1) == self.n_state
@@ -99,22 +101,27 @@ class PaiFunction(NeuralNetworks):
         normal = Normal(mean, std)
         raw_act = normal.rsample()
         assert raw_act.shape == (s.size(0), self.n_action)
-        act = torch.tanh(raw_act)
+
+        act = self.action_scale * torch.tanh(raw_act)
 
         raw_log_prob = normal.log_prob(raw_act)
         assert raw_log_prob.shape == (s.size(0), self.n_action)
 
-        mod_log_prob = (1 - act.pow(2) + 1e-6).log()
+        mod_log_prob = (self.action_scale * (1 - act.pow(2)) + 1e-6).log()
         assert mod_log_prob.shape == (s.size(0), self.n_action)
+
         log_prob = (raw_log_prob - mod_log_prob).sum(1, keepdim=True)
 
-        mean = torch.tanh(mean)
+        mean = self.action_scale * torch.tanh(mean)
         return act, log_prob, mean
 
 
 class SAC(Algorithm[State]):
 
-    def __init__(self, n_state: int, n_actions: int):
+    def __init__(self,
+                 n_state: int,
+                 n_actions: int,
+                 action_scale: float = 1.0):
         self.name = "sac"
         self.n_actions = n_actions
         self.n_state = n_state
@@ -123,6 +130,7 @@ class SAC(Algorithm[State]):
 
         self.alpha = 1.0
         self.tau = 1e-2
+        self.action_scale = action_scale
 
         self.start_traininig_size = int(1e4)
         self.mini_batch_size = 256
@@ -130,7 +138,8 @@ class SAC(Algorithm[State]):
         self.online_v = VFunction(self.n_state)
         self.offline_v = self.online_v.clone().no_grad()
 
-        self.policy = PaiFunction(self.n_state, self.n_actions)
+        self.policy = PaiFunction(self.n_state, self.n_actions,
+                                  self.action_scale)
 
         self.q1 = QFunction(self.n_state, self.n_actions)
         self.q2 = QFunction(self.n_state, self.n_actions)
