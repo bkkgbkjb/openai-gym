@@ -21,8 +21,8 @@ train_env, eval_env = make_train_and_eval_env("AntUMaze-v0", [
 
 agent = Agent(
     train_env,
-    TD3(train_env.observation_space.shape[0], train_env.action_space.shape[0]),
-    Preprocess())
+    TD3(train_env.observation_space.shape[0], train_env.action_space.shape[0],
+        30), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 

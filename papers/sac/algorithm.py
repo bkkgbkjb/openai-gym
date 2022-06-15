@@ -67,7 +67,7 @@ class QFunction(NeuralNetworks):
 
 class PaiFunction(NeuralNetworks):
 
-    def __init__(self, n_state: int, n_action: int, action_scale: float = 1.0):
+    def __init__(self, n_state: int, n_action: int, action_scale: float):
         super().__init__()
         self.net = nn.Sequential(
             layer_init(nn.Linear(n_state, 256)),
@@ -107,7 +107,7 @@ class PaiFunction(NeuralNetworks):
         raw_log_prob = normal.log_prob(raw_act)
         assert raw_log_prob.shape == (s.size(0), self.n_action)
 
-        mod_log_prob = (self.action_scale * (1 - act.pow(2)) + 1e-6).log()
+        mod_log_prob = (self.action_scale ** 2 - act.pow(2) + 1e-6).log()
         assert mod_log_prob.shape == (s.size(0), self.n_action)
 
         log_prob = (raw_log_prob - mod_log_prob).sum(1, keepdim=True)
@@ -118,10 +118,7 @@ class PaiFunction(NeuralNetworks):
 
 class SAC(Algorithm[State]):
 
-    def __init__(self,
-                 n_state: int,
-                 n_actions: int,
-                 action_scale: float = 1.0):
+    def __init__(self, n_state: int, n_actions: int, action_scale: float):
         self.name = "sac"
         self.n_actions = n_actions
         self.n_state = n_state
@@ -236,19 +233,21 @@ class SAC(Algorithm[State]):
 
 class NewSAC(Algorithm):
 
-    def __init__(self, n_state: int, n_actions: int):
+    def __init__(self, n_state: int, n_actions: int, action_scale: float):
         self.name = "new-sac"
         self.n_actions = n_actions
         self.n_state = n_state
 
         self.gamma = 0.99
+        self.action_scale = action_scale
 
         self.tau = 5e-3
 
         self.start_traininig_size = int(1e4)
         self.mini_batch_size = 256
 
-        self.policy = PaiFunction(self.n_state, self.n_actions)
+        self.policy = PaiFunction(self.n_state, self.n_actions,
+                                  self.action_scale)
 
         self.q1 = QFunction(self.n_state, self.n_actions)
         self.q2 = QFunction(self.n_state, self.n_actions)

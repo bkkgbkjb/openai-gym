@@ -50,10 +50,7 @@ class Preprocess(Preprocess[Observation, State]):
 
 class Actor(NeuralNetworks):
 
-    def __init__(self,
-                 n_states: int,
-                 n_actions: int,
-                 action_scale: float = 1.0):
+    def __init__(self, n_states: int, n_actions: int, action_scale: float):
         super(Actor, self).__init__()
 
         self.net = nn.Sequential(
@@ -90,10 +87,8 @@ class Critic(NeuralNetworks):
 
 class TD3(Algorithm[State]):
 
-    def __init__(self,
-                 n_states: int,
-                 n_actions: int,
-                 action_scale: float = 1.0) -> None:
+    def __init__(self, n_states: int, n_actions: int,
+                 action_scale: float) -> None:
         self.name = "td3"
         self.n_actions = n_actions
         self.n_states = n_states

@@ -9,20 +9,12 @@ from utils.reporter import get_reporter
 from utils.env import train_and_eval, make_train_and_eval_env
 from utils.env_sb3 import RecordVideo
 
-j = 0
-
-
-def every_five_episode(episode_id: int) -> bool:
-    global j
-    record = j % 5 == 0
-    j += 1
-    return record
-
-
 train_env, eval_env = make_train_and_eval_env("AntUMaze-v0", [
     lambda env, kind: RecordVideo(
-        env, 'vlog/sac-on-antmaze', episode_trigger=lambda episode_id: episode_id % 5 == 0, name_prefix='sac-on-ant-maze')
-    if kind == 'eval' else env
+        env,
+        'vlog/sac-on-antmaze',
+        episode_trigger=lambda episode_id: episode_id % 5 == 0,
+        name_prefix='sac-on-ant-maze') if kind == 'eval' else env
 ], RANDOM_SEED)
 
 # %%
@@ -30,7 +22,7 @@ train_env, eval_env = make_train_and_eval_env("AntUMaze-v0", [
 agent = Agent(
     train_env,
     NewSAC(train_env.observation_space.shape[0],
-           train_env.action_space.shape[0]), Preprocess())
+           train_env.action_space.shape[0], 30), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
