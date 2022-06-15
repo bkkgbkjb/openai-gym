@@ -69,7 +69,7 @@ def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
         frames = 0
         while frames <= training_frames:
             agent.reset()
-            (_, (_, _, a, _)) = agent.train()
+            (_, (_, _, a, _, _)) = agent.train()
 
             pbar.update(len(a))
             frames += len(a)

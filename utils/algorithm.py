@@ -1,10 +1,13 @@
 from abc import abstractmethod
-from typing import Callable, Dict, Generic, Optional, Protocol, Tuple, TypeVar, List, Union, Any, Union
-from utils.common import Action, ActionInfo, AllowedStates, NotNoneStep, Reward, Transition, TransitionTuple
-from utils.env_sb3 import LazyFrames, resolve_lazy_frames
+from typing import Callable, Dict, Generic, Tuple, TypeVar, List, Union, Any, Union
+from utils.common import Action, Info, Reward
+from utils.env_sb3 import LazyFrames
+from utils.transition import TransitionTuple
+
 import torch
 
 S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
+ActionInfo = Tuple[Action, Dict[str, Any]]
 
 
 class Algorithm(Generic[S]):
@@ -25,8 +28,8 @@ class Algorithm(Generic[S]):
     def after_step(self, transition: TransitionTuple[S]):
         pass
 
-    def on_episode_termination(self, sar: Tuple[List[S], List[ActionInfo],
-                                                List[Reward]]):
+    def on_episode_termination(self, sari: Tuple[List[S], List[Action],
+                                                 List[Reward], List[Info]]):
         pass
 
     def on_agent_reset(self):

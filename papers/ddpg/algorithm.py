@@ -1,10 +1,6 @@
 import setup
-from utils.common import (
-    ActionInfo,
-    Transition,
-    TransitionTuple,
-    resolve_transitions
-)
+from utils.common import Info
+from utils.transition import (Transition, TransitionTuple, resolve_transitions)
 from torch import nn
 import math
 import torch
@@ -141,7 +137,7 @@ class DDPG(Algorithm[State]):
         self.critic_target = self.critic.clone().no_grad()
 
         self.replay_buffer = ReplayBuffer((self.n_states, ),
-                                                 (self.n_actions, ), int(1e6))
+                                          (self.n_actions, ), int(1e6))
 
         self.noise_generator = OrnsteinUhlenbeckActionNoise(
             np.zeros(n_actions), sigma=0.2 * np.ones(n_actions)).reset()
@@ -196,14 +192,12 @@ class DDPG(Algorithm[State]):
             act += torch.from_numpy(noise).to(DEVICE)
         return act.cpu().squeeze(0).numpy()
 
-    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
-                                                List[Reward]]):
+    def on_episode_termination(self, sari: Tuple[List[State], List[Action],
+                                                 List[Reward], List[Info]]):
         self.noise_generator.reset()
 
     def after_step(self, transition: TransitionTuple[State]):
-        (s, a, r, sn, an) = transition
-        assert isinstance(an, tuple) or an is None
-        self.replay_buffer.append(Transition((s, a, r, sn, an)))
+        self.replay_buffer.append(Transition(transition))
 
         assert self.replay_buffer.size is not None
 

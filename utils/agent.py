@@ -17,10 +17,12 @@ from typing import (
     Union,
     TypeVar,
 )
-from utils.algorithm import Algorithm
+from utils.algorithm import Algorithm, ActionInfo
 from utils.preprocess import Preprocess
-from utils.common import ActionInfo, Action, Reward
+from utils.common import Action, Info, Reward
 from torch.utils.data import DataLoader
+
+from utils.step import NotNoneStep, Step
 
 R = Reward
 
@@ -56,8 +58,9 @@ class Agent(Generic[AO, AS]):
 
         self.observation_episode: List[AO] = []
         self.state_episode: List[AS] = []
-        self.action_episode: List[ActionInfo] = []
+        self.action_episode: List[Action] = []
         self.reward_episode: List[R] = []
+        self.info_episode: List[Info] = []
 
         self.eval_observation_episode: List[AO] = []
 
@@ -73,12 +76,12 @@ class Agent(Generic[AO, AS]):
     def toggleEval(self, newEval: bool):
         self.algm.on_toggle_eval(newEval)
 
-    def format_action(
-            self, a: Union[Action,
-                           ActionInfo]) -> Tuple[Action, Dict[str, Any]]:
+    def format_action(self, a: Union[Action, ActionInfo]) -> ActionInfo:
         if isinstance(a, tuple):
+            assert 'end' not in a[1]
+            a[1]['end'] = False
             return a
-        return (a, dict())
+        return (a, dict(end=False))
 
     def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[AO]]]:
         assert len(self.eval_observation_episode) == 0
@@ -124,7 +127,8 @@ class Agent(Generic[AO, AS]):
 
     def train(
         self
-    ) -> Tuple[float, Tuple[List[AO], List[AS], List[ActionInfo], List[R]]]:
+    ) -> Tuple[float, Tuple[List[AO], List[AS], List[Action], List[R],
+                            List[Info]]]:
         assert not self.end, "agent needs to be reset before training"
         self.toggleEval(False)
 
@@ -139,11 +143,12 @@ class Agent(Generic[AO, AS]):
 
             actinfo = self.ready_act or self.get_action(self.state_episode[-1])
 
-            act = actinfo[0]
+            act, info = actinfo
             (obs, rwd, stop, _) = self.env.step(act[0] if isinstance(
                 self.env.action_space, gym.spaces.Discrete) else act)
 
-            self.action_episode.append(actinfo)
+            self.action_episode.append(act)
+            self.info_episode.append(info)
             self.reward_episode.append(rwd)
 
             obs = cast(AO, obs)
@@ -151,33 +156,41 @@ class Agent(Generic[AO, AS]):
             self.state_episode.append(
                 self.get_current_state(self.observation_episode))
 
-            self.ready_act = (None if stop else self.get_action(
-                self.state_episode[-1]))
-
             assert len(self.state_episode) == len(self.observation_episode)
 
-            self.algm.after_step((
-                self.state_episode[-2],
-                self.action_episode[-1],
-                self.reward_episode[-1],
-                self.state_episode[-1],
-                self.ready_act,
-            ))
+            if stop:
+                self.ready_act = None
+            else:
+                self.ready_act = self.get_action(self.state_episode[-1])
 
+            self.algm.after_step(
+                (NotNoneStep(self.state_episode[-2], self.action_episode[-1],
+                             self.reward_episode[-1], self.info_episode[-1]),
+                 Step(
+                     self.state_episode[-1],
+                     None if self.ready_act is None else self.ready_act[0],
+                     None,
+                     dict(end=True)
+                     if self.ready_act is None else self.ready_act[1])))
+
+        self.info_episode.append(dict(end=True))
         assert len(self.state_episode) == len(self.observation_episode) == len(
-            self.action_episode) + 1 == len(self.reward_episode) + 1
+            self.action_episode) + 1 == len(self.reward_episode) + 1 == len(
+                self.info_episode)
 
         self.end = True
 
         self.algm.on_episode_termination(
-            (self.state_episode, self.action_episode, self.reward_episode))
+            (self.state_episode, self.action_episode, self.reward_episode,
+             self.info_episode))
 
         total_rwd = np.sum([r for r in self.reward_episode])
 
         self.report({"train_return": total_rwd})
 
         return total_rwd, (self.observation_episode, self.state_episode,
-                           self.action_episode, self.reward_episode)
+                           self.action_episode, self.reward_episode,
+                           self.info_episode)
 
     def close(self):
         self.reset()

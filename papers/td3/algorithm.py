@@ -1,6 +1,5 @@
 import setup
-from utils.common import (
-    ActionInfo,
+from utils.transition import (
     Transition,
     TransitionTuple,
     resolve_transitions,
@@ -196,9 +195,7 @@ class TD3(Algorithm[State]):
         return act.squeeze(0).clip(-self.action_scale, self.action_scale)
 
     def after_step(self, transition: TransitionTuple[State]):
-        (s, a, r, sn, an) = transition
-        assert isinstance(an, tuple) or an is None
-        self.replay_buffer.append(Transition((s, a, r, sn, an)))
+        self.replay_buffer.append(Transition(transition))
 
         if self.times >= self.start_timestamp:
             self.train()
