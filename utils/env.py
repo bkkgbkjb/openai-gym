@@ -27,11 +27,11 @@ O = TypeVar('O')
 S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
 
 
-def glance(env: gym.Env[O, Action],
+def glance(env: gym.Env,
            render: Union[Literal['rgb_array'], Literal['none'],
                          Literal['human']] = 'human',
            random_seed=0,
-           repeats=3) -> gym.Env[O, Action]:
+           repeats=3) -> gym.Env:
     assert render in ['rgb_array', 'none', 'human']
     env.seed(random_seed)
     env.action_space.seed(random_seed)
@@ -97,7 +97,7 @@ def offline_train(
 
 
 def eval(agent: AllAgent[O, S],
-         env: gym.Env[O, Action],
+         env: gym.Env,
          repeats=10) -> AllAgent[O, S]:
 
     for _ in range(repeats):
@@ -110,7 +110,7 @@ def eval(agent: AllAgent[O, S],
 
 def train_and_eval(
         agent: Agent[O, S],
-        eval_env: gym.Env[O, Action],
+        eval_env: gym.Env,
         single_train_frames=int(1e4),
         eval_repeats=10,
         total_train_frames=int(1e6),
@@ -126,7 +126,7 @@ def train_and_eval(
 
 def offline_train_and_eval(
     agent: OfflineAgent[O, S],
-    eval_env: gym.Env[O, Action],
+    eval_env: gym.Env,
     single_train_frames=int(1e4),
     eval_repeats=10,
     total_train_frames=int(1e6)) -> OfflineAgent[O, S]:
@@ -143,7 +143,7 @@ def offline_train_and_eval(
 def make_train_and_eval_env(
         envs: Union[str, Tuple[gym.Env, gym.Env]],
         wrappers: List[Callable[[gym.Env], gym.Env]] = [],
-        seed: int = 0) -> Tuple[gym.Env[O, Action], gym.Env[O, Action]]:
+        seed: int = 0) -> Tuple[gym.Env, gym.Env]:
     train_env = gym.make(envs) if isinstance(envs, str) else envs[0]
     train_env.seed(seed)
     train_env.action_space.seed(seed)

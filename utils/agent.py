@@ -34,7 +34,7 @@ class Agent(Generic[AO, AS]):
 
     def __init__(
         self,
-        env: gym.Env[AO, Action],
+        env: gym.Env,
         algm: Algorithm[AS],
         preprocess: PreprocessI[AO, AS],
     ):

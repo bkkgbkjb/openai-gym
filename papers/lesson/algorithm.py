@@ -161,7 +161,7 @@ class LESSON(Algorithm):
                                           (self.action_dim, ))
     
     def on_env_reset(self, info: Dict[str, Any]):
-        assert info['desired_goal']
+        assert 'desired_goal' in info
 
     @torch.no_grad()
     def take_action(self, state: State, goal: Goal) -> Action:
