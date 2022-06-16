@@ -15,9 +15,8 @@ train_env, eval_env = make_train_and_eval_env("AntMaze1-v1", [], RANDOM_SEED)
 
 agent = Agent(
     train_env,
-    LESSON(train_env.observation_space.shape[0],
-           train_env.action_space.shape[0], train_env.goal_space[0]),
-    Preprocess())
+    LESSON(train_env.observation_space.shape[0], train_env.goal_space.shape[0],
+           train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 

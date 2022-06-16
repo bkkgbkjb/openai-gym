@@ -974,3 +974,51 @@ class RecordVideo(gym.Wrapper):
 
     def __del__(self):
         self.close_video_recorder()
+
+
+class RescaleAction(gym.ActionWrapper):
+    r"""Rescales the continuous action space of the environment to a range [min_action, max_action].
+
+    Example::
+
+        >>> RescaleAction(env, min_action, max_action).action_space == Box(min_action, max_action)
+        True
+
+    """
+
+    def __init__(self, env, scale):
+        assert scale > 0
+        min_action = -scale
+        max_action = scale
+        assert isinstance(
+            env.action_space, spaces.Box
+        ), f"expected Box action space, got {type(env.action_space)}"
+        assert np.less_equal(min_action,
+                             max_action).all(), (min_action, max_action)
+
+        super().__init__(env)
+        self.scale = scale
+        self.min_action = (
+            np.zeros(env.action_space.shape, dtype=env.action_space.dtype) +
+            min_action)
+        self.max_action = (
+            np.zeros(env.action_space.shape, dtype=env.action_space.dtype) +
+            max_action)
+        self.action_space = spaces.Box(
+            low=min_action,
+            high=max_action,
+            shape=env.action_space.shape,
+            dtype=env.action_space.dtype,
+        )
+
+    def action(self, action):
+        assert np.all(np.greater_equal(action, self.min_action)), (
+            action,
+            self.min_action,
+        )
+        assert np.all(np.less_equal(action,
+                                    self.max_action)), (action,
+                                                        self.max_action)
+        action = self.scale * action
+        action = np.clip(action, -self.scale, self.scale)
+        return action
