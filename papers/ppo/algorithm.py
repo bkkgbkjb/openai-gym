@@ -1,17 +1,13 @@
 import setup
-from utils.common import (
-    ActionInfo,
-    Episodes,
-    Step,
-    NotNoneStep,
-    Transition,
-    TransitionTuple,
-)
+from utils.step import Step, NotNoneStep
+from utils.episode import Episodes
+from utils.algorithm import ActionInfo
+from utils.transition import (Transition, TransitionTuple)
 from torch import nn
 import math
 from collections import deque
 import torch
-from utils.preprocess import Preprocess
+from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from utils.nets import NeuralNetworks, layer_init
 from torch.distributions import Categorical
@@ -33,6 +29,20 @@ State = Observation
 Reward = float
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+class Preprocess(PreprocessI[Observation, State]):
+
+    def __init__(self):
+        pass
+
+    def on_agent_reset(self):
+        pass
+
+    def get_current_state(self, h: List[Observation]) -> State:
+        assert len(h) > 0
+
+        assert h[-1].shape == (4, 84, 84)
+        return h[-1]
 
 
 class ActorCritic(NeuralNetworks):
@@ -120,13 +130,8 @@ class PPO(Algorithm[State]):
         self.episode.append_transition(trs)
 
     def after_step(self, transition: TransitionTuple[State]):
-        (s, a, r, sn, an) = transition
 
-        assert isinstance(an, tuple) or an is None
-        assert isinstance(s, LazyFrames)
-        assert isinstance(sn, LazyFrames)
-
-        trs = Transition((s, a, r, sn, an))
+        trs = Transition(transition)
         self.append_step(trs)
 
         if self.times != 0 and self.episode.len >= 1024:
@@ -143,22 +148,23 @@ class PPO(Algorithm[State]):
                 batch = self.episode.sample_non_stop(self.batch_size)
 
                 advs = torch.tensor([
-                    cast(float, i['advantage']) for (_, i) in batch
+                    cast(float, s.info['advantage']) for s in batch
                 ]).type(torch.float32)
-                rets = torch.tensor([cast(float, i['return'])
-                                    for (_, i) in batch]).type(torch.float32)
+                rets = torch.tensor([
+                    cast(float, s.info['return']) for s in batch
+                ]).type(torch.float32)
 
                 advs = (advs - advs.mean()) / (advs.std() + 1e-8)
 
                 L = self.batch_size
 
                 states = torch.stack(
-                    [resolve_lazy_frames(s) for ((s, _, _), _) in batch])
+                    [resolve_lazy_frames(s.state) for s in batch])
 
                 assert states.shape == (L, 4, 84, 84)
 
-                old_acts = torch.cat([torch.from_numpy(a) for ((_, (a, _), _), _) in batch
-                                        ])
+                old_acts = torch.cat(
+                    [torch.from_numpy(s.action) for s in batch])
 
                 assert old_acts.shape == (L, )
 
@@ -176,7 +182,7 @@ class PPO(Algorithm[State]):
                 assert new_log_prob.shape == (L, )
 
                 old_log_probs = torch.cat(
-                    [i["log_prob"] for ((_, (_, i), _), _) in batch])
+                    [s.info["log_prob"] for s in batch])
 
                 assert old_log_probs.shape == (L, )
                 assert not old_log_probs.requires_grad
@@ -198,7 +204,7 @@ class PPO(Algorithm[State]):
                 v_loss_unclipped = ((new_vals - rets)**2)
 
                 old_values = torch.tensor(
-                    [i['value'] for ((_, (_, i), _), _) in batch])
+                    [s.info['value'] for s in batch])
 
                 assert old_values.shape == (L, )
 
@@ -227,17 +233,3 @@ class PPO(Algorithm[State]):
                 nn.utils.clip_grad_norm_(self.network.parameters(), 1)
                 self.optimzer.step()
 
-
-class Preprocess(Preprocess[Observation, State]):
-
-    def __init__(self):
-        pass
-
-    def on_agent_reset(self):
-        pass
-
-    def get_current_state(self, h: List[Observation]) -> State:
-        assert len(h) > 0
-
-        assert h[-1].shape == (4, 84, 84)
-        return h[-1]

@@ -7,7 +7,7 @@ from utils.transition import (
 from torch import nn
 from collections import deque
 import torch
-from utils.preprocess import Preprocess
+from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from typing import Union
@@ -27,7 +27,7 @@ Reward = int
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[Observation, State]):
+class Preprocess(PreprocessI[Observation, State]):
 
     def __init__(self):
         pass

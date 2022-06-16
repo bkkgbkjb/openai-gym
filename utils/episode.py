@@ -2,7 +2,7 @@ from typing import Union, TypeVar, List, Generic, cast
 from utils.step import Step, NotNoneStep
 from utils.transition import Transition
 import numpy as np
-from common import AllowedStates
+from utils.common import AllowedStates
 import math
 from typing_extensions import Self
 
@@ -41,7 +41,7 @@ class Episodes(Generic[EPS]):
     @property
     def non_stop_steps(self) -> List[NotNoneStep[EPS]]:
         return [
-            cast(NotNoneStep[EPS], s) for s in self.steps if s.is_not_none()
+            NotNoneStep.from_step(s) for s in self.steps if s.is_not_none()
         ]
 
     def append_step(self, step: Step[EPS]) -> Self:
@@ -67,7 +67,7 @@ class Episodes(Generic[EPS]):
         (ls, la, lr, li) = self._steps[-1].details
 
         if not self._steps[-1].is_end():
-            assert la is None
+            assert la is not None
             assert lr is None
             self._steps[-1] = Step(ls, a, r, i1)
             self._steps.append(s2)

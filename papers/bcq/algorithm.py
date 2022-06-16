@@ -1,9 +1,11 @@
 import setup
-from utils.common import (ActionInfo, Transition, resolve_transitions)
+from utils.algorithm import (ActionInfo)
+from utils.step import NotNoneStep, Step
+from utils.transition import (Transition, resolve_transitions)
 from torch import nn
 from collections import deque
 import torch
-from utils.preprocess import Preprocess
+from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from typing import Union
@@ -24,7 +26,7 @@ Reward = int
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[O, S]):
+class Preprocess(PreprocessI[O, S]):
 
     def __init__(self):
         pass
@@ -171,8 +173,9 @@ class BCQ(Algorithm[S]):
             for (s, a, r, sn, done) in zip(states, actions, rewards,
                                            next_states, dones):
                 self.replay_buffer.append(
-                    Transition((s, (a.numpy(), dict()), r.item(), sn,
-                                done.item() == 1)))
+                    Transition((NotNoneStep(s, a.numpy(), r.item()),
+                                Step(sn, None, None,
+                                     dict(end=done.item() == 1)))))
 
     def manual_train(self):
 

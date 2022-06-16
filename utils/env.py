@@ -141,12 +141,10 @@ def offline_train_and_eval(
 
 
 def make_train_and_eval_env(
-        env_name: str,
-        wrappers: List[
-            Callable[[gym.Env, Union[Literal['train'], Literal['eval']]],
-                     gym.Env]] = [],
+        envs: Union[str, Tuple[gym.Env, gym.Env]],
+        wrappers: List[Callable[[gym.Env], gym.Env]] = [],
         seed: int = 0) -> Tuple[gym.Env[O, Action], gym.Env[O, Action]]:
-    train_env = gym.make(env_name)
+    train_env = gym.make(envs) if isinstance(envs, str) else envs[0]
     train_env.seed(seed)
     train_env.action_space.seed(seed)
     train_env.observation_space.seed(seed)
@@ -154,9 +152,9 @@ def make_train_and_eval_env(
 
     # %%
     for w in wrappers:
-        train_env = w(train_env, 'train')
+        train_env = w(train_env)
 
-    eval_env = gym.make(env_name)
+    eval_env = gym.make(envs) if isinstance(envs, str) else envs[1]
     eval_env.seed(seed + 5)
     eval_env.action_space.seed(seed + 5)
     eval_env.observation_space.seed(seed + 5)
@@ -164,6 +162,6 @@ def make_train_and_eval_env(
 
     # %%
     for w in wrappers:
-        eval_env = w(eval_env, 'eval')
+        eval_env = w(eval_env)
 
     return train_env, eval_env

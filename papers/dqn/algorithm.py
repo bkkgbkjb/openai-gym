@@ -1,11 +1,13 @@
 import setup
-from utils.common import ActionInfo, Transition, TransitionTuple, resolve_transitions
+from utils.common import Info
+from utils.transition import Transition, TransitionTuple, resolve_transitions
+from utils.algorithm import ActionInfo
 from torch import nn
 import math
 from collections import deque
 import torch
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
-from utils.preprocess import Preprocess
+from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from typing import List, Tuple, Optional, cast, Callable, Dict, Any
 import numpy as np
@@ -21,7 +23,7 @@ Reward = int
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[Observation, State]):
+class Preprocess(PreprocessI[Observation, State]):
 
     def __init__(self):
         pass
@@ -113,9 +115,7 @@ class DQNAlgorithm(Algorithm[State]):
             return np.asarray([maxi.item()], dtype=np.int64)
 
     def after_step(self, transition: TransitionTuple[State]):
-        (s, a, r, sn, an) = transition
-        assert isinstance(an, tuple) or an is None
-        self.replay_memory.append(Transition((s, a, r, sn, an)))
+        self.replay_memory.append(Transition(transition))
 
         if self.times != 0 and self.times % (self.update_times) == 0:
 
@@ -168,11 +168,8 @@ class DQNAlgorithm(Algorithm[State]):
 
         self.report(dict(loss=loss))
 
-    def on_episode_termination(self, sar: Tuple[List[State], List[ActionInfo],
-                                                List[Reward]]):
-        (s, a, r) = sar
-        assert len(s) == len(a) + 1
-        assert len(s) == len(r) + 1
+    def on_episode_termination(self, sari: Tuple[List[State], List[ActionInfo],
+                                                 List[Reward], List[Info]]):
         pass
 
 

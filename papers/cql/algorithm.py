@@ -1,9 +1,11 @@
 import setup
-from utils.common import (ActionInfo, Transition, TransitionTuple, resolve_transitions)
+from utils.transition import (Transition, TransitionTuple, resolve_transitions)
+from utils.algorithm import ActionInfo
 from torch import nn
 from collections import deque
 import torch
-from utils.preprocess import Preprocess
+from utils.preprocess import PreprocessI
+from utils.step import (NotNoneStep, Step)
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from typing import Union
@@ -22,6 +24,21 @@ State = Observation
 Reward = int
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+class Preprocess(PreprocessI[Observation, State]):
+
+    def __init__(self):
+        pass
+
+    def on_agent_reset(self):
+        pass
+
+    def get_current_state(self, h: List[Observation]) -> State:
+        assert len(h) > 0
+
+        # assert h[-1].shape == (4, 1, 84, 84)
+        return torch.from_numpy(h[-1]).type(torch.float32).to(DEVICE)
 
 
 class VFunction(NeuralNetworks):
@@ -160,8 +177,9 @@ class CQL_SAC(Algorithm[State]):
             for (s, a, r, sn, done) in zip(states, actions, rewards,
                                            next_states, dones):
                 self.replay_memory.append(
-                    Transition((s, (a.numpy(), dict()), r.item(), sn,
-                                done.item() == 1)))
+                    Transition((NotNoneStep(s, a.numpy(), r.item()),
+                                Step(sn, None, None,
+                                     dict(end=done.item() == 1)))))
 
     @property
     def alpha(self):
@@ -321,18 +339,3 @@ class CQL_SAC(Algorithm[State]):
                 q_loss1=q_val_loss1,
                 q_loss2=q_val_loss2,
             ))
-
-
-class Preprocess(Preprocess[Observation, State]):
-
-    def __init__(self):
-        pass
-
-    def on_agent_reset(self):
-        pass
-
-    def get_current_state(self, h: List[Observation]) -> State:
-        assert len(h) > 0
-
-        # assert h[-1].shape == (4, 1, 84, 84)
-        return torch.from_numpy(h[-1]).type(torch.float32).to(DEVICE)

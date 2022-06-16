@@ -8,7 +8,7 @@ from torch import nn
 from collections import deque
 import torch
 from utils.nets import NeuralNetworks
-from utils.preprocess import Preprocess
+from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 
 from typing import (
@@ -32,7 +32,7 @@ Reward = float
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(Preprocess[Observation, State]):
+class Preprocess(PreprocessI[Observation, State]):
 
     def __init__(self):
         pass

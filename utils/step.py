@@ -1,5 +1,6 @@
 from abc import ABC
 from typing import Generic, Tuple, TypeVar, Optional, cast
+from typing_extensions import Self
 
 from utils.common import Info, Action, Reward, AllAllowedStates, AllowedStates
 import numpy as np
@@ -57,8 +58,11 @@ SS = TypeVar('SS', bound=AllowedStates)
 
 class Step(BaseStep[SS, Optional[Action], Optional[Reward]], Generic[SS]):
 
-    def __init__(self, s: SS, a: Optional[Action], r: Optional[Reward],
-                 i: Optional[Info]):
+    def __init__(self,
+                 s: SS,
+                 a: Optional[Action],
+                 r: Optional[Reward],
+                 i: Optional[Info] = None):
         super().__init__(s, a, r, dict(end=False) if i is None else i)
 
         assert self.a is None or isinstance(self.a, np.ndarray)
@@ -70,8 +74,14 @@ class Step(BaseStep[SS, Optional[Action], Optional[Reward]], Generic[SS]):
 
 class NotNoneStep(BaseStep[NNS, Action, Reward], Generic[NNS]):
 
-    def __init__(self, s: NNS, a: Action, r: Reward, i: Info):
-        super().__init__(s, a, r, i)
+    def __init__(self, s: NNS, a: Action, r: Reward, i: Optional[Info] = None):
+        super().__init__(s, a, r, dict(end=False) if i is None else i)
+
+    @classmethod
+    def from_step(cls, step: Step[NNS]) -> Self:
+        assert step.action is not None
+        assert step.reward is not None
+        return cls(step.state, step.action, step.reward, step.info)
 
     def to_step(self) -> Step[NNS]:
-        return cast(Step[NNS], self)
+        return Step(self.state, self.action, self.reward, self.info)

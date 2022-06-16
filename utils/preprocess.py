@@ -7,7 +7,7 @@ O = TypeVar("O")
 S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames], covariant=True)
 
 
-class Preprocess(Protocol[O, S]):
+class PreprocessI(Protocol[O, S]):
 
     @abstractmethod
     def get_current_state(self, h: List[O]) -> S:

@@ -18,7 +18,7 @@ from typing import (
     TypeVar,
 )
 from utils.algorithm import Algorithm, ActionInfo
-from utils.preprocess import Preprocess
+from utils.preprocess import PreprocessI
 from utils.common import Action, Info, Reward
 from torch.utils.data import DataLoader
 
@@ -36,7 +36,7 @@ class Agent(Generic[AO, AS]):
         self,
         env: gym.Env[AO, Action],
         algm: Algorithm[AS],
-        preprocess: Preprocess[AO, AS],
+        preprocess: PreprocessI[AO, AS],
     ):
         self.env = env
         self.algm = algm
@@ -204,7 +204,7 @@ OO = TypeVar("OO")
 class OfflineAgent(Generic[OO, OS]):
 
     def __init__(self, dataloader: DataLoader, algm: Algorithm[OS],
-                 preprocess: Preprocess[OO, OS]):
+                 preprocess: PreprocessI[OO, OS]):
         self.dataloader = dataloader
         self.algm = algm
         self.preprocess = preprocess
