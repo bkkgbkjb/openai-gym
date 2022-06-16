@@ -24,6 +24,9 @@ class Algorithm(Generic[S]):
     @abstractmethod
     def manual_train(self):
         raise NotImplementedError()
+    
+    def on_env_reset(self, info: Dict[str, Any]):
+        pass
 
     def after_step(self, transition: TransitionTuple[S]):
         pass

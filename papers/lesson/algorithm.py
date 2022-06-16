@@ -99,7 +99,6 @@ class LowActor(NeuralNetworks):
         self.state_dim = state_dim
         self.goal_dim = goal_dim
         self.action_dim = action_dim
-        self.action_scale = action_scale
 
     def forward(self, s: State, g: torch.Tensor) -> torch.Tensor:
         assert s.size(1) == self.state_dim
@@ -160,6 +159,9 @@ class LESSON(Algorithm):
         self.times = 0
         self.replay_memory = ReplayBuffer((self.state_dim, ),
                                           (self.action_dim, ))
+    
+    def on_env_reset(self, info: Dict[str, Any]):
+        assert info['desired_goal']
 
     @torch.no_grad()
     def take_action(self, state: State, goal: Goal) -> Action:
@@ -167,10 +169,10 @@ class LESSON(Algorithm):
         return action.detach().cpu().squeeze(0).numpy()
 
     def after_step(self, transition: TransitionTuple[State]):
-        self.replay_memory.append(Transition(transition))
+        # self.replay_memory.append(Transition(transition))
 
-        if self.replay_memory.len >= self.start_traininig_size:
-            self.train()
+        # if self.replay_memory.len >= self.start_traininig_size:
+        #     self.train()
 
         self.times += 1
 

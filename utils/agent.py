@@ -83,12 +83,26 @@ class Agent(Generic[AO, AS]):
             return a
         return (a, dict(end=False))
 
+    def format_env_reset(self, env: gym.Env) -> AO:
+        o = env.reset()
+
+        if not isinstance(o, tuple):
+            self.algm.on_env_reset(dict())
+            return o
+
+        assert len(o) == 2
+        assert isinstance(o[1], dict)
+        self.algm.on_env_reset(o[1])
+        return cast(AO, o[0])
+
     def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[AO]]]:
         assert len(self.eval_observation_episode) == 0
         assert not self.end, "should reset before eval agnet"
         self.toggleEval(True)
 
-        o = cast(AO, env.reset())
+        # o = cast(AO, env.reset())
+        o = self.format_env_reset(env)
+
         self.eval_observation_episode.append(o)
 
         s = False
@@ -132,7 +146,8 @@ class Agent(Generic[AO, AS]):
         assert not self.end, "agent needs to be reset before training"
         self.toggleEval(False)
 
-        o = cast(AO, self.env.reset())
+        # o = cast(AO, self.env.reset())
+        o = self.format_env_reset(self.env)
         self.observation_episode.append(o)
         self.state_episode.append(
             self.get_current_state(self.observation_episode))
@@ -261,12 +276,25 @@ class OfflineAgent(Generic[OO, OS]):
 
         return actinfo
 
+    def format_env_reset(self, env: gym.Env) -> OO:
+        o = env.reset()
+
+        if not isinstance(o, tuple):
+            self.algm.on_env_reset(dict())
+            return o
+
+        assert len(o) == 2
+        assert isinstance(o[1], dict)
+        self.algm.on_env_reset(o[1])
+        return o[0]
+
     def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[OO]]]:
         assert len(self.eval_observation_episode) == 0
         self.env = env
         self.toggleEval(True)
 
-        o = cast(OO, env.reset())
+        # o = cast(OO, env.reset())
+        o = self.format_env_reset(env)
         self.eval_observation_episode.append(o)
 
         s = False
