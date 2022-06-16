@@ -9,21 +9,21 @@ from utils.reporter import get_reporter
 from utils.env import train_and_eval, make_train_and_eval_env
 from utils.env_sb3 import RecordVideo
 
-j = 0
+train_env = gym.make('Ant-v3')
+eval_env = gym.make('Ant-v3')
+eval_env = RecordVideo(eval_env,
+                       'vlog/td3-on-ant',
+                       episode_trigger=lambda episode_id: episode_id % 5 == 0,
+                       name_prefix='td3-on-ant')
 
-train_env, eval_env = make_train_and_eval_env("Ant-v3", [
-    lambda env, kind: RecordVideo(
-        env,
-        'vlog/td3-ant',
-        episode_trigger=lambda episode_id: episode_id % 5 == 0,
-        name_prefix='td3-on-ant') if kind == 'eval' else env
-], RANDOM_SEED)
+train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [],
+                                              RANDOM_SEED)
 
 # %%
 
 agent = Agent(
     train_env,
-    TD3(train_env.observation_space.shape[0], train_env.action_space.shape[0]),
+    TD3(train_env.observation_space.shape[0], train_env.action_space.shape[0], 1),
     Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
