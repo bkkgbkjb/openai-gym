@@ -42,11 +42,7 @@ class GoalWrapper(Wrapper):
         self.distance_threshold = 1.5
         print("distance threshold in create_maze", self.distance_threshold)
 
-        self.observation_space = gym.spaces.Dict(OrderedDict({
-            'observation': ob_space,
-            'desired_goal': self.goal_space,
-            'achieved_goal': self.goal_space,
-        }))
+        self.observation_space = ob_space
         self.random_start = random_start
 
         # fix goal
@@ -108,7 +104,10 @@ class GoalWrapper(Wrapper):
         if self.top_down:
             mask = np.array([0.0] * 2 + [1.0] * (out['observation'].shape[0] - 2))
             out['observation'] = out['observation'] * mask
-        return out, reward, done, info
+        
+        info['desired_goal']  = out['desired_goal']
+        info['achieved_goal'] = out['achieved_goal']
+        return out['observation'], reward, done, info
 
     def reset(self):
         if self.fix_goal:
@@ -140,8 +139,11 @@ class GoalWrapper(Wrapper):
             # print("obs", out['observation'].shape)
             mask = np.array([0.0] * 2 + [1.0] * (out['observation'].shape[0] - 2))
             out['observation'] = out['observation'] * mask
-        return out
+        info = dict(desired_goal = out['desired_goal'], achieved_goal = out['achieved_goal'])
+        return out['observation'], info
 
+    def seed(self, seed: int = None):
+        self.env.seed(seed)
 
 def create_maze_env(env_name=None, top_down_view=False, maze_size_scaling=4, random_start=True, goal_args=None,
                     fix_goal=True, test=None):
