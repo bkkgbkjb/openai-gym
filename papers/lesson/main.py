@@ -1,15 +1,22 @@
 import setup
-from algorithm import LESSON, Preprocess
+from lesson import LESSON, Preprocess
 from utils.agent import Agent
 import gym
 from setup import RANDOM_SEED
 from utils.reporter import get_reporter
 from utils.env import train_and_eval, make_train_and_eval_env
 from goal_env.mujoco import *
-from gym.wrappers import rescale_action
+from utils.env_sb3 import RecordVideo, RescaleAction
 
 # %%
-train_env, eval_env = make_train_and_eval_env("AntMaze1-v1", [], RANDOM_SEED)
+train_env = gym.make('AntMaze1-v1')
+eval_env = gym.make('AntMaze1-v1')
+eval_env = RecordVideo(eval_env,
+                       'vlog/lesson',
+                       episode_trigger=lambda episode_id: episode_id % 5 == 0,
+                       name_prefix='lesson')
+train_env, eval_env = make_train_and_eval_env(
+    (train_env, eval_env), [lambda env: RescaleAction(env, 16)], RANDOM_SEED)
 
 # %%
 

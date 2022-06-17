@@ -156,8 +156,10 @@ class Agent(Generic[AO, AS]):
             actinfo = self.get_action(self.state_episode[-1])
 
             act, info = actinfo
-            (obs, rwd, stop, _) = self.env.step(act[0] if isinstance(
+            (obs, rwd, stop, env_info) = self.env.step(act[0] if isinstance(
                 self.env.action_space, gym.spaces.Discrete) else act)
+
+            info['env_info'] = env_info
 
             self.action_episode.append(act)
             self.info_episode.append(info)

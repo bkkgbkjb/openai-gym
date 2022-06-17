@@ -5,16 +5,13 @@ from utils.transition import (
     resolve_transitions,
 )
 from torch import nn
-from collections import deque
 import torch
 from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
-from typing import Union
 from utils.nets import NeuralNetworks, layer_init
 
-from typing import List, Tuple, Any, Optional, Callable, Dict
-import numpy as np
+from typing import List, Tuple
 
 from utils.replay_buffer import ReplayBuffer
 
@@ -132,10 +129,11 @@ class PaiFunction(NeuralNetworks):
 
 class NewSAC(Algorithm):
 
-    def __init__(self, n_state: int, n_actions: int, action_scale: float):
+    def __init__(self, n_state: int, n_actions: int, action_scale: float, no_auto_train: bool = False):
         self.name = "new-sac"
         self.n_actions = n_actions
         self.n_state = n_state
+        self.no_auto_train = no_auto_train
 
         self.gamma = 0.99
         self.action_scale = action_scale
@@ -189,7 +187,7 @@ class NewSAC(Algorithm):
         # assert isinstance(an, tuple) or an is None
         self.replay_memory.append(Transition(transition))
 
-        if self.replay_memory.len >= self.start_traininig_size:
+        if self.replay_memory.len >= self.start_traininig_size and not self.no_auto_train:
             self.train()
 
         self.times += 1

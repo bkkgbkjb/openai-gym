@@ -1,1 +1,1 @@
-from algorithm import NewSAC
+from papers.sac.sac import NewSAC

@@ -1,5 +1,5 @@
 import setup
-from algorithm import NewSAC, Preprocess
+from sac import NewSAC, Preprocess
 from utils.agent import Agent
 import gym
 from setup import RANDOM_SEED

@@ -1,13 +1,12 @@
 from abc import abstractmethod
 from typing import Callable, Dict, Generic, Tuple, TypeVar, List, Union, Any, Union
-from utils.common import Action, Info, Reward
+from utils.common import Action, Info, Reward, ActionInfo
 from utils.env_sb3 import LazyFrames
 from utils.transition import TransitionTuple
 
 import torch
 
 S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
-ActionInfo = Tuple[Action, Dict[str, Any]]
 
 
 class Algorithm(Generic[S]):

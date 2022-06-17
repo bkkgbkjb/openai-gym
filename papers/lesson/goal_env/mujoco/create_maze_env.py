@@ -107,7 +107,8 @@ class GoalWrapper(Wrapper):
         
         info['desired_goal']  = out['desired_goal']
         info['achieved_goal'] = out['achieved_goal']
-        return out['observation'], reward, done, info
+        info['observation'] = out['observation']
+        return out['observation'], reward, False, info
 
     def reset(self):
         if self.fix_goal:
@@ -139,7 +140,7 @@ class GoalWrapper(Wrapper):
             # print("obs", out['observation'].shape)
             mask = np.array([0.0] * 2 + [1.0] * (out['observation'].shape[0] - 2))
             out['observation'] = out['observation'] * mask
-        info = dict(desired_goal = out['desired_goal'], achieved_goal = out['achieved_goal'])
+        info = dict(desired_goal = out['desired_goal'], achieved_goal = out['achieved_goal'], observation = out['observation'])
         return out['observation'], info
 
     def seed(self, seed: int = None):
