@@ -1,5 +1,5 @@
 import setup
-from utils.common import Info
+from utils.common import Info, ActionInfo
 from utils.step import NotNoneStep, Step
 from utils.transition import (
     Transition,
@@ -125,7 +125,7 @@ class RepresentationNetwork(NeuralNetworks):
         return self.net(s)
 
 
-class LowNetwork:
+class LowNetwork(Algorithm):
 
     def __init__(self, state_dim: int, goal_dim: int, action_dim: int):
         self.state_dim = state_dim
@@ -163,6 +163,56 @@ class LowNetwork:
     def pertub(self, act: np.ndarray):
         act += 0.2 * 1.0 * np.random.randn(self.action_dim)
         return act.clip(-1.0, 1.0)
+    
+    def on_episode_termination(self, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]):
+        pass
+
+
+class HighNetwork(Algorithm):
+
+    def __init__(self, state_dim: int, goal_dim: int, action_dim: int) -> None:
+        self.name = 'lesson-high'
+
+        self.action_dim = action_dim
+        self.state_dim = state_dim
+        self.goal_dim = goal_dim
+
+        self.sac = NewSAC(self.state_dim + self.goal_dim, self.goal_dim, 1.0)
+
+        self.random_episode = 20
+        self.reset()
+
+    def reset(self):
+        self.dg = None
+        self.ag = None
+        self.epoch = 0
+
+    def on_env_reset(self, info: Dict[str, Any]):
+        self.dg = info['desired_goal']
+        self.ag = info['rep_ag']
+
+    @torch.no_grad()
+    def take_action(self, s: State) -> ActionInfo:
+        assert self.dg is not None
+        assert self.ag is not None
+
+        act = None
+        if self.epoch <= self.random_episode:
+            act = torch.from_numpy(np.random.uniform(-20, 20, self.goal_dim))
+
+        else:
+            obs = torch.cat([s, self.dg])
+            act = self.sac.take_action(obs)
+
+        return ((self.ag + act).clip(-200, 200), dict(raw_action=act))
+
+    def after_step(self, transition: TransitionTuple[State]):
+        # return super().after_step(transition)
+        pass
+
+    def on_episode_termination(self, sari: Tuple[List[State], List[Action],
+                                                 List[Reward], List[Info]]):
+        self.epoch += 1
 
 
 class LESSON(Algorithm):
@@ -183,8 +233,8 @@ class LESSON(Algorithm):
         self.low_network = LowNetwork(self.state_dim, self.goal_dim,
                                       self.action_dim)
 
-        self.high_network = NewSAC(self.state_dim + self.goal_dim,
-                                   self.goal_dim, 1.0)
+        self.high_network = HighNetwork(self.state_dim, self.goal_dim,
+                                        self.action_dim)
 
         self.representation_network = RepresentationNetwork(
             self.state_dim, self.goal_dim)
@@ -197,13 +247,12 @@ class LESSON(Algorithm):
         self.total_steps = 0
         self.inner_steps = 0
         self.epoch = 0
-        self.high_buffer = ReplayBuffer((self.state_dim, ),
-                                        (self.action_dim, ))
-        self.high_action_for_low = None
 
-        self.last_high_act = None
+        self.current_high_act = None
         self.last_high_obs = None
-        self.high_reward = 0.
+        self.last_high_act = None
+        self.high_reward = 0.0
+
         self.end = False
 
     def on_env_reset(self, info: Dict[str, Any]):
@@ -211,35 +260,10 @@ class LESSON(Algorithm):
         self.desired_goal = info['desired_goal']
 
         obs = info['observation']
-        self.achieved_goal = self.representation_network(
-            obs).detach().cpu().nump()
+        info['rep_ag'] = self.representation_network(obs).detach().cpu().nump()
 
-    def step_high_network(self, s: State):
-        if self.last_high_obs is not None and self.last_high_act is not None:
-            self.high_buffer.append(
-                Transition(
-                    (NotNoneStep(self.last_high_obs,
-                                 self.last_high_act, self.high_reward,
-                                 dict(end=self.end)), Step(s, None, None))))
-
-        self.high_reward = 0
-        self.last_high_obs = s
-
-        hi_act = None
-        if self.epoch <= self.high_random_episode:
-            hi_act = torch.from_numpy(np.random.uniform(
-                -20, 20, self.goal_dim))
-        else:
-            hi_act_obs = torch.cat([s, self.desired_goal])
-            hi_act = self.high_network.take_action(hi_act_obs)
-        self.last_high_act = hi_act.detach().cpu().numpy()
-
-        assert hi_act is not None
-        self.high_action_for_low = (self.achieved_goal + hi_act).clip(
-            -200, 200)
-
-        if self.high_buffer.len > self.mini_batch_size:
-            self.update_high()
+        self.high_network.on_env_reset(info)
+        self.low_network.on_env_reset(info)
 
     def update_high(self):
         raise NotImplementedError()
@@ -247,36 +271,51 @@ class LESSON(Algorithm):
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         if self.inner_steps % self.c == 0:
-            self.step_high_network(state)
+            (act, info) = self.high_network.take_action(state)
 
-        assert self.high_action_for_low is not None
-        act = self.low_network.take_action(state, self.high_action_for_low)
+            self.current_high_act = act
+            self.last_high_obs = state
+            self.last_high_act = info['raw_act']
 
-        self.inner_steps += 1
-        self.total_steps += 1
-
-        self.update_phi()
+        assert self.current_high_act is not None
+        act = self.low_network.take_action(
+            state, torch.from_numpy(self.current_high_act))
 
         return act
-    
+
     def update_phi(self):
         raise NotImplementedError()
 
     def after_step(self, transition: TransitionTuple[State]):
         (s1, s2) = transition
 
-        obs = s2.state
         self.high_reward += s1.reward
 
-        self.achieved_goal = self.representation_network(obs).detach().cpu()
+        if self.inner_steps != 0 and self.inner_steps % (self.c - 1) == 0:
+            assert self.last_high_obs is not None
+            assert self.last_high_act is not None
+
+            self.high_network.after_step(
+                (NotNoneStep(self.last_high_obs, self.last_high_act,
+                             self.high_reward), Step(s2.state, None, None)))
+
+            self.high_reward = 0.0
+
+        obs = s2.state
+        # self.high_reward += s1.reward
+
+        # self.achieved_goal = self.representation_network(obs).detach().cpu()
 
         if s1.info['end']:
             self.end = True
 
+        self.inner_steps += 1
+        self.total_steps += 1
+
     def on_episode_termination(self, sari: Tuple[List[State], List[Action],
                                                  List[Reward], List[Info]]):
+
+        self.high_network.on_episode_termination(sari)
+        self.low_network.on_episode_termination(sari)
         self.epoch += 1
         self.inner_steps = 0
-
-    def train(self):
-        pass
