@@ -53,7 +53,6 @@ class Agent(Generic[AO, AS]):
         return state
 
     def reset(self, ):
-        self.ready_act: Optional[ActionInfo] = None
         self.end = False
 
         self.observation_episode: List[AO] = []
@@ -100,7 +99,6 @@ class Agent(Generic[AO, AS]):
         assert not self.end, "should reset before eval agnet"
         self.toggleEval(True)
 
-        # o = cast(AO, env.reset())
         o = self.format_env_reset(env)
 
         self.eval_observation_episode.append(o)
@@ -146,7 +144,6 @@ class Agent(Generic[AO, AS]):
         assert not self.end, "agent needs to be reset before training"
         self.toggleEval(False)
 
-        # o = cast(AO, self.env.reset())
         o = self.format_env_reset(self.env)
         self.observation_episode.append(o)
         self.state_episode.append(
@@ -156,7 +153,7 @@ class Agent(Generic[AO, AS]):
 
         while not stop:
 
-            actinfo = self.ready_act or self.get_action(self.state_episode[-1])
+            actinfo = self.get_action(self.state_episode[-1])
 
             act, info = actinfo
             (obs, rwd, stop, _) = self.env.step(act[0] if isinstance(
@@ -173,20 +170,10 @@ class Agent(Generic[AO, AS]):
 
             assert len(self.state_episode) == len(self.observation_episode)
 
-            if stop:
-                self.ready_act = None
-            else:
-                self.ready_act = self.get_action(self.state_episode[-1])
-
             self.algm.after_step(
                 (NotNoneStep(self.state_episode[-2], self.action_episode[-1],
                              self.reward_episode[-1], self.info_episode[-1]),
-                 Step(
-                     self.state_episode[-1],
-                     None if self.ready_act is None else self.ready_act[0],
-                     None,
-                     dict(end=True)
-                     if self.ready_act is None else self.ready_act[1])))
+                 Step(self.state_episode[-1], None, None, dict(end=stop))))
 
         self.info_episode.append(dict(end=True))
         assert len(self.state_episode) == len(self.observation_episode) == len(
