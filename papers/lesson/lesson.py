@@ -185,8 +185,12 @@ class HighNetwork(Algorithm):
 
         self.random_episode = 20
         self.reset()
+    
+    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
+        self.sac.set_reporter(reporter)
 
     def reset(self):
+        self.times = 0
         self.dg = None
         self.ag = None
         self.epoch = 0
@@ -216,6 +220,9 @@ class HighNetwork(Algorithm):
 
     def after_step(self, transition: TransitionTuple[State]):
         self.sac.after_step(transition)
+        self.times += 1
+        if self.times >= 128:
+            self.sac.train()
 
     def on_episode_termination(self, sari: Tuple[List[State], List[Action],
                                                  List[Reward], List[Info]]):
@@ -284,7 +291,11 @@ class LESSON(Algorithm):
             (act, info) = self.high_network.take_action(state.to(DEVICE))
 
             self.current_high_act = act
-            self.last_high_obs = state
+            self.last_high_obs = torch.cat([
+                state,
+                torch.from_numpy(self.desired_goal).type(
+                    torch.float32).to(DEVICE)
+            ])
             self.last_high_act = info['raw_action']
 
         assert self.current_high_act is not None
@@ -313,7 +324,13 @@ class LESSON(Algorithm):
 
             self.high_network.after_step(
                 (NotNoneStep(self.last_high_obs, self.last_high_act,
-                             self.high_reward), Step(s2.state, None, None)))
+                             self.high_reward),
+                 Step(
+                     torch.cat([
+                         s2.state,
+                         torch.from_numpy(self.desired_goal).type(
+                             torch.float32).to(DEVICE)
+                     ]), None, None)))
 
             self.high_reward = 0.0
 
@@ -328,6 +345,10 @@ class LESSON(Algorithm):
         self.inner_steps += 1
         self.total_steps += 1
 
+    def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
+        self.high_network.set_reporter(reporter)
+        self.low_network.set_reporter(reporter)
+
     def on_episode_termination(self, sari: Tuple[List[State], List[Action],
                                                  List[Reward], List[Info]]):
         (s, a, r, i) = sari
@@ -336,7 +357,12 @@ class LESSON(Algorithm):
         self.high_network.after_step(
             (NotNoneStep(self.last_high_obs, self.last_high_act,
                          self.high_reward),
-             Step(s[-1], None, None, dict(end=True))))
+             Step(
+                 torch.cat([
+                     s[-1],
+                     torch.from_numpy(self.desired_goal).type(
+                         torch.float32).to(DEVICE)
+                 ]), None, None, dict(end=True))))
 
         self.high_reward = 0.0
 
