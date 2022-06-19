@@ -1,19 +1,18 @@
-from typing import Union, TypeVar, List, Generic, cast
+from typing import Union, TypeVar, List, Generic, cast, Tuple, List
 from utils.step import Step, NotNoneStep
 from utils.transition import Transition
 import numpy as np
-from utils.common import AllowedStates
+from utils.common import AllowedStates, Action, Reward, Info
 import math
 from typing_extensions import Self
 
 ES = TypeVar("ES", bound=Union[Step, NotNoneStep])
 EpisodeGeneric = List[ES]
 
-EPS = TypeVar('EPS', bound=AllowedStates)
+EPS = TypeVar("EPS", bound=AllowedStates)
 
 
 class Episodes(Generic[EPS]):
-
     def __init__(self):
         self._steps: List[Step[EPS]] = []
         self.returns_computed = False
@@ -40,9 +39,7 @@ class Episodes(Generic[EPS]):
 
     @property
     def non_stop_steps(self) -> List[NotNoneStep[EPS]]:
-        return [
-            NotNoneStep.from_step(s) for s in self.steps if s.is_not_none()
-        ]
+        return [NotNoneStep.from_step(s) for s in self.steps if s.is_not_none()]
 
     def append_step(self, step: Step[EPS]) -> Self:
         (_, a, r, info) = step.details
@@ -55,6 +52,23 @@ class Episodes(Generic[EPS]):
         self._steps.append(step)
 
         return self
+
+    def from_list(self, sari: Tuple[List[EPS], List[Action], List[Reward], List[Info]]):
+        (s, a, r, info) = sari
+        assert len(s) == len(a) + 1 == len(r) + 1 == len(info)
+
+        for i in range(len(a)):
+
+            self.append_step(Step(s[i], a[i], r[i], info[i]))
+
+        self.append_step(Step(s[-1], None, None, info[-1]))
+
+        return self
+
+    def get_steps(self, s_list: List[int]) -> List[Step[EPS]]:
+
+        steps = self.steps
+        return [steps[i] for i in s_list]
 
     def append_transition(self, transition: Transition[EPS]) -> Self:
         (s1, s2) = transition.as_tuple()
@@ -101,13 +115,13 @@ class Episodes(Generic[EPS]):
         steps = self.steps
         l = self.len
 
-        returns = [float('nan') for _ in range(l)]
+        returns = [float("nan") for _ in range(l)]
 
         (_, a, _, i) = steps[-1].details
 
         next_is_stop = steps[-1].is_end()
 
-        next_value = 0 if next_is_stop else i['value']
+        next_value = 0 if next_is_stop else i["value"]
         returns[-1] = next_value
 
         for j in reversed(range(l - 1)):
@@ -124,8 +138,8 @@ class Episodes(Generic[EPS]):
                 next_value = returns[j]
 
         for i, r in enumerate(returns):
-            assert 'return' not in steps[i].info
-            steps[i].info['return'] = r
+            assert "return" not in steps[i].info
+            steps[i].info["return"] = r
 
         self.returns_computed = True
 
@@ -139,7 +153,7 @@ class Episodes(Generic[EPS]):
 
         for i in range(l):
             (_, a, _, i) = steps[i].details
-            assert 'advantage' not in i
-            i['advantage'] = i['return'] - (i['value'] if a is not None else 0)
+            assert "advantage" not in i
+            i["advantage"] = i["return"] - (i["value"] if a is not None else 0)
 
         self.advantage_computed = True

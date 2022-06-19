@@ -6,24 +6,24 @@ import torch
 from utils.transition import Transition
 from utils.env_sb3 import LazyFrames, resolve_lazy_frames
 
+from utils.episode import Episodes
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
-              torch.Tensor]
+SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+
+E = TypeVar("E", bound=Union[Transition, Episodes])
 
 
-class ReplayBuffer:
+class ReplayBuffer(Generic[E]):
+    def __init__(
+        self,
+        capacity: Optional[int] = int(1e6),
+    ):
+        self.buffer: Deque[E] = deque(maxlen=capacity)
 
-    def __init__(self,
-                 state_shape: Tuple,
-                 action_shape: Tuple,
-                 capacity: Optional[int] = int(1e6)):
-        self.buffer: Deque[Transition] = deque(maxlen=capacity)
-        self.state_shape = state_shape
-        self.action_shape = action_shape
-
-    def append(self, transition: Transition):
-        self.buffer.append(transition)
+    def append(self, e: E):
+        self.buffer.append(e)
 
         return self
 
@@ -39,11 +39,11 @@ class ReplayBuffer:
     def len(self) -> int:
         return len(self.buffer)
 
-    def sample(self, size: int) -> List[Transition]:
+    def sample(self, size: int) -> List[E]:
         assert self.len > 0
         idx = np.random.choice(len(self.buffer), size)
 
-        r: List[Transition] = []
+        r: List[E] = []
         for i in idx:
             r.append(self.buffer[i])
 

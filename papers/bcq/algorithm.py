@@ -152,8 +152,7 @@ class BCQ(Algorithm[S]):
 
     def reset(self):
         self.times = 0
-        self.replay_buffer = ReplayBuffer((self.state_dim, ),
-                                          (self.action_dim, ), None)
+        self.replay_buffer = ReplayBuffer(None)
 
     @torch.no_grad()
     def take_action(self, state: S) -> Union[ActionInfo, Action]:

@@ -164,8 +164,7 @@ class CQL_SAC(Algorithm[State]):
 
     def reset(self):
         self.times = 0
-        self.replay_memory = ReplayBuffer((self.n_state, ), (self.n_actions, ),
-                                          None)
+        self.replay_memory = ReplayBuffer(None)
 
     def on_init(self, info: Dict[str, Any]):
         assert "dataloader" in info

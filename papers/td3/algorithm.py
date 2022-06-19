@@ -118,8 +118,7 @@ class TD3(Algorithm[State]):
 
         self.critic_target2 = self.critic2.clone().no_grad()
 
-        self.replay_buffer = ReplayBuffer((self.n_states, ),
-                                          (self.n_actions, ), int(1e6))
+        self.replay_buffer = ReplayBuffer(int(1e6))
 
         self.noise_generator = lambda: np.random.normal(
             0, 0.1 * self.action_scale, size=self.n_actions)

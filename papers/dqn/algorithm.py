@@ -80,7 +80,7 @@ class DQNAlgorithm(Algorithm[State]):
 
         self.update_target = 250
 
-        self.replay_memory = ReplayBuffer((4, 84, 84), (1, ), int(2e5))
+        self.replay_memory = ReplayBuffer(int(2e5))
 
         self.gamma = gamma
         self.loss_func = torch.nn.MSELoss()

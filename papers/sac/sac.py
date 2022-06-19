@@ -175,7 +175,7 @@ class NewSAC(Algorithm):
 
     def reset(self):
         self.times = 0
-        self.replay_memory = ReplayBuffer((self.n_state, ), (self.n_actions, ))
+        self.replay_memory = ReplayBuffer()
 
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
