@@ -1,5 +1,5 @@
 import setup
-from lesson import LESSON, Preprocess
+from lesson import LESSON, Preprocess, MAX_TIMESTEPS
 from utils.agent import Agent
 import gym
 from setup import RANDOM_SEED

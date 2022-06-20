@@ -10,15 +10,17 @@ from utils.episode import Episodes
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+              torch.Tensor]
 
 E = TypeVar("E", bound=Union[Transition, Episodes])
 
 
 class ReplayBuffer(Generic[E]):
+
     def __init__(
-        self,
-        capacity: Optional[int] = int(1e6),
+            self,
+            capacity: Optional[int] = int(1e6),
     ):
         self.buffer: Deque[E] = deque(maxlen=capacity)
 
@@ -26,6 +28,9 @@ class ReplayBuffer(Generic[E]):
         self.buffer.append(e)
 
         return self
+
+    def details(self) -> List[E]:
+        return list(self.buffer)
 
     def clear(self):
         self.buffer.clear()

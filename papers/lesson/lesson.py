@@ -17,6 +17,8 @@ from typing import List, Tuple, Any, Optional, Callable, Dict
 from papers.sac import NewSAC
 import numpy as np
 
+MAX_TIMESTEPS = 500
+
 Observation = torch.Tensor
 Action = np.ndarray
 
@@ -65,7 +67,7 @@ class LowCritic(NeuralNetworks):
 
     def forward(self, s: State, g: Goal, a: torch.Tensor) -> torch.Tensor:
         assert s.size(1) == self.state_dim
-        assert a.shape[0] == self.action_dim
+        assert a.size(1) == self.action_dim
         assert g.size(1) == self.goal_dim
         return self.net(
             torch.cat([s.to(DEVICE), g.to(DEVICE),
@@ -101,9 +103,10 @@ class LowActor(NeuralNetworks):
     def forward(self, s: State, g: torch.Tensor) -> torch.Tensor:
         assert s.size(1) == self.state_dim
         assert g.size(1) == self.goal_dim
+        assert s.size(0) == g.size(0)
         x = torch.cat([s, g], dim=1)
         act = self.net(x)
-        assert act.shape == (1, self.action_dim)
+        assert act.shape == (s.size(0), self.action_dim)
         return act
 
 
@@ -162,44 +165,45 @@ class LowNetwork(Algorithm):
 
         return act
 
-    def after_step(self, transition: TransitionTuple[State]):
-        pass
-
     def pertub(self, act: np.ndarray):
         act += 0.2 * 1.0 * np.random.randn(self.action_dim)
         return act.clip(-1.0, 1.0)
 
     def sample(self, buffers: ReplayBuffer[Episodes[State]]):
         episodes = buffers.sample(128)
-        time_stamps = np.random.randint(3000, size=128)
 
-        sampled_episodes = [
-            e.get_steps(time_stamps.tolist()) for e in episodes
+        time_stamps = np.random.randint(MAX_TIMESTEPS - 1, size=128)
+
+        sampled_steps = [
+            e.get_step(time_stamps[i]) for i, e in enumerate(episodes)
         ]
 
-        # obs = [s. for s in sampled_steps]
-        obs = torch.as_tensor([[s.state for s in e] for e in sampled_episodes])
+        obs = torch.stack([s.state for s in sampled_steps])
 
-        obs_next = obs[1:]
-        acts = torch.as_tensor([(s.action for s in e)
-                                for e in sampled_episodes])
+        obs_next = torch.stack([s.info['next_obs'] for s in sampled_steps])
 
-        rgs = torch.as_tensor([(s.info['representation_goal'] for s in e)
-                               for e in sampled_episodes])
+        acts = torch.stack([
+            torch.from_numpy(s.action).type(torch.float32).to(DEVICE)
+            for s in sampled_steps
+        ])
 
-        rg_next = rgs[1:]
+        rgs = torch.stack(
+            [s.info['representation_goal'] for s in sampled_steps])
 
-        g = torch.as_tensor([(s.info['hi_act'] for s in e)
-                             for e in sampled_episodes])
+        rg_next = torch.stack([s.info['next_rg'] for s in sampled_steps])
+
+        g = torch.stack([
+            torch.from_numpy(s.info['high_act']).type(torch.float32).to(DEVICE)
+            for s in sampled_steps
+        ])
 
         reward = torch.from_numpy(
-            -np.linalg.norm(rg_next.numpy() - g.numpy(), axis=-1) * 0.1).type(
-                torch.float32)
+            -np.linalg.norm(rg_next.cpu().numpy() - g.cpu().numpy(), axis=-1) *
+            0.1).type(torch.float32).to(DEVICE)
 
         g_next = g
         not_done = (torch.norm(
-            (rg_next - g_next), dim=1) > 0.1).astype(torch.int8).reshape(
-                -1, 1)
+            (rg_next - g_next), dim=1) > 0.1).type(torch.int8).reshape(-1, 1)
         return (obs, obs_next, rgs, rg_next, acts, reward, g, g_next, not_done)
 
     def train(self, low_buffer: ReplayBuffer[Episodes]):
@@ -230,6 +234,8 @@ class LowNetwork(Algorithm):
         critic_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optim.step()
+
+        self.report(dict(actor_loss=actor_loss, critic_loss=critic_loss))
 
 
 class HighNetwork(Algorithm):
@@ -267,7 +273,7 @@ class HighNetwork(Algorithm):
             act = self.sac.take_action(obs)
 
         assert act.shape == (self.goal_dim, )
-        return ((rg.numpy() + act).clip(-200, 200), dict(raw_action=act))
+        return ((rg.cpu().numpy() + act).clip(-200, 200), dict(raw_action=act))
 
     def after_step(self, transition: TransitionTuple[State]):
         self.sac.after_step(transition)
@@ -293,7 +299,6 @@ class LESSON(Algorithm):
 
         self.tau = 5e-3
 
-        self.start_traininig_size = int(1e4)
         self.mini_batch_size = 128
 
         self.low_network = LowNetwork(self.state_dim, self.goal_dim,
@@ -309,7 +314,6 @@ class LESSON(Algorithm):
             self.representation_network.parameters(), 1e-4)
 
         self.c = 50
-        self.high_random_episode = 20
         self.start_update_phi = 10
         self.reset()
 
@@ -330,7 +334,7 @@ class LESSON(Algorithm):
         obs = torch.from_numpy(info["observation"]).type(
             torch.float32).to(DEVICE)
         self.representation_goal = (self.representation_network(
-            obs.unsqueeze(0)).squeeze(0).to(DEVICE))
+            obs.unsqueeze(0)).squeeze(0))
 
         self.reset_episode_info()
 
@@ -341,15 +345,12 @@ class LESSON(Algorithm):
         self.last_high_act = None
         self.high_reward = 0.0
 
-    def update_high(self):
-        pass
-
     @torch.no_grad()
     def take_action(self, state: State) -> ActionInfo:
+        s = state.to(DEVICE)
         if self.inner_steps % self.c == 0:
             (act,
-             info) = self.high_network.take_action(state.to(DEVICE),
-                                                   self.desired_goal,
+             info) = self.high_network.take_action(s, self.desired_goal,
                                                    self.representation_goal)
 
             self.current_high_act = act
@@ -361,7 +362,7 @@ class LESSON(Algorithm):
 
         assert self.current_high_act is not None
         act = self.low_network.take_action(
-            state.unsqueeze(0).to(DEVICE),
+            s.unsqueeze(0),
             torch.from_numpy(self.current_high_act).type(
                 torch.float32).unsqueeze(0).to(DEVICE),
         )
@@ -375,23 +376,18 @@ class LESSON(Algorithm):
         self,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         episodes = self.low_buffer.sample(100)
-        ts = np.random.randint(3000 - self.c, size=100).tolist()
-        hi_obs = obs = [(s.state for s in e.get_steps(ts)) for e in episodes]
-        hi_obs_next = [
-            (s.state
-             for s in e.get_steps(list(map(lambda _ts: _ts + self.c, ts))))
-            for e in episodes
-        ]
-        obs_next = [(s.state
-                     for s in e.get_steps(list(map(lambda _ts: _ts + 1, ts))))
-                    for e in episodes]
 
-        return (
-            torch.tensor(obs, dtype=torch.float32),
-            torch.tensor(obs_next, dtype=torch.float32),
-            torch.tensor(hi_obs, dtype=torch.float32),
-            torch.tensor(hi_obs_next, dtype=torch.float32),
-        )
+        ts = np.random.randint(MAX_TIMESTEPS - self.c, size=100)
+
+        hi_obs = obs = torch.stack(
+            [e.get_step(ts[i]).state for i, e in enumerate(episodes)])
+
+        hi_obs_next = torch.stack(
+            [e.get_step(ts[i] + self.c).state for i, e in enumerate(episodes)])
+        obs_next = torch.stack(
+            [e.get_step(ts[i] + 1).state for i, e in enumerate(episodes)])
+
+        return (obs, obs_next, hi_obs, hi_obs_next)
 
     def update_phi(self):
         (obs, obs_next, hi_obs, hi_obs_next) = self.collect_samples()
@@ -412,7 +408,7 @@ class LESSON(Algorithm):
         representation_loss.backward()
         self.representation_optim.step()
 
-        # self.re
+        self.report(dict(representation_loss=representation_loss))
 
     def after_step(self, transition: TransitionTuple[State]):
         (s1, s2) = transition
@@ -446,12 +442,29 @@ class LESSON(Algorithm):
         self.total_steps += 1
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
+        self.reporter = reporter
         self.high_network.set_reporter(reporter)
         self.low_network.set_reporter(reporter)
 
+    def get_episodes(
+        self, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]
+    ) -> Episodes[State]:
+        episode = Episodes[State]()
+        episode.from_list(sari)
+
+        for i in range(episode.len - 1):
+            episode.get_step(i).info['next_obs'] = episode.get_step(i +
+                                                                    1).state
+            episode.get_step(i).info['next_rg'] = episode.get_step(
+                i + 1).info['representation_goal']
+
+        return episode
+
     def on_episode_termination(self, sari: Tuple[List[State], List[Action],
                                                  List[Reward], List[Info]]):
-        (s, a, r, i) = sari
+
+        (s, _, _, _) = sari
+        assert len(s) == MAX_TIMESTEPS + 1
         assert self.last_high_obs is not None
         assert self.last_high_act is not None
 
@@ -468,8 +481,7 @@ class LESSON(Algorithm):
 
         self.high_network.on_episode_termination(sari)
 
-        episode = Episodes()
-        self.low_buffer.append(episode.from_list(sari))
+        self.low_buffer.append(self.get_episodes(sari))
         for _ in range(20):
             self.low_network.train(self.low_buffer)
 

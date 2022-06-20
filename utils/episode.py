@@ -13,11 +13,15 @@ EPS = TypeVar("EPS", bound=AllowedStates)
 
 
 class Episodes(Generic[EPS]):
+
     def __init__(self):
         self._steps: List[Step[EPS]] = []
         self.returns_computed = False
         self.advantage_computed = False
         self.clear()
+
+    def get_step(self, i: int) -> Step[EPS]:
+        return self.steps[i]
 
     def clear(self) -> Self:
         self._steps = []
@@ -39,7 +43,9 @@ class Episodes(Generic[EPS]):
 
     @property
     def non_stop_steps(self) -> List[NotNoneStep[EPS]]:
-        return [NotNoneStep.from_step(s) for s in self.steps if s.is_not_none()]
+        return [
+            NotNoneStep.from_step(s) for s in self.steps if s.is_not_none()
+        ]
 
     def append_step(self, step: Step[EPS]) -> Self:
         (_, a, r, info) = step.details
@@ -53,7 +59,8 @@ class Episodes(Generic[EPS]):
 
         return self
 
-    def from_list(self, sari: Tuple[List[EPS], List[Action], List[Reward], List[Info]]):
+    def from_list(self, sari: Tuple[List[EPS], List[Action], List[Reward],
+                                    List[Info]]):
         (s, a, r, info) = sari
         assert len(s) == len(a) + 1 == len(r) + 1 == len(info)
 
