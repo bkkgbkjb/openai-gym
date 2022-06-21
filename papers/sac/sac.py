@@ -1,3 +1,4 @@
+import numpy as np
 import setup
 from utils.transition import (
     Transition,
@@ -134,11 +135,13 @@ class NewSAC(Algorithm):
                  n_state: int,
                  n_actions: int,
                  action_scale: float,
-                 no_auto_train: bool = False):
+                 no_auto_train: bool = False,
+                 alpha_tune: bool = True):
         self.name = "new-sac"
         self.n_actions = n_actions
         self.n_state = n_state
         self.no_auto_train = no_auto_train
+        self.alpha_tune = alpha_tune
 
         self.gamma = 0.99
         self.action_scale = action_scale
@@ -160,8 +163,13 @@ class NewSAC(Algorithm):
         self.q1_loss = nn.MSELoss()
         self.q2_loss = nn.MSELoss()
 
-        self.log_alpha = torch.tensor([0.1], requires_grad=True, device=DEVICE)
-        assert self.log_alpha.requires_grad
+        self.log_alpha = torch.tensor(
+            [-1.6094],
+            requires_grad=True if self.alpha_tune else False,
+            device=DEVICE)
+        if self.alpha_tune:
+            assert self.log_alpha.requires_grad
+
         self.target_entropy = -n_actions
 
         self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), 3e-4)
@@ -247,12 +255,14 @@ class NewSAC(Algorithm):
         policy_loss.backward()
         self.p_optimizer.step()
 
-        # Training self.alpha
-        alpha_loss = -(self.log_alpha.exp() *
-                       (new_log_probs + self.target_entropy).detach()).mean()
-        self.log_alpha_optimizer.zero_grad()
-        alpha_loss.backward()
-        self.log_alpha_optimizer.step()
+        if self.alpha_tune:
+            # Training self.alpha
+            alpha_loss = -(
+                self.log_alpha.exp() *
+                (new_log_probs + self.target_entropy).detach()).mean()
+            self.log_alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.log_alpha_optimizer.step()
 
         # # soft update old_v net
         # self.offline_v.soft_update_to(self.online_v, self.tau)
@@ -264,7 +274,7 @@ class NewSAC(Algorithm):
             dict(
                 # value_loss=value_loss,
                 alpha=self.alpha,
-                alpha_loss=alpha_loss,
+                alpha_loss=alpha_loss if self.alpha_tune else 0,
                 policy_loss=policy_loss,
                 q_loss1=q_val_loss1,
                 q_loss2=q_val_loss2,

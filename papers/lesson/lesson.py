@@ -74,7 +74,7 @@ class HighNetwork(Algorithm):
         self.goal_dim = goal_dim
 
         self.sac = NewSAC(self.state_dim + self.goal_dim, self.goal_dim, 20.0,
-                          True)
+                          True, False)
 
         self.random_episode = 300
         self.reset()

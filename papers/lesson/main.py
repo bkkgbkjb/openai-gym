@@ -10,7 +10,7 @@ from utils.env_sb3 import RecordVideo, RescaleAction
 
 # %%
 train_env = gym.make('AntMaze1-v1')
-eval_env = gym.make('AntMaze1-v1')
+eval_env = gym.make('AntMaze1Test-v1')
 eval_env = RecordVideo(eval_env,
                        'vlog/lesson',
                        episode_trigger=lambda episode_id: episode_id % 5 == 0,

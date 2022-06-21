@@ -104,7 +104,7 @@ class GoalWrapper(Wrapper):
         if self.top_down:
             mask = np.array([0.0] * 2 + [1.0] * (out['observation'].shape[0] - 2))
             out['observation'] = out['observation'] * mask
-        
+
         info['desired_goal']  = out['desired_goal']
         info['achieved_goal'] = out['achieved_goal']
         info['observation'] = out['observation']
@@ -143,8 +143,6 @@ class GoalWrapper(Wrapper):
         info = dict(desired_goal = out['desired_goal'], achieved_goal = out['achieved_goal'], observation = out['observation'])
         return out['observation'], info
 
-    def seed(self, seed: int = None):
-        self.env.seed(seed)
 
 def create_maze_env(env_name=None, top_down_view=False, maze_size_scaling=4, random_start=True, goal_args=None,
                     fix_goal=True, test=None):

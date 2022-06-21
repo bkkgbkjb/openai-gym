@@ -57,7 +57,7 @@ for name_t in all_name:
                 "top_down_view": top_down,
                 'test': Test
             },
-            max_episode_steps=500,
+            max_episode_steps=max_timestep,
         )
 
         register(
