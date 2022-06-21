@@ -118,11 +118,11 @@ class RepresentationNetwork(NeuralNetworks):
         self.goal_dim = goal_dim
 
         self.net = nn.Sequential(
-            nn.Linear(self.state_dim, 100),
+            layer_init(nn.Linear(self.state_dim, 100)),
             nn.ReLU(),
-            nn.Linear(100, 100),
+            layer_init(nn.Linear(100, 100)),
             nn.ReLU(),
-            nn.Linear(100, self.goal_dim),
+            layer_init(nn.Linear(100, self.goal_dim)),
         ).to(DEVICE)
 
     def forward(self, s: State):
@@ -153,6 +153,10 @@ class LowNetwork(Algorithm):
         self.training = True
         self.eps = 0.2
         self.gamma = 0.99
+
+        self.tau = 1e-2
+
+        self.train_times = 0
 
     @torch.no_grad()
     def take_action(self, s: torch.Tensor, g: torch.Tensor):
@@ -236,6 +240,12 @@ class LowNetwork(Algorithm):
         self.critic_optim.step()
 
         self.report(dict(actor_loss=actor_loss, critic_loss=critic_loss))
+
+        if self.train_times % 3 == 0:
+            self.actor_target.soft_update_to(self.actor, self.tau)
+            self.critic_target.soft_update_to(self.critic, self.tau)
+
+        self.train_times += 1
 
 
 class HighNetwork(Algorithm):
@@ -426,11 +436,8 @@ class LESSON(Algorithm):
             self.high_network.after_step((
                 NotNoneStep(self.last_high_obs, self.last_high_act,
                             self.high_reward),
-                Step(
-                    torch.cat([s2.state, self.desired_goal]),
-                    None,
-                    None,
-                ),
+                Step(torch.cat([s2.state, self.desired_goal]), None, None,
+                     dict(end=self.has_achieved_goal)),
             ))
 
             self.high_reward = 0.0
@@ -475,14 +482,14 @@ class LESSON(Algorithm):
                 torch.cat([s[-1], self.desired_goal]),
                 None,
                 None,
-                dict(end=True),
+                dict(end=self.has_achieved_goal),
             ),
         ))
 
         self.high_network.on_episode_termination(sari)
 
         self.low_buffer.append(self.get_episodes(sari))
-        for _ in range(20):
+        for _ in range(200):
             self.low_network.train(self.low_buffer)
 
         self.reset_episode_info()
