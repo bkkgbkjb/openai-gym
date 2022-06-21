@@ -113,12 +113,13 @@ class PaiFunction(NeuralNetworks):
         raw_act = normal.rsample()
         assert raw_act.shape == (s.size(0), self.n_action)
 
-        act = self.action_scale * torch.tanh(raw_act)
+        y_t = torch.tanh(raw_act)
+        act = y_t * self.action_scale
 
         raw_log_prob = normal.log_prob(raw_act)
         assert raw_log_prob.shape == (s.size(0), self.n_action)
 
-        mod_log_prob = (self.action_scale**2 - act.pow(2) + 1e-6).log()
+        mod_log_prob = (self.action_scale * (1 - y_t.pow(2)) + 1e-6).log()
         assert mod_log_prob.shape == (s.size(0), self.n_action)
 
         log_prob = (raw_log_prob - mod_log_prob).sum(1, keepdim=True)
@@ -129,7 +130,11 @@ class PaiFunction(NeuralNetworks):
 
 class NewSAC(Algorithm):
 
-    def __init__(self, n_state: int, n_actions: int, action_scale: float, no_auto_train: bool = False):
+    def __init__(self,
+                 n_state: int,
+                 n_actions: int,
+                 action_scale: float,
+                 no_auto_train: bool = False):
         self.name = "new-sac"
         self.n_actions = n_actions
         self.n_state = n_state
@@ -175,12 +180,17 @@ class NewSAC(Algorithm):
 
     def reset(self):
         self.times = 0
+        self.eval = False
         self.replay_memory = ReplayBuffer()
 
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
-        action, _, _ = self.policy.sample(state.unsqueeze(0))
-        return action.detach().cpu().squeeze(0).numpy()
+        action, _, max_actions = self.policy.sample(state.unsqueeze(0))
+        return (max_actions
+                if self.eval else action).detach().cpu().squeeze(0).numpy()
+
+    def on_toggle_eval(self, isEval: bool):
+        self.eval = isEval
 
     def after_step(self, transition: TransitionTuple[State]):
         # (s, a, r, sn, an) = transition

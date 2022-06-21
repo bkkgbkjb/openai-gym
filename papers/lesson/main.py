@@ -15,8 +15,8 @@ eval_env = RecordVideo(eval_env,
                        'vlog/lesson',
                        episode_trigger=lambda episode_id: episode_id % 5 == 0,
                        name_prefix='lesson')
-train_env, eval_env = make_train_and_eval_env(
-    (train_env, eval_env), [lambda env: RescaleAction(env, 16)], RANDOM_SEED)
+train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [],
+                                              RANDOM_SEED)
 
 # %%
 
