@@ -66,8 +66,7 @@ def resolve_transitions(trs: List[Transition[RTS]], state_shape: Tuple,
     assert not states.requires_grad
 
     actions = torch.stack([
-        torch.from_numpy(s1.action).type(torch.float32)
-        if s1.action.dtype == np.float64 else torch.from_numpy(s1.action)
+        s1.action
         for (s1, _) in trs_tuples
     ])
 

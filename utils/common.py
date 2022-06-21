@@ -4,7 +4,7 @@ import numpy as np
 from utils.env_sb3 import LazyFrames
 import torch
 
-Action = np.ndarray
+Action = torch.Tensor
 ActionInfo = Tuple[Action, Dict[str, Any]]
 
 Reward = float

@@ -89,7 +89,7 @@ class PPO(Algorithm[State]):
         c2: float = 0.01,
         gamma: float = 0.99,
     ):
-        self.name = "ppo"
+        self.set_name('ppo')
         self.n_actions = n_actions
         self.network = ActorCritic(n_actions).to(DEVICE)
         self.times = 0
@@ -119,7 +119,7 @@ class PPO(Algorithm[State]):
         act = dist.sample()
 
         return (
-            act.numpy(),
+            act,
             {
                 "log_prob": dist.log_prob(act),
                 "value": value.item()
@@ -164,7 +164,7 @@ class PPO(Algorithm[State]):
                 assert states.shape == (L, 4, 84, 84)
 
                 old_acts = torch.cat(
-                    [torch.from_numpy(s.action) for s in batch])
+                    [s.action for s in batch])
 
                 assert old_acts.shape == (L, )
 

@@ -137,7 +137,7 @@ class NewSAC(Algorithm):
                  action_scale: float,
                  no_auto_train: bool = False,
                  alpha_tune: bool = True):
-        self.name = "new-sac"
+        self.set_name("new-sac")
         self.n_actions = n_actions
         self.n_state = n_state
         self.no_auto_train = no_auto_train
@@ -195,7 +195,7 @@ class NewSAC(Algorithm):
     def take_action(self, state: State) -> Action:
         action, _, max_actions = self.policy.sample(state.unsqueeze(0))
         return (max_actions
-                if self.eval else action).detach().cpu().squeeze(0).numpy()
+                if self.eval else action).detach().cpu().squeeze()
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval

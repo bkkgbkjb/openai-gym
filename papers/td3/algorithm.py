@@ -4,6 +4,7 @@ from utils.transition import (
     TransitionTuple,
     resolve_transitions,
 )
+from utils.common import Action
 from torch import nn
 from collections import deque
 import torch
@@ -24,7 +25,6 @@ from utils.nets import layer_init
 import numpy as np
 
 Observation = torch.Tensor
-Action = np.ndarray
 
 State = Observation
 Reward = float
@@ -88,7 +88,7 @@ class TD3(Algorithm[State]):
 
     def __init__(self, n_states: int, n_actions: int,
                  action_scale: float) -> None:
-        self.name = "td3"
+        self.set_name('td3')
         self.n_actions = n_actions
         self.n_states = n_states
 
@@ -183,13 +183,13 @@ class TD3(Algorithm[State]):
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         if self.times <= self.start_timestamp:
-            return np.random.uniform(-self.action_scale,
+            return torch.from_numpy( np.random.uniform(-self.action_scale,
                                      self.action_scale,
-                                     size=self.n_actions)
+                                     size=self.n_actions)).type(torch.float32)
 
-        act = self.actor(state.unsqueeze(0)).cpu().numpy()
+        act = self.actor(state.unsqueeze(0)).cpu()
         if not self.eval:
-            noise = self.noise_generator()
+            noise = torch.from_numpy( self.noise_generator()).type(torch.float32)
             act += noise
         return act.squeeze(0).clip(-self.action_scale, self.action_scale)
 

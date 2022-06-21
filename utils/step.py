@@ -65,7 +65,7 @@ class Step(BaseStep[SS, Optional[Action], Optional[Reward]], Generic[SS]):
                  i: Optional[Info] = None):
         super().__init__(s, a, r, dict(end=False) if i is None else i)
 
-        assert self.a is None or isinstance(self.a, np.ndarray)
+        assert self.a is None or isinstance(self.a, torch.Tensor)
         assert r is None or isinstance(r, float)
 
     def is_not_none(self) -> bool:
