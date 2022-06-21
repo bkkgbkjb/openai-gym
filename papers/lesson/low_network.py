@@ -1,17 +1,18 @@
 import setup
 from utils.episode import Episodes
 from utils.replay_buffer import ReplayBuffer
+from utils.common import Action
 from torch import nn
 import torch
 from utils.algorithm import Algorithm
 from utils.nets import NeuralNetworks, layer_init
+from typing import cast
 import numpy as np
 
 MAX_TIMESTEPS = 500
 ACTION_SCALE = 16.0
 
 Observation = torch.Tensor
-Action = np.ndarray
 
 State = Observation
 Goal = torch.Tensor
@@ -91,6 +92,7 @@ class LowNetwork(Algorithm):
         goal_dim: int,
         action_dim: int,
     ):
+        self.set_name('low-network')
         self.state_dim = state_dim
         self.goal_dim = goal_dim
         self.action_dim = action_dim
@@ -125,17 +127,17 @@ class LowNetwork(Algorithm):
     @torch.no_grad()
     def take_action(self, s: torch.Tensor, g: torch.Tensor):
         if self.training and np.random.rand() < self.eps:
-            return np.random.uniform(-self.action_scale, self.action_scale,
-                                     self.action_dim)
+            return torch.from_numpy( np.random.uniform(-self.action_scale, self.action_scale,
+                                     self.action_dim)).type(torch.float32)
 
-        act = self.actor(s, g).cpu().detach().squeeze(0).numpy()
+        act = self.actor(s, g).cpu().detach().squeeze()
         if self.training:
             return self.pertub(act)
 
         return act
 
-    def pertub(self, act: np.ndarray):
-        act += 0.2 * self.action_scale * np.random.randn(self.action_dim)
+    def pertub(self, act: Action):
+        act += 0.2 * self.action_scale * torch.randn(self.action_dim)
         return act.clip(-self.action_scale, self.action_scale)
 
     def sample(self, buffers: ReplayBuffer[Episodes[State]]):
@@ -152,7 +154,7 @@ class LowNetwork(Algorithm):
         obs_next = torch.stack([s.info['next_obs'] for s in sampled_steps])
 
         acts = torch.stack([
-            torch.from_numpy(s.action).type(torch.float32).to(DEVICE)
+            cast(Action, s.action).to(DEVICE)
             for s in sampled_steps
         ])
 
@@ -161,7 +163,7 @@ class LowNetwork(Algorithm):
         rg_next = torch.stack([s.info['next_rg'] for s in sampled_steps])
 
         g = torch.stack([
-            torch.from_numpy(s.info['high_act']).type(torch.float32).to(DEVICE)
+            s.info['high_act'].to(DEVICE)
             for s in sampled_steps
         ])
 
@@ -204,7 +206,7 @@ class LowNetwork(Algorithm):
         self.critic_optim.step()
 
         self.report(
-            dict(low_actor_loss=actor_loss, low_critic_loss=critic_loss))
+            dict(actor_loss=actor_loss, critic_loss=critic_loss))
 
         if self.train_times % 3 == 0:
             self.actor_target.soft_update_to(self.actor, self.tau)
