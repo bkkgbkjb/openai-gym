@@ -23,10 +23,10 @@ Goal = torch.Tensor
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class LowActor(NeuralNetworks):
+class HighActor(NeuralNetworks):
 
     def __init__(self, state_dim, goal_dim, action_dim, scale):
-        super(LowActor, self).__init__()
+        super(HighActor, self).__init__()
         self.scale = ACTION_SCALE
 
         self.l1 = nn.Linear(state_dim + goal_dim, 300)
@@ -39,10 +39,10 @@ class LowActor(NeuralNetworks):
         return self.scale * torch.tanh(self.l3(a))
 
 
-class LowCritic(NeuralNetworks):
+class HighCritic(NeuralNetworks):
 
     def __init__(self, state_dim, goal_dim, action_dim):
-        super(LowCritic, self).__init__()
+        super(HighCritic, self).__init__()
 
         self.l1 = nn.Linear(state_dim + goal_dim + action_dim, 300)
         self.l2 = nn.Linear(300, 300)
@@ -58,7 +58,7 @@ class LowCritic(NeuralNetworks):
         return q
 
 
-class LowNetwork(Algorithm):
+class HighNetwork(Algorithm):
 
     def __init__(
         self,
@@ -80,13 +80,13 @@ class LowNetwork(Algorithm):
         self.tau = 5e-3
         self.batch_size = 128
 
-        self.actor = LowActor(self.state_dim, self.goal_dim, self.action_dim,
+        self.actor = HighActor(self.state_dim, self.goal_dim, self.action_dim,
                               self.action_scale)
         self.actor_target = self.actor.clone().no_grad()
 
         self.actor_optim = torch.optim.Adam(self.actor.parameters(), lr=1e-4)
 
-        self.critic1 = LowCritic(self.state_dim, self.goal_dim,
+        self.critic1 = HighCritic(self.state_dim, self.goal_dim,
                                  self.action_dim)
         self.critic1_target = self.critic1.clone().no_grad()
 
@@ -97,7 +97,7 @@ class LowNetwork(Algorithm):
             lr=1e-3,
         )
 
-        self.critic2 = LowCritic(self.state_dim, self.goal_dim,
+        self.critic2 = HighCritic(self.state_dim, self.goal_dim,
                                  self.action_dim)
         self.critic2_target = self.critic2.clone().no_grad()
 
@@ -110,6 +110,10 @@ class LowNetwork(Algorithm):
 
         self.train_times = 0
         self.eval = False
+    
+    def off_policy_correct(self, low_ctrl):
+
+        pass
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
