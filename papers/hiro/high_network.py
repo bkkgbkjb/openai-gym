@@ -65,7 +65,7 @@ class HighNetwork(Algorithm):
 
     def __init__(self, state_dim: int, goal_dim: int, action_dim: int,
                  action_scale: np.ndarray):
-        self.name = 'high-network'
+        self.set_name('high-network')
         self.state_dim = state_dim
         self.goal_dim = goal_dim
         self.action_dim = action_dim

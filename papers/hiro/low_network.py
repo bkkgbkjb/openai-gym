@@ -65,7 +65,7 @@ class LowNetwork(Algorithm):
 
     def __init__(self, state_dim: int, goal_dim: int, action_dim: int,
                  action_scale: float):
-        self.name = 'low-network'
+        self.set_name('low-network')
         self.state_dim = state_dim
         self.goal_dim = goal_dim
         self.action_dim = action_dim

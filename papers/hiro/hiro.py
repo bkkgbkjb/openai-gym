@@ -68,7 +68,7 @@ class Subgoal:
 class Hiro(Algorithm):
 
     def __init__(self, state_dim: int, goal_dim: int, action_dim: int):
-        self.name = "hiro"
+        self.set_name('hiro')
         self.action_dim = action_dim
         self.state_dim = state_dim
         self.goal_dim = goal_dim
@@ -85,7 +85,7 @@ class Hiro(Algorithm):
                                         self.subgoal_dim, high_network_scale)
 
         self.low_network = LowNetwork(self.state_dim, self.subgoal_dim,
-                                      self.action_dim, 30)
+                                      self.action_dim, 16)
 
         self.start_training_steps = 2500
         self.buffer_freq = 10
