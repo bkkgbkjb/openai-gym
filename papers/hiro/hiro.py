@@ -1,11 +1,14 @@
 import setup
+import gym
 from utils.algorithm import ActionInfo
-from utils.common import Info, Reward
+from utils.common import Info, Reward, Action
 from utils.episode import Episodes
 from utils.replay_buffer import ReplayBuffer
 from utils.step import NotNoneStep, Step
 from utils.transition import (
-    TransitionTuple, )
+    Transition,
+    TransitionTuple,
+)
 from torch import nn
 import torch
 from utils.preprocess import PreprocessI
@@ -17,15 +20,15 @@ from typing import List, Tuple, Any, Optional, Callable, Dict
 from papers.sac import NewSAC
 import numpy as np
 from low_network import LowNetwork
+from high_network import HighNetwork
 
 MAX_TIMESTEPS = 500
-ACTION_SCALE = 1.0
 
 Observation = torch.Tensor
-Action = np.ndarray
 
 State = Observation
 Goal = torch.Tensor
+SUBGOAL_DIM = 15
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -45,6 +48,22 @@ class Preprocess(PreprocessI[Observation, State]):
         return torch.from_numpy(h[-1]).type(torch.float32).to(DEVICE)
 
 
+class Subgoal:
+
+    def __init__(self, dim):
+        limits = np.array([
+            -10, -10, -0.5, -1, -1, -1, -1, -0.5, -0.3, -0.5, -0.3, -0.5, -0.3,
+            -0.5, -0.3
+        ])
+        self.shape = (dim, 1)
+        self.low = limits[:dim]
+        self.high = -self.low
+        self.action_dim = dim
+
+    def sample(self):
+        return (self.high - self.low) * np.random.sample(
+            self.high.shape) + self.low
+
 
 class Hiro(Algorithm):
 
@@ -53,25 +72,25 @@ class Hiro(Algorithm):
         self.action_dim = action_dim
         self.state_dim = state_dim
         self.goal_dim = goal_dim
+        self.subgoal_dim = SUBGOAL_DIM
 
         self.gamma = 0.99
 
         self.mini_batch_size = 128
 
-        self.low_network = LowNetwork(self.state_dim, self.goal_dim,
-                                      self.action_dim)
+        self.subgoal = Subgoal(self.subgoal_dim)
+        high_network_scale = self.subgoal.high * np.ones(self.subgoal_dim)
 
         self.high_network = HighNetwork(self.state_dim, self.goal_dim,
-                                        self.action_dim)
+                                        self.subgoal_dim, high_network_scale)
 
-        self.representation_network = RepresentationNetwork(
-            self.state_dim, self.goal_dim)
+        self.low_network = LowNetwork(self.state_dim, self.subgoal_dim,
+                                      self.action_dim, 30)
 
-        self.representation_optim = torch.optim.Adam(
-            self.representation_network.parameters(), 1e-4)
-
-        self.c = 50
-        self.start_update_phi = 10
+        self.start_training_steps = 2500
+        self.buffer_freq = 10
+        self.reward_scale = 0.1
+        self.train_freq = 10
         self.reset()
 
     def on_toggle_eval(self, isEval: bool):
@@ -80,175 +99,144 @@ class Hiro(Algorithm):
         self.low_network.on_toggle_eval(isEval)
 
     def reset(self):
+        self.replay_buffer_low = ReplayBuffer[Transition](int(2e5))
+        self.replay_buffer_high = ReplayBuffer[Transition](int(2e5))
+
         self.total_steps = 0
         self.inner_steps = 0
         self.epoch = 0
 
-        self.low_buffer = ReplayBuffer[Episodes](300)
-
         self.reset_episode_info()
 
-    @torch.no_grad()
+    def on_init(self, info: Dict[str, Any]):
+        self.env: gym.Env = info['env']
+
     def on_env_reset(self, info: Dict[str, Any]):
-        self.desired_goal = (torch.from_numpy(info["desired_goal"]).type(
+        self.fg = (torch.from_numpy(info["desired_goal"]).type(
             torch.float32).to(DEVICE))
 
-        obs = torch.from_numpy(info["observation"]).type(
-            torch.float32).to(DEVICE)
-        self.representation_goal = (self.representation_network(
-            obs.unsqueeze(0)).squeeze(0)).detach()
-
-        self.reset_episode_info()
-
     def reset_episode_info(self):
-        self.has_achieved_goal = False
-        self.current_high_act = None
-        self.last_high_obs = None
-        self.last_high_act = None
-        self.high_reward = 0.0
+        self.sg = torch.from_numpy(self.subgoal.sample()).type(
+            torch.float32).to(DEVICE)
+        self.n_sg = None
+        self.fg = None
+        self.episode_subreward = 0.0
+        self.sr = 0
+        self.buf = [None, None, None, 0, None, None, [], []]
 
-    def take_action(self, state: State) -> ActionInfo:
+    def take_action(self, state: State) -> Action:
         s = state.to(DEVICE)
-        if self.inner_steps % self.c == 0:
-            if self.last_high_act is not None:
-                assert self.current_high_act is not None
-                assert self.last_high_obs is not None
+        if self.eval:
+            assert self.low_network.eval
+            assert self.sg is not None
+            return self.low_network.take_action(s, self.sg)
 
-                self.high_network.after_step((
-                    NotNoneStep(self.last_high_obs, self.last_high_act,
-                                self.high_reward),
-                    Step(torch.cat([s, self.desired_goal]), None, None,
-                         dict(end=self.has_achieved_goal)),
-                ))
+        a = None
+        if self.total_steps <= self.start_training_steps:
+            a = torch.from_numpy(self.env.action_space.sample()).type(
+                torch.float32).to(DEVICE)
+        else:
+            assert not self.low_network.eval
+            assert self.sg is not None
+            a = self.low_network.take_action(s, self.sg)
+        assert a is not None
 
-            self.high_reward = 0.0
-
-            (act,
-             info) = self.high_network.take_action(s, self.desired_goal,
-                                                   self.representation_goal)
-
-            self.current_high_act = act
-            self.last_high_obs = torch.cat([
-                state,
-                self.desired_goal,
-            ])
-            self.last_high_act = info["raw_action"]
-
-        with torch.no_grad():
-            assert self.current_high_act is not None
-            act = self.low_network.take_action(
-                s.unsqueeze(0),
-                torch.from_numpy(self.current_high_act).type(
-                    torch.float32).unsqueeze(0).to(DEVICE),
-            )
-
-            return act, dict(rg=self.representation_goal,
-                             high_act=self.current_high_act)
-
-    def collect_samples(
-        self,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        episodes = self.low_buffer.sample(100)
-
-        ts = np.random.randint(MAX_TIMESTEPS - self.c, size=100)
-
-        hi_obs = obs = torch.stack(
-            [e.get_step(ts[i]).state for i, e in enumerate(episodes)])
-
-        hi_obs_next = torch.stack(
-            [e.get_step(ts[i] + self.c).state for i, e in enumerate(episodes)])
-        obs_next = torch.stack(
-            [e.get_step(ts[i] + 1).state for i, e in enumerate(episodes)])
-
-        return (obs, obs_next, hi_obs, hi_obs_next)
-
-    def update_phi(self):
-        (obs, obs_next, hi_obs, hi_obs_next) = self.collect_samples()
-
-        new_obs = self.representation_network(obs)
-        new_obs_next = self.representation_network(obs_next)
-        min_dist = (new_obs - new_obs_next).pow(2).mean(dim=1).clamp(min=0)
-
-        new_hi_obs = self.representation_network(hi_obs)
-        new_hi_obs_next = self.representation_network(hi_obs_next)
-
-        max_dist = (1 -
-                    (new_hi_obs - new_hi_obs_next).pow(2).mean(dim=1)).clamp(
-                        min=0)
-
-        representation_loss = (min_dist + max_dist).mean()
-
-        self.representation_optim.zero_grad()
-        representation_loss.backward()
-        self.representation_optim.step()
-
-        self.report(dict(representation_loss=representation_loss))
+        return a
 
     def after_step(self, transition: TransitionTuple[State]):
         (s1, s2) = transition
+        self.choose_subgoal(transition)
 
-        if s1.info["env_info"]["is_success"]:
-            self.has_achieved_goal = True
+        assert self.sg is not None
+        self.sr = self.low_reward(s1.state, self.sg, s2.state)
 
-        if not self.has_achieved_goal:
-            self.high_reward += s1.reward
+        self.replay_buffer_low.append(
+            Transition((NotNoneStep(
+                s1.state, s1.action, self.sr,
+                dict(goal=self.sg, next_goal=self.n_sg, end=False)),
+                        Step(s2.state, None, None, dict(end=s2.is_end())))))
 
-        self.representation_goal = (self.representation_network(
-            s2.state.unsqueeze(0)).squeeze(0).to(DEVICE)).detach()
+        if self.inner_steps != 0 and self.inner_steps % self.buffer_freq == 1:
+            if len(self.buf[6]) == self.buffer_freq:
+                self.buf[4] = s1.state
+                self.buf[5] = s2.is_end()
+                self.replay_buffer_high.append(
+                    Transition((NotNoneStep(
+                        self.buf[0], self.buf[2], self.buf[3],
+                        dict(goal=self.buf[1],
+                             state_arr=torch.stack(self.buf[6]),
+                             action_arr=torch.stack(self.buf[7]),
+                             end=False)),
+                                Step(self.buf[4], None, None,
+                                     dict(end=self.buf[5])))))
 
-        if self.epoch > self.start_update_phi:
-            self.update_phi()
+            self.buf = [s1.state, self.fg, self.sg, 0, None, None, [], []]
+
+        self.buf[3] += self.reward_scale * s1.reward
+        self.buf[6].append(s1.state)
+        self.buf[7].append(s1.action)
+
+        self.train()
+
+        self.episode_subreward += self.sr
+        self.sg = self.n_sg
+        self.n_sg = None
 
         self.inner_steps += 1
         self.total_steps += 1
+
+    def train(self):
+        if self.total_steps <= self.start_training_steps:
+            return
+
+        self.low_network.train(self.replay_buffer_low)
+        if self.total_steps % self.train_freq == 0:
+            self.high_network.train(self.replay_buffer_high, self.low_network)
+
+    def low_reward(self, s: torch.Tensor, sg: torch.Tensor,
+                   n_s: torch.Tensor) -> float:
+        abs_s = s[:sg.shape[0]] + sg
+        return -torch.sqrt(torch.sum((abs_s - n_s[:sg.shape[0]])**2)).item()
+
+    def choose_subgoal(self, trx: TransitionTuple[State]):
+        assert self.n_sg is None
+        (s1, s2) = trx
+        if self.eval:
+            assert self.high_network.eval
+            self.n_sg = self._choose_subgoal(s1.state, self.sg, s2.state)
+            return
+
+        assert not self.high_network.eval
+        if self.total_steps <= self.start_training_steps:
+            self.n_sg = torch.from_numpy(self.subgoal.sample()).type(
+                torch.float32).to(DEVICE)
+            return
+
+        self.n_sg = self._choose_subgoal(s1.state, self.sg, s2.state)
+
+    def _choose_subgoal(self, s: torch.Tensor, sg: torch.Tensor,
+                        n_s: torch.Tensor):
+        new_sg = None
+        assert self.fg is not None
+
+        if self.total_steps % self.buffer_freq == 0:
+            new_sg = self.high_network.take_action(s, self.fg)
+        else:
+            new_sg = s[:sg.shape[0]] + sg - n_s[:sg.shape[0]]
+
+        return new_sg
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.reporter = reporter
         self.high_network.set_reporter(reporter)
         self.low_network.set_reporter(reporter)
 
-    def get_episodes(
-        self, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]
-    ) -> Episodes[State]:
-        episode = Episodes[State]()
-        episode.from_list(sari)
-
-        for i in range(episode.len - 1):
-            episode.get_step(i).info['next_obs'] = episode.get_step(i +
-                                                                    1).state
-            episode.get_step(i).info['next_rg'] = episode.get_step(
-                i + 1).info['rg']
-
-        return episode
-
     def on_episode_termination(self, sari: Tuple[List[State], List[Action],
                                                  List[Reward], List[Info]]):
 
         (s, _, _, i) = sari
         assert len(s) == MAX_TIMESTEPS + 1
-        assert self.last_high_obs is not None
-        assert self.last_high_act is not None
-
-        assert 'rg' not in i[-1]
-        i[-1]['rg'] = self.representation_goal
-
-        self.high_network.after_step((
-            NotNoneStep(self.last_high_obs, self.last_high_act,
-                        self.high_reward),
-            Step(
-                torch.cat([s[-1], self.desired_goal]),
-                None,
-                None,
-                dict(end=self.has_achieved_goal),
-            ),
-        ))
-
-        self.high_network.on_episode_termination(sari)
-
-        self.low_buffer.append(self.get_episodes(sari))
-        for _ in range(200):
-            self.low_network.train(self.low_buffer)
-
+        self.report(dict(episode_subreward=self.episode_subreward))
         self.reset_episode_info()
 
         self.epoch += 1

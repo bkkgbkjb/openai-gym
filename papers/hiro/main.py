@@ -11,10 +11,10 @@ from envs import EnvWithGoal
 
 # %%
 eval_env = train_env = EnvWithGoal(create_maze_env('AntMaze'), 'AntMaze')
-eval_env = RecordVideo(eval_env,
-                       'vlog/lesson',
-                       episode_trigger=lambda episode_id: episode_id % 5 == 0,
-                       name_prefix='lesson')
+# eval_env = RecordVideo(eval_env,
+#                        'vlog/lesson',
+#                        episode_trigger=lambda episode_id: episode_id % 5 == 0,
+#                        name_prefix='lesson')
 train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [],
                                               RANDOM_SEED)
 
@@ -22,7 +22,7 @@ train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [],
 
 agent = Agent(
     train_env,
-    Hiro(train_env.observation_space.shape[0], train_env.goal_space.shape[0],
+    Hiro(31, 2,
          train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))

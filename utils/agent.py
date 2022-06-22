@@ -82,10 +82,10 @@ class Agent(Generic[AO, AS]):
             assert "end" not in a[1]
             assert isinstance(a[0], torch.Tensor)
             a[1]["end"] = False
-            return a
+            return (a[0].detach(), a[1])
         
         assert isinstance(a, torch.Tensor)
-        return (a, dict(end=False))
+        return (a.detach(), dict(end=False))
 
     def format_env_reset(self, env: gym.Env) -> AO:
         o = env.reset()
@@ -118,7 +118,7 @@ class Agent(Generic[AO, AS]):
             act = actinfo[0]
 
             (o, r, s, _) = env.step(
-                act[0].numpy() if isinstance(env.action_space, gym.spaces.Discrete) else act.numpy()
+                act[0].cpu().numpy() if isinstance(env.action_space, gym.spaces.Discrete) else act.cpu().numpy()
             )
             rwd += r
             self.eval_observation_episode.append(o)
@@ -162,9 +162,9 @@ class Agent(Generic[AO, AS]):
 
             act, info = actinfo
             (obs, rwd, stop, env_info) = self.env.step(
-                act[0].numpy()
+                act[0].cpu().numpy()
                 if isinstance(self.env.action_space, gym.spaces.Discrete)
-                else act.numpy()
+                else act.cpu().numpy()
             )
 
             info["env_info"] = env_info
@@ -268,8 +268,8 @@ class OfflineAgent(Generic[OO, OS]):
         self, a: Union[Action, ActionInfo]
     ) -> Tuple[Action, Dict[str, Any]]:
         if isinstance(a, tuple):
-            return a
-        return (a, dict())
+            return (a[0].detach(), a[1])
+        return (a.detach(), dict())
 
     def get_current_state(self, obs_episode: List[OO]) -> OS:
         state = self.preprocess.get_current_state(obs_episode)
@@ -327,7 +327,7 @@ class OfflineAgent(Generic[OO, OS]):
             act = actinfo[0]
 
             (o, r, s, _) = env.step(
-                act[0].numpy() if isinstance(env.action_space, gym.spaces.Discrete) else act.numpy()
+                act[0].cpu().numpy() if isinstance(env.action_space, gym.spaces.Discrete) else act.cpu().numpy()
             )
             rwd += r
             self.eval_observation_episode.append(cast(OO, o))

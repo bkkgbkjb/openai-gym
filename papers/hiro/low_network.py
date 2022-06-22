@@ -3,16 +3,14 @@ from utils.episode import Episodes
 from utils.replay_buffer import ReplayBuffer
 from torch import nn
 import torch
-from papers.td3 import TD3
 from utils.algorithm import Algorithm
 from utils.nets import NeuralNetworks, layer_init
 import torch.nn.functional as F
 import numpy as np
 
-from utils.transition import Transition
+from utils.transition import Transition, resolve_transitions
 
 MAX_TIMESTEPS = 500
-ACTION_SCALE = 30.0
 
 Observation = torch.Tensor
 Action = np.ndarray
@@ -27,14 +25,17 @@ class LowActor(NeuralNetworks):
 
     def __init__(self, state_dim, goal_dim, action_dim, scale):
         super(LowActor, self).__init__()
-        self.scale = ACTION_SCALE
+        self.scale = scale
+        self.state_dim = state_dim
+        self.goal_dim = goal_dim
+        self.action_dim = action_dim
 
-        self.l1 = nn.Linear(state_dim + goal_dim, 300)
-        self.l2 = nn.Linear(300, 300)
-        self.l3 = nn.Linear(300, action_dim)
+        self.l1 = nn.Linear(state_dim + goal_dim, 300).to(DEVICE)
+        self.l2 = nn.Linear(300, 300).to(DEVICE)
+        self.l3 = nn.Linear(300, action_dim).to(DEVICE)
 
     def forward(self, state, goal):
-        a = F.relu(self.l1(torch.cat([state, goal], 1)))
+        a = F.relu(self.l1(torch.cat([state.to(DEVICE), goal.to(DEVICE)], 1)))
         a = F.relu(self.l2(a))
         return self.scale * torch.tanh(self.l3(a))
 
@@ -44,12 +45,14 @@ class LowCritic(NeuralNetworks):
     def __init__(self, state_dim, goal_dim, action_dim):
         super(LowCritic, self).__init__()
 
-        self.l1 = nn.Linear(state_dim + goal_dim + action_dim, 300)
-        self.l2 = nn.Linear(300, 300)
-        self.l3 = nn.Linear(300, 1)
+        self.l1 = nn.Linear(state_dim + goal_dim + action_dim, 300).to(DEVICE)
+        self.l2 = nn.Linear(300, 300).to(DEVICE)
+        self.l3 = nn.Linear(300, 1).to(DEVICE)
 
     def forward(self, state, goal, action):
-        sa = torch.cat([state, goal, action], 1)
+        sa = torch.cat([state.to(DEVICE),
+                        goal.to(DEVICE),
+                        action.to(DEVICE)], 1)
 
         q = F.relu(self.l1(sa))
         q = F.relu(self.l2(q))
@@ -60,17 +63,13 @@ class LowCritic(NeuralNetworks):
 
 class LowNetwork(Algorithm):
 
-    def __init__(
-        self,
-        state_dim: int,
-        goal_dim: int,
-        action_dim: int,
-    ):
+    def __init__(self, state_dim: int, goal_dim: int, action_dim: int,
+                 action_scale: float):
         self.name = 'low-network'
         self.state_dim = state_dim
         self.goal_dim = goal_dim
         self.action_dim = action_dim
-        self.action_scale = ACTION_SCALE
+        self.action_scale = action_scale
 
         self.expl_noise = 1.0
         self.policy_noise = 0.2
@@ -89,9 +88,7 @@ class LowNetwork(Algorithm):
         self.critic1 = LowCritic(self.state_dim, self.goal_dim,
                                  self.action_dim)
         self.critic1_target = self.critic1.clone().no_grad()
-
         self.critic1_loss = nn.MSELoss()
-
         self.critic1_optim = torch.optim.Adam(
             self.critic1.parameters(),
             lr=1e-3,
@@ -100,9 +97,7 @@ class LowNetwork(Algorithm):
         self.critic2 = LowCritic(self.state_dim, self.goal_dim,
                                  self.action_dim)
         self.critic2_target = self.critic2.clone().no_grad()
-
         self.critic2_loss = nn.MSELoss()
-
         self.critic2_optim = torch.optim.Adam(
             self.critic2.parameters(),
             lr=1e-3,
@@ -115,39 +110,42 @@ class LowNetwork(Algorithm):
         self.eval = isEval
 
     def take_action(self, s: torch.Tensor, g: torch.Tensor):
+        s = s.unsqueeze(0)
+        g = g.unsqueeze(0)
         if self.eval:
-            return self.actor(s, g).cpu().detach().squeeze().numpy()
+            return self.actor(s, g).squeeze()
 
         act = self.actor(s, g)
         act += self.pertub(act)
 
-        return act.clamp(-ACTION_SCALE, ACTION_SCALE)
+        return act.clamp(-self.action_scale, self.action_scale).squeeze()
+
+    def policy(self, s: torch.Tensor, g: torch.Tensor):
+        return self.actor(s, g).squeeze()
 
     def pertub(self, act: torch.Tensor):
         mean = torch.zeros_like(act)
         var = torch.ones_like(act)
-        return torch.normal(mean, self.expl_noise * var)
+        return torch.normal(mean, self.expl_noise * var).to(DEVICE)
 
     def train(self, buffer: ReplayBuffer[Transition]):
-        (
-            states,
-            goals,
-            actions,
-            n_states,
-            n_goals,
-            rewards,
-            not_done,
-        ) = buffer.sample(self.batch_size)
+        (states, actions, rewards, n_states, done,
+         infos) = resolve_transitions(buffer.sample(self.batch_size),
+                                      (self.state_dim, ), (self.action_dim, ))
+
+        goals = torch.stack([i['goal'] for i in infos]).detach()
+        n_goals = torch.stack([i['next_goal'] for i in infos]).detach()
+        not_done = 1 - done
 
         with torch.no_grad():
             noise = (torch.randn_like(actions) * self.policy_noise).clamp(
                 -self.noise_clip, self.noise_clip)
 
-            new_actions = (self.actor_target(n_states, n_goals) + noise).clamp(
-                -ACTION_SCALE, ACTION_SCALE)
+            n_actions = (self.actor_target(n_states, n_goals) + noise).clamp(
+                -self.action_scale, self.action_scale)
 
-            target_Q1 = self.critic1_target(n_states, n_goals, new_actions)
-            target_Q2 = self.critic2_target(n_states, n_goals, new_actions)
+            target_Q1 = self.critic1_target(n_states, n_goals, n_actions)
+            target_Q2 = self.critic2_target(n_states, n_goals, n_actions)
 
             target_Q = torch.min(target_Q1, target_Q2)
 
@@ -167,7 +165,7 @@ class LowNetwork(Algorithm):
         self.critic1_optim.step()
         self.critic2_optim.step()
 
-        self.report(dict(low_critic_loss=critic_loss))
+        self.report(dict(critic_loss=critic_loss))
 
         if self.train_times % self.policy_freq == 0:
             a = self.actor(states, goals)
@@ -183,6 +181,6 @@ class LowNetwork(Algorithm):
             self.critic2_target.soft_update_to(self.critic2, self.tau)
 
             self.actor_target.soft_update_to(self.actor, self.tau)
-            self.report(dict(low_actor_loss=actor_loss))
+            self.report(dict(actor_loss=actor_loss))
 
         self.train_times += 1

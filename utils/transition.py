@@ -1,5 +1,5 @@
 from typing import Generic, Tuple, TypeVar, List
-from utils.common import AllowedStates, SARSA
+from utils.common import AllowedStates, SARSAI
 import torch
 from utils.step import NotNoneStep, Step
 from utils.env_sb3 import resolve_lazy_frames
@@ -54,7 +54,7 @@ RTS = TypeVar('RTS', bound=AllowedStates)
 
 
 def resolve_transitions(trs: List[Transition[RTS]], state_shape: Tuple,
-                        action_shape: Tuple) -> SARSA:
+                        action_shape: Tuple) -> SARSAI:
     l = len(trs)
     trs_tuples = [trs.as_tuple() for trs in trs]
 
@@ -65,10 +65,7 @@ def resolve_transitions(trs: List[Transition[RTS]], state_shape: Tuple,
     assert states.shape == ((l, ) + state_shape)
     assert not states.requires_grad
 
-    actions = torch.stack([
-        s1.action
-        for (s1, _) in trs_tuples
-    ])
+    actions = torch.stack([s1.action for (s1, _) in trs_tuples])
 
     assert actions.shape == ((l, ) + action_shape)
     assert not states.requires_grad
@@ -96,10 +93,13 @@ def resolve_transitions(trs: List[Transition[RTS]], state_shape: Tuple,
     assert done.shape == (l, 1)
     assert not done.requires_grad
 
+    infos = [s1.info for (s1, _) in trs_tuples]
+
     return (
         states.to(DEVICE),
         actions.to(DEVICE),
         rewards.to(DEVICE),
         next_states.to(DEVICE),
         done.to(DEVICE),
+        infos
     )

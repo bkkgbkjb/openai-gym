@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, Tuple, Optional, Any, Union
+from typing import Dict, Tuple, Optional, Any, Union, List
 import numpy as np
 from utils.env_sb3 import LazyFrames
 import torch
@@ -11,8 +11,8 @@ Reward = float
 
 Info = Dict[str, Any]
 
-SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
-              torch.Tensor]
+SARSAI = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+              torch.Tensor, List[Info]]
 
 AllowedStates = Union[torch.Tensor, LazyFrames]
 EmptyStates = Union[Optional[torch.Tensor], Optional[LazyFrames]]
