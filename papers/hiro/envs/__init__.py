@@ -60,12 +60,6 @@ class EnvWithGoal(object):
         self.count = 0
         self.goal = self.goal_sample_fn()
         return np.r_[obs.copy(), self.count], dict(desired_goal = self.goal, achieved_goal = obs[:2])
-        return {
-            # add timestep
-            'observation': np.r_[obs.copy(), self.count], 
-            'achieved_goal': obs[:2],
-            'desired_goal': self.goal,
-        }
 
     def step(self, a):
         obs, _, done, info = self.base_env.step(a)
@@ -83,8 +77,8 @@ class EnvWithGoal(object):
         info['achieved_goal'] = obs[:2]
         return next_obs['observation'], reward, done or self.count >= 500, info
 
-    def render(self):
-        self.base_env.render()
+    def render(self, mode):
+        self.base_env.render(mode)
 
     def get_image(self):
         self.render()
@@ -107,6 +101,10 @@ class EnvWithGoal(object):
     @property
     def observation_space(self):
         return self.base_env.observation_space
+    
+    @property
+    def metadata(self):
+        return dict()
 
 def run_environment(env_name, episode_length, num_episodes):
     env = EnvWithGoal(
