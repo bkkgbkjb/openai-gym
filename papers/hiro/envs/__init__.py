@@ -77,8 +77,8 @@ class EnvWithGoal(object):
         info['achieved_goal'] = obs[:2]
         return next_obs['observation'], reward, done or self.count >= 500, info
 
-    def render(self, mode):
-        self.base_env.render(mode)
+    def render(self, *args, **kwargs):
+        return self.base_env.render(*args, **kwargs)
 
     def get_image(self):
         self.render()

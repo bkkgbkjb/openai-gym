@@ -85,7 +85,7 @@ class Hiro(Algorithm):
                                         self.subgoal_dim, high_network_scale)
 
         self.low_network = LowNetwork(self.state_dim, self.subgoal_dim,
-                                      self.action_dim, 16)
+                                      self.action_dim, 30)
 
         self.start_training_steps = 2500
         self.buffer_freq = 10

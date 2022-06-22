@@ -117,8 +117,12 @@ class HighNetwork(Algorithm):
         first_s = states[:, 0]
         last_s = states[:, -1]
 
-        diff_goal = (last_s - first_s)[:, :self.action_dim].unsqueeze(
-            1)  #[:, np.newaxis, :self.action_dim]
+        assert (last_s - first_s).unsqueeze(1).shape == (self.batch_size, 1,
+                                                         self.state_dim)
+        diff_goal = (
+            last_s -
+            first_s).unsqueeze(1)[:, :, :self.action_dim]  #.unsqueeze(
+        #1)  #[:, np.newaxis, :self.action_dim]
 
         original_goal = sgoals.unsqueeze(1)  #[:, np.newaxis, :]
         random_goals = torch.from_numpy(
@@ -133,7 +137,7 @@ class HighNetwork(Algorithm):
 
         candidates = torch.cat([original_goal, diff_goal, random_goals], dim=1)
 
-        actions = actions
+        # seq_len = states.shape[1]
         seq_len = states.shape[1]
 
         new_batch_size = seq_len * self.batch_size
@@ -142,33 +146,37 @@ class HighNetwork(Algorithm):
 
         obs_dim = self.state_dim
 
-        ncands = candidates.shape[1]
+        ncands = candidates.shape[1]  # 10
 
         true_actions = actions.reshape((new_batch_size, action_dim))
 
         observations = states.reshape((new_batch_size, obs_dim))
         goal_shape = (new_batch_size, self.action_dim)
 
-        policy_actions = torch.zeros((ncands, new_batch_size, action_dim)).to(DEVICE)
+        policy_actions = torch.zeros(
+            (ncands, new_batch_size, action_dim)).to(DEVICE)
 
         for c in range(ncands):
             subgoal = candidates[:, c]
-            candidate = (subgoal + states[:, 0, :self.action_dim]
-                         ).unsqueeze(1) - states[:, :, :self.action_dim]
+            # candidate = (subgoal + states[:, 1, :self.action_dim]
+            #              ).unsqueeze(1) - states[:, :, :self.action_dim]
+            candidate = subgoal
 
-            candidate = candidate.reshape(*goal_shape)
-            policy_actions[c] = low_network.policy(observations, candidate).detach()
+            candidate = candidate.repeat_interleave(10, dim=0)
+            policy_actions[c] = low_network.policy(observations,
+                                                   candidate).detach()
 
         difference = (policy_actions - true_actions).cpu().numpy()
-        difference = np.where(difference != -np.inf, difference, 0)
-        difference = difference.reshape((ncands, self.batch_size, seq_len,
-                                         action_dim)).transpose(1, 0, 2, 3)
+        # difference = np.where(difference != -np.inf, difference, 0)
+        # difference = difference.reshape((ncands, self.batch_size, seq_len,
+        #  action_dim)).transpose(1, 0, 2, 3)
 
         logprob = -0.5 * np.sum(np.linalg.norm(difference, axis=-1)**2,
                                 axis=-1)
+        assert logprob.shape == (ncands, )
         max_indices = np.argmax(logprob, axis=-1)
 
-        return candidates[np.arange(self.batch_size), max_indices]
+        return candidates[:, max_indices]
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
