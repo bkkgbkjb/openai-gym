@@ -10,11 +10,21 @@ S = TypeVar("S", bound=Union[torch.Tensor, LazyFrames])
 
 
 class Algorithm(Generic[S]):
+
     def set_name(self, name: str):
         assert not hasattr(self, "name")
         self.name = name
 
     def on_init(self, info: Dict[str, Any]):
+        pass
+
+    def on_agent_reset(self):
+        pass
+
+    def on_toggle_eval(self, isEval: bool):
+        pass
+
+    def on_env_reset(self, info: Dict[str, Any]):
         pass
 
     @abstractmethod
@@ -25,21 +35,11 @@ class Algorithm(Generic[S]):
     def manual_train(self):
         raise NotImplementedError()
 
-    def on_env_reset(self, info: Dict[str, Any]):
-        pass
-
     def after_step(self, transition: TransitionTuple[S]):
         pass
 
-    def on_episode_termination(
-        self, sari: Tuple[List[S], List[Action], List[Reward], List[Info]]
-    ):
-        pass
-
-    def on_agent_reset(self):
-        pass
-
-    def on_toggle_eval(self, isEval: bool):
+    def on_episode_termination(self, sari: Tuple[List[S], List[Action],
+                                                 List[Reward], List[Info]]):
         pass
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
