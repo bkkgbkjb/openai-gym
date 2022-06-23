@@ -79,10 +79,10 @@ class Hiro(Algorithm):
         self.mini_batch_size = 128
 
         self.subgoal = Subgoal(self.subgoal_dim)
-        high_network_scale = self.subgoal.high * np.ones(self.subgoal_dim)
+        high_action_scale = self.subgoal.high * np.ones(self.subgoal_dim)
 
         self.high_network = HighNetwork(self.state_dim, self.goal_dim,
-                                        self.subgoal_dim, high_network_scale)
+                                        self.subgoal_dim, high_action_scale)
 
         self.low_network = LowNetwork(self.state_dim, self.subgoal_dim,
                                       self.action_dim, 30)
@@ -112,6 +112,7 @@ class Hiro(Algorithm):
         self.env: gym.Env = info['env']
 
     def on_env_reset(self, info: Dict[str, Any]):
+        assert self.fg is None
         self.fg = (torch.from_numpy(info["desired_goal"]).type(
             torch.float32).to(DEVICE))
 

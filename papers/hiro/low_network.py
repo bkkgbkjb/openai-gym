@@ -30,9 +30,9 @@ class LowActor(NeuralNetworks):
         self.goal_dim = goal_dim
         self.action_dim = action_dim
 
-        self.l1 = nn.Linear(state_dim + goal_dim, 300).to(DEVICE)
-        self.l2 = nn.Linear(300, 300).to(DEVICE)
-        self.l3 = nn.Linear(300, action_dim).to(DEVICE)
+        self.l1 = layer_init(nn.Linear(state_dim + goal_dim, 300)).to(DEVICE)
+        self.l2 = layer_init(nn.Linear(300, 300)).to(DEVICE)
+        self.l3 = layer_init(nn.Linear(300, action_dim)).to(DEVICE)
 
     def forward(self, state, goal):
         a = F.relu(self.l1(torch.cat([state.to(DEVICE), goal.to(DEVICE)], 1)))
@@ -45,9 +45,10 @@ class LowCritic(NeuralNetworks):
     def __init__(self, state_dim, goal_dim, action_dim):
         super(LowCritic, self).__init__()
 
-        self.l1 = nn.Linear(state_dim + goal_dim + action_dim, 300).to(DEVICE)
-        self.l2 = nn.Linear(300, 300).to(DEVICE)
-        self.l3 = nn.Linear(300, 1).to(DEVICE)
+        self.l1 = layer_init(nn.Linear(state_dim + goal_dim + action_dim,
+                                       300)).to(DEVICE)
+        self.l2 = layer_init(nn.Linear(300, 300)).to(DEVICE)
+        self.l3 = layer_init(nn.Linear(300, 1)).to(DEVICE)
 
     def forward(self, state, goal, action):
         sa = torch.cat([state.to(DEVICE),
@@ -126,7 +127,8 @@ class LowNetwork(Algorithm):
     def pertub(self, act: torch.Tensor):
         mean = torch.zeros_like(act)
         var = torch.ones_like(act)
-        return torch.normal(mean, self.expl_noise * var).to(DEVICE)
+        return self.action_scale * torch.normal(
+            mean, self.expl_noise * var).to(DEVICE)
 
     def train(self, buffer: ReplayBuffer[Transition]):
         (states, actions, rewards, n_states, done,

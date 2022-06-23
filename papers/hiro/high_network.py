@@ -30,9 +30,9 @@ class HighActor(NeuralNetworks):
         super(HighActor, self).__init__()
         self.scale = scale.to(DEVICE)
 
-        self.l1 = nn.Linear(state_dim + goal_dim, 300).to(DEVICE)
-        self.l2 = nn.Linear(300, 300).to(DEVICE)
-        self.l3 = nn.Linear(300, action_dim).to(DEVICE)
+        self.l1 = layer_init(nn.Linear(state_dim + goal_dim, 300)).to(DEVICE)
+        self.l2 = layer_init(nn.Linear(300, 300)).to(DEVICE)
+        self.l3 = layer_init(nn.Linear(300, action_dim)).to(DEVICE)
 
     def forward(self, state, goal):
         a = F.relu(self.l1(torch.cat([state.to(DEVICE), goal.to(DEVICE)], 1)))
@@ -45,9 +45,10 @@ class HighCritic(NeuralNetworks):
     def __init__(self, state_dim, goal_dim, action_dim):
         super(HighCritic, self).__init__()
 
-        self.l1 = nn.Linear(state_dim + goal_dim + action_dim, 300).to(DEVICE)
-        self.l2 = nn.Linear(300, 300).to(DEVICE)
-        self.l3 = nn.Linear(300, 1).to(DEVICE)
+        self.l1 = layer_init(nn.Linear(state_dim + goal_dim + action_dim,
+                                       300)).to(DEVICE)
+        self.l2 = layer_init(nn.Linear(300, 300)).to(DEVICE)
+        self.l3 = layer_init(nn.Linear(300, 1)).to(DEVICE)
 
     def forward(self, state, goal, action):
         sa = torch.cat([state.to(DEVICE),
@@ -104,7 +105,7 @@ class HighNetwork(Algorithm):
             lr=1e-3,
         )
 
-        self.candidate_goals = 8
+        self.candidate_goals = 16
 
         self.train_times = 0
         self.eval = False
@@ -128,7 +129,7 @@ class HighNetwork(Algorithm):
         random_goals = torch.from_numpy(
             np.random.normal(
                 loc=diff_goal.cpu().numpy(),
-                scale=0.5 * action_scale.unsqueeze(0).unsqueeze(
+                scale=0.333 * action_scale.unsqueeze(0).unsqueeze(
                     0).cpu().numpy(),  #[np.newaxis, np.newaxis, :],
                 size=(self.batch_size, self.candidate_goals,
                       self.action_dim)).clip(-action_scale.cpu().numpy(),
@@ -162,7 +163,7 @@ class HighNetwork(Algorithm):
             #              ).unsqueeze(1) - states[:, :, :self.action_dim]
             candidate = subgoal
 
-            candidate = candidate.repeat_interleave(10, dim=0)
+            candidate = candidate.repeat_interleave(seq_len, dim=0)
             policy_actions[c] = low_network.policy(observations,
                                                    candidate).detach()
 
@@ -195,7 +196,7 @@ class HighNetwork(Algorithm):
     def pertub(self, act: torch.Tensor):
         mean = torch.zeros_like(act)
         var = torch.ones_like(act)
-        return torch.normal(mean, self.expl_noise * var).to(DEVICE)
+        return self.action_scale * torch.normal(mean, self.expl_noise * var).to(DEVICE)
 
     def train(self, buffer: ReplayBuffer[Transition], low_con: LowNetwork):
         (states, actions, rewards, n_states, done,
