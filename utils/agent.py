@@ -31,6 +31,7 @@ AO = TypeVar("AO")
 
 
 class Agent(Generic[AO, AS]):
+
     def __init__(
         self,
         env: gym.Env,
@@ -45,16 +46,7 @@ class Agent(Generic[AO, AS]):
         self.algm.on_init({"env": self.env})
         self.reset()
 
-    def get_current_state(self, obs_episode: List[AO]) -> AS:
-        state = self.preprocess.get_current_state(obs_episode)
-        assert isinstance(state, torch.Tensor) or isinstance(
-            state, LazyFrames
-        ), "preprocess.get_current_state应该返回tensor或lazyframes"
-        return state
-
-    def reset(
-        self,
-    ):
+    def reset(self, ):
         self.end = False
 
         self.observation_episode: List[AO] = []
@@ -70,12 +62,19 @@ class Agent(Generic[AO, AS]):
         self.preprocess.on_agent_reset()
         self.algm.on_agent_reset()
 
+    def toggleEval(self, newEval: bool):
+        self.algm.on_toggle_eval(newEval)
+
     def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
         self.algm.set_reporter(reporter)
 
-    def toggleEval(self, newEval: bool):
-        self.algm.on_toggle_eval(newEval)
+    def get_current_state(self, obs_episode: List[AO]) -> AS:
+        state = self.preprocess.get_current_state(obs_episode)
+        assert isinstance(state, torch.Tensor) or isinstance(
+            state,
+            LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
+        return state
 
     def format_action(self, a: Union[Action, ActionInfo]) -> ActionInfo:
         if isinstance(a, tuple):
@@ -83,11 +82,28 @@ class Agent(Generic[AO, AS]):
             assert isinstance(a[0], torch.Tensor)
             a[1]["end"] = False
             return (a[0].detach(), a[1])
-        
+
         assert isinstance(a, torch.Tensor)
         return (a.detach(), dict(end=False))
 
-    def format_env_reset(self, env: gym.Env) -> AO:
+    def get_action(self, state: AS) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(state))
+        act = actinfo[0]
+
+        action_space = self.env.action_space
+
+        assert isinstance(action_space, gym.spaces.Discrete) or isinstance(
+            action_space, gym.spaces.Box), "目前只能处理Discrete和Box两种action_space"
+
+        if isinstance(action_space, gym.spaces.Discrete):
+            assert act.shape == (1, )
+
+        if isinstance(action_space, gym.spaces.Box):
+            assert act.shape == action_space.shape
+
+        return actinfo
+
+    def reset_env(self, env: gym.Env) -> AO:
         o = env.reset()
 
         if not isinstance(o, tuple):
@@ -99,60 +115,17 @@ class Agent(Generic[AO, AS]):
         self.algm.on_env_reset(o[1])
         return cast(AO, o[0])
 
-    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[AO]]]:
-        assert len(self.eval_observation_episode) == 0
-        assert not self.end, "should reset before eval agnet"
-        self.toggleEval(True)
-
-        o = self.format_env_reset(env)
-
-        self.eval_observation_episode.append(o)
-
-        s = False
-        rwd = 0.0
-
-        while not s:
-            actinfo = self.get_action(
-                self.get_current_state(self.eval_observation_episode)
-            )
-            act = actinfo[0]
-
-            (o, r, s, _) = env.step(
-                act[0].cpu().numpy() if isinstance(env.action_space, gym.spaces.Discrete) else act.cpu().numpy()
-            )
-            rwd += r
-            self.eval_observation_episode.append(o)
-
-        self.report({"eval_return": rwd})
-        return rwd, (self.eval_observation_episode,)
-
-    def get_action(self, state: AS) -> ActionInfo:
-        actinfo = self.format_action(self.algm.take_action(state))
-        act = actinfo[0]
-
-        action_space = self.env.action_space
-
-        assert isinstance(action_space, gym.spaces.Discrete) or isinstance(
-            action_space, gym.spaces.Box
-        ), "目前只能处理Discrete和Box两种action_space"
-
-        if isinstance(action_space, gym.spaces.Discrete):
-            assert act.shape == (1,)
-
-        if isinstance(action_space, gym.spaces.Box):
-            assert act.shape == action_space.shape
-
-        return actinfo
-
     def train(
         self,
-    ) -> Tuple[float, Tuple[List[AO], List[AS], List[Action], List[R], List[Info]]]:
+    ) -> Tuple[float, Tuple[List[AO], List[AS], List[Action], List[R],
+                            List[Info]]]:
         assert not self.end, "agent needs to be reset before training"
         self.toggleEval(False)
 
-        o = self.format_env_reset(self.env)
+        o = self.reset_env(self.env)
         self.observation_episode.append(o)
-        self.state_episode.append(self.get_current_state(self.observation_episode))
+        self.state_episode.append(
+            self.get_current_state(self.observation_episode))
 
         stop = False
 
@@ -161,11 +134,9 @@ class Agent(Generic[AO, AS]):
             actinfo = self.get_action(self.state_episode[-1])
 
             act, info = actinfo
-            (obs, rwd, stop, env_info) = self.env.step(
-                act[0].cpu().numpy()
-                if isinstance(self.env.action_space, gym.spaces.Discrete)
-                else act.cpu().numpy()
-            )
+            (obs, rwd, stop, env_info) = self.env.step(act[0].cpu().numpy(
+            ) if isinstance(self.env.action_space, gym.spaces.Discrete
+                            ) else act.cpu().numpy())
 
             info["env_info"] = env_info
 
@@ -175,41 +146,34 @@ class Agent(Generic[AO, AS]):
 
             obs = cast(AO, obs)
             self.observation_episode.append(obs)
-            self.state_episode.append(self.get_current_state(self.observation_episode))
+            self.state_episode.append(
+                self.get_current_state(self.observation_episode))
 
             assert len(self.state_episode) == len(self.observation_episode)
 
-            self.algm.after_step(
-                (
-                    NotNoneStep(
-                        self.state_episode[-2],
-                        self.action_episode[-1],
-                        self.reward_episode[-1],
-                        self.info_episode[-1],
-                    ),
-                    Step(self.state_episode[-1], None, None, dict(end=stop)),
-                )
-            )
+            self.algm.after_step((
+                NotNoneStep(
+                    self.state_episode[-2],
+                    self.action_episode[-1],
+                    self.reward_episode[-1],
+                    self.info_episode[-1],
+                ),
+                Step(self.state_episode[-1], None, None, dict(end=stop)),
+            ))
 
         self.info_episode.append(dict(end=True))
-        assert (
-            len(self.state_episode)
-            == len(self.observation_episode)
-            == len(self.action_episode) + 1
-            == len(self.reward_episode) + 1
-            == len(self.info_episode)
-        )
+        assert (len(self.state_episode) == len(
+            self.observation_episode) == len(self.action_episode) + 1 ==
+                len(self.reward_episode) + 1 == len(self.info_episode))
 
         self.end = True
 
-        self.algm.on_episode_termination(
-            (
-                self.state_episode,
-                self.action_episode,
-                self.reward_episode,
-                self.info_episode,
-            )
-        )
+        self.algm.on_episode_termination((
+            self.state_episode,
+            self.action_episode,
+            self.reward_episode,
+            self.info_episode,
+        ))
 
         total_rwd = np.sum([r for r in self.reward_episode])
 
@@ -223,6 +187,31 @@ class Agent(Generic[AO, AS]):
             self.info_episode,
         )
 
+    def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[AO]]]:
+        assert len(self.eval_observation_episode) == 0
+        assert not self.end, "should reset before eval agnet"
+        self.toggleEval(True)
+
+        o = self.reset_env(env)
+
+        self.eval_observation_episode.append(o)
+
+        s = False
+        rwd = 0.0
+
+        while not s:
+            actinfo = self.get_action(
+                self.get_current_state(self.eval_observation_episode))
+            act = actinfo[0]
+
+            (o, r, s, _) = env.step(act[0].cpu().numpy() if isinstance(
+                env.action_space, gym.spaces.Discrete) else act.cpu().numpy())
+            rwd += r
+            self.eval_observation_episode.append(o)
+
+        self.report({"eval_return": rwd})
+        return rwd, (self.eval_observation_episode, )
+
     def close(self):
         self.reset()
         self.env.close()
@@ -233,6 +222,7 @@ OO = TypeVar("OO")
 
 
 class OfflineAgent(Generic[OO, OS]):
+
     def __init__(
         self,
         dataloader: DataLoader,
@@ -253,30 +243,26 @@ class OfflineAgent(Generic[OO, OS]):
         self.algm.on_agent_reset()
         self.eval_observation_episode: List[OO] = []
 
+    def toggleEval(self, newEval: bool):
+        self.algm.on_toggle_eval(newEval)
+
     def set_algm_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
         self.report = reporter
         self.algm.set_reporter(reporter)
 
-    def toggleEval(self, newEval: bool):
-        self.algm.on_toggle_eval(newEval)
-
-    def train(self) -> int:
-        self.toggleEval(False)
-        return self.algm.manual_train()
-
-    def format_action(
-        self, a: Union[Action, ActionInfo]
-    ) -> Tuple[Action, Dict[str, Any]]:
-        if isinstance(a, tuple):
-            return (a[0].detach(), a[1])
-        return (a.detach(), dict())
-
     def get_current_state(self, obs_episode: List[OO]) -> OS:
         state = self.preprocess.get_current_state(obs_episode)
         assert isinstance(state, torch.Tensor) or isinstance(
-            state, LazyFrames
-        ), "preprocess.get_current_state应该返回tensor或lazyframes"
+            state,
+            LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
         return state
+
+    def format_action(
+            self, a: Union[Action,
+                           ActionInfo]) -> Tuple[Action, Dict[str, Any]]:
+        if isinstance(a, tuple):
+            return (a[0].detach(), a[1])
+        return (a.detach(), dict())
 
     def get_action(self, state: OS) -> ActionInfo:
         actinfo = self.format_action(self.algm.take_action(state))
@@ -285,18 +271,17 @@ class OfflineAgent(Generic[OO, OS]):
         action_space = self.env.action_space
 
         assert isinstance(action_space, gym.spaces.Discrete) or isinstance(
-            action_space, gym.spaces.Box
-        ), "目前只能处理Discrete和Box两种action_space"
+            action_space, gym.spaces.Box), "目前只能处理Discrete和Box两种action_space"
 
         if isinstance(action_space, gym.spaces.Discrete):
-            assert act.shape == (1,)
+            assert act.shape == (1, )
 
         if isinstance(action_space, gym.spaces.Box):
             assert act.shape == action_space.shape
 
         return actinfo
 
-    def format_env_reset(self, env: gym.Env) -> OO:
+    def reset_env(self, env: gym.Env) -> OO:
         o = env.reset()
 
         if not isinstance(o, tuple):
@@ -308,13 +293,17 @@ class OfflineAgent(Generic[OO, OS]):
         self.algm.on_env_reset(o[1])
         return o[0]
 
+    def train(self) -> int:
+        self.toggleEval(False)
+        return self.algm.manual_train()
+
     def eval(self, env: gym.Env) -> Tuple[float, Tuple[List[OO]]]:
         assert len(self.eval_observation_episode) == 0
         self.env = env
         self.toggleEval(True)
 
         # o = cast(OO, env.reset())
-        o = self.format_env_reset(env)
+        o = self.reset_env(env)
         self.eval_observation_episode.append(o)
 
         s = False
@@ -322,18 +311,16 @@ class OfflineAgent(Generic[OO, OS]):
 
         while not s:
             actinfo = self.get_action(
-                self.get_current_state(self.eval_observation_episode)
-            )
+                self.get_current_state(self.eval_observation_episode))
             act = actinfo[0]
 
-            (o, r, s, _) = env.step(
-                act[0].cpu().numpy() if isinstance(env.action_space, gym.spaces.Discrete) else act.cpu().numpy()
-            )
+            (o, r, s, _) = env.step(act[0].cpu().numpy() if isinstance(
+                env.action_space, gym.spaces.Discrete) else act.cpu().numpy())
             rwd += r
             self.eval_observation_episode.append(cast(OO, o))
 
         self.report({"eval_return": rwd})
-        return rwd, (self.eval_observation_episode,)
+        return rwd, (self.eval_observation_episode, )
 
 
 AAO = TypeVar("AAO")

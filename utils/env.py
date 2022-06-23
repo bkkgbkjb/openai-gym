@@ -96,9 +96,7 @@ def offline_train(
     return agent
 
 
-def eval(agent: AllAgent[O, S],
-         env: gym.Env,
-         repeats=10) -> AllAgent[O, S]:
+def eval(agent: AllAgent[O, S], env: gym.Env, repeats=10) -> AllAgent[O, S]:
 
     for _ in range(repeats):
         agent.reset()
@@ -140,10 +138,9 @@ def offline_train_and_eval(
     return agent
 
 
-def make_train_and_eval_env(
-        envs: Union[str, Tuple[gym.Env, gym.Env]],
-        wrappers: List[Callable[[gym.Env], gym.Env]] = [],
-        seed: int = 0) -> Tuple[gym.Env, gym.Env]:
+def make_train_and_eval_env(envs: Union[str, Tuple[gym.Env, gym.Env]],
+                            wrappers: List[Callable[[gym.Env], gym.Env]] = [],
+                            seed: int = 0) -> Tuple[gym.Env, gym.Env]:
     train_env = gym.make(envs) if isinstance(envs, str) else envs[0]
     train_env.seed(seed)
     train_env.action_space.seed(seed)
