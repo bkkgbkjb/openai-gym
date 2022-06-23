@@ -1,7 +1,7 @@
 import setup
 from utils.step import Step, NotNoneStep
 from utils.episode import Episodes
-from utils.algorithm import ActionInfo
+from utils.algorithm import ActionInfo, Mode
 from utils.transition import (Transition, TransitionTuple)
 from torch import nn
 import math
@@ -29,6 +29,7 @@ State = Observation
 Reward = float
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 class Preprocess(PreprocessI[Observation, State]):
 
@@ -93,6 +94,7 @@ class PPO(Algorithm[State]):
         self.n_actions = n_actions
         self.network = ActorCritic(n_actions).to(DEVICE)
         self.times = 0
+        self.train_times = 0
 
         self.epoch = 4
 
@@ -129,14 +131,15 @@ class PPO(Algorithm[State]):
     def append_step(self, trs: Transition):
         self.episode.append_transition(trs)
 
-    def after_step(self, transition: TransitionTuple[State]):
+    def after_step(self, mode: Mode, transition: TransitionTuple[State]):
+        if mode == 'train':
+            trs = Transition(transition)
+            self.append_step(trs)
 
-        trs = Transition(transition)
-        self.append_step(trs)
-
-        if self.times != 0 and self.episode.len >= 1024:
-            self.train()
-            self.episode.clear()
+            if self.train_times != 0 and self.episode.len >= 1024:
+                self.train()
+                self.episode.clear()
+            self.train_times += 1
 
         self.times += 1
 
@@ -163,8 +166,7 @@ class PPO(Algorithm[State]):
 
                 assert states.shape == (L, 4, 84, 84)
 
-                old_acts = torch.cat(
-                    [s.action for s in batch])
+                old_acts = torch.cat([s.action for s in batch])
 
                 assert old_acts.shape == (L, )
 
@@ -181,8 +183,7 @@ class PPO(Algorithm[State]):
                 new_log_prob = dists.log_prob(old_acts)
                 assert new_log_prob.shape == (L, )
 
-                old_log_probs = torch.cat(
-                    [s.info["log_prob"] for s in batch])
+                old_log_probs = torch.cat([s.info["log_prob"] for s in batch])
 
                 assert old_log_probs.shape == (L, )
                 assert not old_log_probs.requires_grad
@@ -203,8 +204,7 @@ class PPO(Algorithm[State]):
 
                 v_loss_unclipped = ((new_vals - rets)**2)
 
-                old_values = torch.tensor(
-                    [s.info['value'] for s in batch])
+                old_values = torch.tensor([s.info['value'] for s in batch])
 
                 assert old_values.shape == (L, )
 
@@ -232,4 +232,3 @@ class PPO(Algorithm[State]):
                 target.backward()
                 nn.utils.clip_grad_norm_(self.network.parameters(), 1)
                 self.optimzer.step()
-

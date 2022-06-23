@@ -164,11 +164,9 @@ class BCQ(Algorithm[S]):
         act = a[q1.argmax(0)].squeeze(0).cpu().numpy()
         return act
 
-    def on_init(self, info: Dict[str, Any]):
-        assert 'dataloader' in info
-        self.dataloader = info['dataloader']
+    def get_data(self, dataloader: DataLoader):
 
-        for (states, actions, rewards, next_states, dones) in self.dataloader:
+        for (states, actions, rewards, next_states, dones) in dataloader:
             for (s, a, r, sn, done) in zip(states, actions, rewards,
                                            next_states, dones):
                 self.replay_buffer.append(
@@ -176,11 +174,14 @@ class BCQ(Algorithm[S]):
                                 Step(sn, None, None,
                                      dict(end=done.item() == 1)))))
 
-    def manual_train(self):
+    def manual_train(self, info: Dict[str, Any]):
+        assert 'dataloader' in info
+        dataloader = info['dataloader']
+        self.get_data(dataloader)
 
-        (states, actions, rewards, next_states,
-         done) = resolve_transitions(self.replay_buffer.sample(100),
-                                     (self.state_dim, ), (self.action_dim, ))
+        (states, actions, rewards, next_states, done,
+         _) = resolve_transitions(self.replay_buffer.sample(100),
+                                  (self.state_dim, ), (self.action_dim, ))
 
         recon, mean, std = self.vae(states, actions)
         recon_loss = self.recon_loss(recon, actions)

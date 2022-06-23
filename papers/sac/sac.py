@@ -8,7 +8,7 @@ from utils.transition import (
 from torch import nn
 import torch
 from utils.preprocess import PreprocessI
-from utils.algorithm import Algorithm
+from utils.algorithm import Algorithm, Mode
 from torch.distributions import Categorical, Normal
 from utils.nets import NeuralNetworks, layer_init
 
@@ -194,25 +194,23 @@ class NewSAC(Algorithm):
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
         action, _, max_actions = self.policy.sample(state.unsqueeze(0))
-        return (max_actions
-                if self.eval else action).detach().cpu().squeeze()
+        return (max_actions if self.eval else action).detach().cpu().squeeze()
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
-    def after_step(self, transition: TransitionTuple[State]):
-        # (s, a, r, sn, an) = transition
-        # assert isinstance(an, tuple) or an is None
-        self.replay_memory.append(Transition(transition))
+    def after_step(self, mode: Mode, transition: TransitionTuple[State]):
+        if mode == 'train':
+            self.replay_memory.append(Transition(transition))
 
-        if self.replay_memory.len >= self.start_traininig_size and not self.no_auto_train:
-            self.train()
+            if self.replay_memory.len >= self.start_traininig_size and not self.no_auto_train:
+                self.train()
 
         self.times += 1
 
     def train(self):
 
-        (states, actions, rewards, next_states, done) = resolve_transitions(
+        (states, actions, rewards, next_states, done, _) = resolve_transitions(
             self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
             (self.n_actions, ))
 

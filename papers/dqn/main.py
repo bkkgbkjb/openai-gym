@@ -22,8 +22,8 @@ train_env, eval_env = make_train_and_eval_env("PongDeterministic-v4", wrappers,
 
 # %%
 
-agent = Agent(train_env, DQNAlgorithm(train_env.action_space.n), Preprocess())
+agent = Agent(DQNAlgorithm(train_env.action_space.n), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent, eval_env, total_train_frames=int(3e6))
+train_and_eval(agent, train_env, eval_env, total_train_frames=int(3e6))

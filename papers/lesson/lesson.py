@@ -132,7 +132,7 @@ class LESSON(Algorithm):
                 assert self.current_high_act is not None
                 assert self.last_high_obs is not None
 
-                self.high_network.after_step((
+                self.high_network.after_step_train((
                     NotNoneStep(self.last_high_obs, self.last_high_act,
                                 self.high_reward),
                     Step(torch.cat([s, self.desired_goal]), None, None,
@@ -201,7 +201,7 @@ class LESSON(Algorithm):
 
         self.report(dict(representation_loss=representation_loss))
 
-    def after_step(self, transition: TransitionTuple[State]):
+    def after_step_train(self, transition: TransitionTuple[State]):
         (s1, s2) = transition
 
         if s1.info["env_info"]["is_success"]:
@@ -238,7 +238,7 @@ class LESSON(Algorithm):
 
         return episode
 
-    def on_episode_termination(self, sari: Tuple[List[State], List[Action],
+    def on_episode_termination_train(self, sari: Tuple[List[State], List[Action],
                                                  List[Reward], List[Info]]):
 
         (s, _, _, i) = sari
@@ -249,7 +249,7 @@ class LESSON(Algorithm):
         assert 'rg' not in i[-1]
         i[-1]['rg'] = self.representation_goal
 
-        self.high_network.after_step((
+        self.high_network.after_step_train((
             NotNoneStep(self.last_high_obs, self.last_high_act,
                         self.high_reward),
             Step(
@@ -260,7 +260,7 @@ class LESSON(Algorithm):
             ),
         ))
 
-        self.high_network.on_episode_termination(sari)
+        self.high_network.on_episode_termination_train(sari)
 
         self.low_buffer.append(self.get_episodes(sari))
         for _ in range(200):

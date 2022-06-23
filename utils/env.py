@@ -17,6 +17,7 @@ from gym.spaces import Box
 import numpy as np
 from torchvision import transforms as T
 import torch
+from torch.utils.data import DataLoader
 
 from utils.agent import Agent, OfflineAgent
 from utils.agent import AllAgent
@@ -61,15 +62,13 @@ def glance(env: gym.Env,
     return env
 
 
-def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
-
-    agent.reset()
+def train(agent: Agent[O, S], train_env: gym.Env,
+          training_frames=int(1e6)) -> Agent[O, S]:
 
     with tqdm(total=training_frames) as pbar:
         frames = 0
         while frames <= training_frames:
-            agent.reset()
-            (_, (_, _, a, _, _)) = agent.train()
+            (_, (_, _, a, _, _)) = agent.train(train_env)
 
             pbar.update(len(a))
             frames += len(a)
@@ -79,16 +78,14 @@ def train(agent: Agent[O, S], training_frames=int(1e6)) -> Agent[O, S]:
 
 def offline_train(
     agent: OfflineAgent[O, S],
+    dataloader: DataLoader,
     single_train_frames=int(1e6)) -> OfflineAgent[O, S]:
-
-    agent.reset()
 
     with tqdm(total=single_train_frames) as pbar:
         frames = 0
 
         while frames <= single_train_frames:
-            agent.reset()
-            l = agent.train()
+            l = agent.train(dataloader)
 
             pbar.update(l)
             frames += l
@@ -98,8 +95,7 @@ def offline_train(
 
 def eval(agent: AllAgent[O, S], env: gym.Env, repeats=10) -> AllAgent[O, S]:
 
-    for _ in range(repeats):
-        agent.reset()
+    for _ in tqdm(range(repeats)):
 
         agent.eval(env)
 
@@ -108,6 +104,7 @@ def eval(agent: AllAgent[O, S], env: gym.Env, repeats=10) -> AllAgent[O, S]:
 
 def train_and_eval(
         agent: Agent[O, S],
+        train_env: gym.Env,
         eval_env: gym.Env,
         single_train_frames=int(1e4),
         eval_repeats=10,
@@ -116,7 +113,7 @@ def train_and_eval(
     s = math.ceil(total_train_frames / single_train_frames)
 
     for _ in tqdm(range(s)):
-        train(agent, single_train_frames)
+        train(agent, train_env, single_train_frames)
         eval(agent, eval_env, eval_repeats)
 
     return agent
@@ -124,6 +121,7 @@ def train_and_eval(
 
 def offline_train_and_eval(
     agent: OfflineAgent[O, S],
+    dataloader: DataLoader,
     eval_env: gym.Env,
     single_train_frames=int(1e4),
     eval_repeats=10,
@@ -132,7 +130,7 @@ def offline_train_and_eval(
     s = math.ceil(total_train_frames / single_train_frames)
 
     for _ in tqdm(range(s)):
-        offline_train(agent, single_train_frames)
+        offline_train(agent, dataloader, single_train_frames)
         eval(agent, eval_env, eval_repeats)
 
     return agent

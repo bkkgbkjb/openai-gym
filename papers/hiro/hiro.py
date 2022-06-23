@@ -108,15 +108,15 @@ class Hiro(Algorithm):
 
         self.reset_episode_info()
 
-    def on_init(self, info: Dict[str, Any]):
-        self.env: gym.Env = info['env']
-
     def on_env_reset(self, info: Dict[str, Any]):
+        assert self.env is None
+        self.env = info['env']
         assert self.fg is None
         self.fg = (torch.from_numpy(info["desired_goal"]).type(
             torch.float32).to(DEVICE))
 
     def reset_episode_info(self):
+        self.env = None
         self.sg = torch.from_numpy(self.subgoal.sample()).type(
             torch.float32).to(DEVICE)
         self.n_sg = None
@@ -132,6 +132,7 @@ class Hiro(Algorithm):
             assert self.sg is not None
             return self.low_network.take_action(s, self.sg)
 
+        assert self.env is not None
         a = None
         if self.total_steps <= self.start_training_steps:
             a = torch.from_numpy(self.env.action_space.sample()).type(
@@ -144,12 +145,13 @@ class Hiro(Algorithm):
 
         return a
 
-    def after_step(self, transition: TransitionTuple[State]):
+    def after_step_train(self, transition: TransitionTuple[State]):
         (s1, s2) = transition
         self.choose_subgoal(transition)
 
         assert self.sg is not None
         self.sr = self.low_reward(s1.state, self.sg, s2.state)
+        self.episode_subreward += self.sr
 
         self.replay_buffer_low.append(
             Transition((NotNoneStep(
@@ -179,7 +181,12 @@ class Hiro(Algorithm):
 
         self.train()
 
-        self.episode_subreward += self.sr
+
+    def after_step(self, trx: TransitionTuple[State]):
+        if self.eval:
+            self.choose_subgoal(trx)
+
+        assert self.n_sg is not None
         self.sg = self.n_sg
         self.n_sg = None
 

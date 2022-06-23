@@ -6,7 +6,7 @@ import math
 import torch
 from utils.nets import NeuralNetworks
 from utils.preprocess import PreprocessI
-from utils.algorithm import Algorithm
+from utils.algorithm import Algorithm, Mode
 
 from typing import (
     List,
@@ -47,8 +47,11 @@ class Preprocess(PreprocessI[Observation, State]):
 
 class Actor(NeuralNetworks):
 
-    def __init__(self, n_states: int, n_actions: int) -> None:
+    def __init__(self, n_states: int, n_actions: int,
+                 action_scale: float) -> None:
         super(Actor, self).__init__()
+
+        self.action_scale = action_scale
 
         self.net = nn.Sequential(
             layer_init(nn.Linear(n_states, 400)),
@@ -62,7 +65,7 @@ class Actor(NeuralNetworks):
         ).to(DEVICE)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        return self.action_scale * self.net(x)
 
 
 class Critic(NeuralNetworks):
@@ -113,15 +116,16 @@ class OrnsteinUhlenbeckActionNoise:
 
 class DDPG(Algorithm[State]):
 
-    def __init__(self, n_states: int, n_actions: int):
+    def __init__(self, n_states: int, n_actions: int, action_scale: float):
         self.name = "ddpg"
         self.n_actions = n_actions
         self.n_states = n_states
+        self.action_scale = action_scale
 
         self.gamma = 0.99
         self.tau = 1e-2
 
-        self.actor = Actor(self.n_states, self.n_actions)
+        self.actor = Actor(self.n_states, self.n_actions, self.action_scale)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
                                                 lr=1e-4)
         self.actor_loss = nn.MSELoss()
@@ -145,14 +149,14 @@ class DDPG(Algorithm[State]):
 
         self.start_train_ratio = 0.1
 
-        self.times = 0
         self.eval = False
+        self.reset()
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
     def train(self):
-        (states, actions, rewards, next_states, done) = resolve_transitions(
+        (states, actions, rewards, next_states, done, _) = resolve_transitions(
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
 
@@ -189,19 +193,20 @@ class DDPG(Algorithm[State]):
         if not self.eval:
             noise = self.noise_generator.noise()
             act += torch.from_numpy(noise).to(DEVICE)
-        return act.cpu().squeeze(0).numpy()
+        return act.squeeze(0).clip(-self.action_scale, self.action_scale)
 
-    def on_episode_termination(self, sari: Tuple[List[State], List[Action],
-                                                 List[Reward], List[Info]]):
+    def on_episode_termination(self, _: Mode,
+                               sari: Tuple[List[State], List[Action],
+                                           List[Reward], List[Info]]):
         self.noise_generator.reset()
 
-    def after_step(self, transition: TransitionTuple[State]):
-        self.replay_buffer.append(Transition(transition))
+    def after_step(self, mode: Mode, transition: TransitionTuple[State]):
+        if mode == 'train':
+            self.replay_buffer.append(Transition(transition))
 
-        assert self.replay_buffer.size is not None
+            assert self.replay_buffer.size is not None
 
-        if self.replay_buffer.len >= math.ceil(
-                self.start_train_ratio * self.replay_buffer.size):
-            self.train()
-
+            if self.replay_buffer.len >= math.ceil(
+                    self.start_train_ratio * self.replay_buffer.size):
+                self.train()
         self.times += 1

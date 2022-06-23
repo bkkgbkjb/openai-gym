@@ -25,9 +25,8 @@ train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [],
 
 # %%
 
-agent = Agent(train_env, Hiro(31, 2, train_env.action_space.shape[0]),
-              Preprocess())
+agent = Agent(Hiro(31, 2, train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent, eval_env, total_train_frames=int(1e7))
+train_and_eval(agent, train_env, eval_env, total_train_frames=int(1e7))

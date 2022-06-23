@@ -10,7 +10,7 @@ from collections import deque
 import torch
 from utils.nets import NeuralNetworks
 from utils.preprocess import PreprocessI
-from utils.algorithm import Algorithm
+from utils.algorithm import Algorithm, Mode
 
 from typing import (
     List,
@@ -125,15 +125,15 @@ class TD3(Algorithm[State]):
 
         self.mini_batch_size = 256
 
-        self.times = 0
         self.eval = False
         self.start_timestamp = int(10e3)
+        self.reset()
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
     def train(self):
-        (states, actions, rewards, next_states, done) = resolve_transitions(
+        (states, actions, rewards, next_states, done, _) = resolve_transitions(
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
 
@@ -162,7 +162,7 @@ class TD3(Algorithm[State]):
 
         self.report(dict(critic_loss=critic_loss))
 
-        if self.times % 2 == 0:
+        if self.train_times % 2 == 0:
             actor_loss = -self.critic1(states, self.actor(states)).mean()
 
             self.actor_optimizer.zero_grad()
@@ -178,25 +178,31 @@ class TD3(Algorithm[State]):
 
     def reset(self):
         self.times = 0
+        self.train_times = 0
         self.replay_buffer.clear()
 
     @torch.no_grad()
     def take_action(self, state: State) -> Action:
-        if self.times <= self.start_timestamp:
-            return torch.from_numpy( np.random.uniform(-self.action_scale,
-                                     self.action_scale,
-                                     size=self.n_actions)).type(torch.float32)
+        if self.eval:
+            return self.actor(state.unsqueeze(0)).squeeze()
+
+        if self.train_times <= self.start_timestamp:
+            return torch.from_numpy(
+                np.random.uniform(-self.action_scale,
+                                  self.action_scale,
+                                  size=self.n_actions)).type(torch.float32)
 
         act = self.actor(state.unsqueeze(0)).cpu()
-        if not self.eval:
-            noise = torch.from_numpy( self.noise_generator()).type(torch.float32)
-            act += noise
+        noise = torch.from_numpy(self.noise_generator()).type(torch.float32)
+        act += noise
         return act.squeeze(0).clip(-self.action_scale, self.action_scale)
 
-    def after_step(self, transition: TransitionTuple[State]):
-        self.replay_buffer.append(Transition(transition))
+    def after_step(self, mode: Mode, transition: TransitionTuple[State]):
+        if mode == 'train':
+            self.replay_buffer.append(Transition(transition))
 
-        if self.times >= self.start_timestamp:
-            self.train()
+            if self.train_times >= self.start_timestamp:
+                self.train()
+            self.train_times += 1
 
         self.times += 1

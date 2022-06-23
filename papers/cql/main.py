@@ -28,13 +28,13 @@ dataloader = DataLoader(
 # %%
 
 agent = OfflineAgent(
-    dataloader,
     CQL_SAC(train_env.observation_space.shape[0],
-               train_env.action_space.shape[0]), Preprocess())
+            train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
 offline_train_and_eval(agent,
+                       dataloader,
                        eval_env,
                        single_train_frames=300 * 256,
                        total_train_frames=1000 * 300 * 256)

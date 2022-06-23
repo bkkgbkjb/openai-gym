@@ -1,7 +1,7 @@
 import setup
 from utils.common import Info
 from utils.transition import Transition, TransitionTuple, resolve_transitions
-from utils.algorithm import ActionInfo
+from utils.algorithm import ActionInfo, Mode
 from torch import nn
 import math
 from collections import deque
@@ -69,6 +69,7 @@ class DQNAlgorithm(Algorithm[State]):
         self.n_actions = n_actions
 
         self.times = 0
+        self.train_times = 0
 
         self.online_network = QNetwork(n_actions)
         self.optimizer = torch.optim.Adam(self.online_network.parameters(),
@@ -102,7 +103,7 @@ class DQNAlgorithm(Algorithm[State]):
         rand = np.random.random()
         max_decry_times = 100_0000
         sigma = 1 - 0.95 / max_decry_times * np.min(
-            [self.times, max_decry_times])
+            [self.train_times, max_decry_times])
 
         if rand < sigma:
             return np.asarray([np.random.choice(self.n_actions)],
@@ -114,18 +115,21 @@ class DQNAlgorithm(Algorithm[State]):
             maxi = torch.argmax(act_vals)
             return np.asarray([maxi.item()], dtype=np.int64)
 
-    def after_step(self, transition: TransitionTuple[State]):
-        self.replay_memory.append(Transition(transition))
+    def after_step(self, mode: Mode, transition: TransitionTuple[State]):
+        if mode == 'train':
+            self.replay_memory.append(Transition(transition))
 
-        if self.times != 0 and self.times % (self.update_times) == 0:
+            if self.train_times != 0 and self.train_times % (
+                    self.update_times) == 0:
 
-            if self.replay_memory.len >= 5 * self.batch_size:
+                if self.replay_memory.len >= 5 * self.batch_size:
 
-                self.train()
+                    self.train()
 
-        if (self.times != 0 and self.times %
-            (self.update_target * self.update_times) == 0):
-            self.update_target_network()
+            if (self.train_times != 0 and self.train_times %
+                (self.update_target * self.update_times) == 0):
+                self.update_target_network()
+            self.train_times += 1
 
         self.times += 1
 
@@ -134,8 +138,9 @@ class DQNAlgorithm(Algorithm[State]):
 
     def train(self):
 
-        (states, actions, rewards, next_states, done) = resolve_transitions(
-            self.replay_memory.sample(self.batch_size), (4, 84, 84), (1, ))
+        (states, actions, rewards, next_states, done,
+         _) = resolve_transitions(self.replay_memory.sample(self.batch_size),
+                                  (4, 84, 84), (1, ))
 
         q_next = self.target_network(next_states)
 
@@ -168,10 +173,6 @@ class DQNAlgorithm(Algorithm[State]):
 
         self.report(dict(loss=loss))
 
-    def on_episode_termination(self, sari: Tuple[List[State], List[ActionInfo],
-                                                 List[Reward], List[Info]]):
-        pass
-
 
 class DDQNAlgorithm(DQNAlgorithm, Algorithm[State]):
 
@@ -181,8 +182,9 @@ class DDQNAlgorithm(DQNAlgorithm, Algorithm[State]):
         self.name = "ddqn"
 
     def train(self):
-        (states, actions, rewards, next_states, done) = resolve_transitions(
-            self.replay_memory.sample(self.batch_size), (4, 84, 84), (1, ))
+        (states, actions, rewards, next_states, done,
+         _) = resolve_transitions(self.replay_memory.sample(self.batch_size),
+                                  (4, 84, 84), (1, ))
 
         q_next = self.target_network(next_states)
 

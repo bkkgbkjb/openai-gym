@@ -59,14 +59,14 @@ class HighNetwork(Algorithm):
         assert act.shape == (self.goal_dim,)
         return ((rg.cpu() + act).clip(-200, 200), dict(raw_action=act))
 
-    def after_step(self, transition: TransitionTuple[State]):
-        self.sac.after_step(transition)
+    def after_step_train(self, transition: TransitionTuple[State]):
+        self.sac.after_step_train(transition)
         if self.sac.replay_memory.len >= 128:
             self.sac.train()
 
         self.times += 1
 
-    def on_episode_termination(
+    def on_episode_termination_train(
         self, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]
     ):
         self.epoch += 1
