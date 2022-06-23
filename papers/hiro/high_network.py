@@ -196,7 +196,8 @@ class HighNetwork(Algorithm):
     def pertub(self, act: torch.Tensor):
         mean = torch.zeros_like(act)
         var = torch.ones_like(act)
-        return self.action_scale * torch.normal(mean, self.expl_noise * var).to(DEVICE)
+        return self.action_scale * torch.normal(
+            mean, self.expl_noise * var).to(DEVICE)
 
     def train(self, buffer: ReplayBuffer[Transition], low_con: LowNetwork):
         (states, actions, rewards, n_states, done,
@@ -214,8 +215,10 @@ class HighNetwork(Algorithm):
         n_goals = goals
 
         with torch.no_grad():
-            noise = (torch.randn_like(actions) * self.policy_noise).clamp(
-                -self.noise_clip, self.noise_clip)
+            noise = (self.action_scale * torch.randn_like(actions) *
+                     self.policy_noise).clamp(
+                         -self.noise_clip * self.action_scale,
+                         self.noise_clip * self.action_scale)
 
             n_actions = (self.actor_target(n_states, n_goals) + noise).clamp(
                 -self.action_scale, self.action_scale)

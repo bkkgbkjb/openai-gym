@@ -201,7 +201,7 @@ class TD3(Algorithm[State]):
         if mode == 'train':
             self.replay_buffer.append(Transition(transition))
 
-            if self.train_times >= self.start_timestamp:
+            if self.train_times > self.start_timestamp:
                 self.train()
             self.train_times += 1
 

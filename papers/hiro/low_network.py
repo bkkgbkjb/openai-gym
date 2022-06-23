@@ -140,8 +140,10 @@ class LowNetwork(Algorithm):
         not_done = 1 - done
 
         with torch.no_grad():
-            noise = (torch.randn_like(actions) * self.policy_noise).clamp(
-                -self.noise_clip, self.noise_clip)
+            noise = (self.action_scale * torch.randn_like(actions) *
+                     self.policy_noise).clamp(
+                         -self.noise_clip * self.action_scale,
+                         self.noise_clip * self.action_scale)
 
             n_actions = (self.actor_target(n_states, n_goals) + noise).clamp(
                 -self.action_scale, self.action_scale)

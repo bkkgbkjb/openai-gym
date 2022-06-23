@@ -1,6 +1,6 @@
 import setup
 import gym
-from utils.algorithm import ActionInfo
+from utils.algorithm import ActionInfo, Mode
 from utils.common import Info, Reward, Action
 from utils.episode import Episodes
 from utils.replay_buffer import ReplayBuffer
@@ -103,6 +103,7 @@ class Hiro(Algorithm):
         self.replay_buffer_high = ReplayBuffer[Transition](int(2e5))
 
         self.total_steps = 0
+        self.train_steps = 0
         self.inner_steps = 0
         self.epoch = 0
 
@@ -134,7 +135,7 @@ class Hiro(Algorithm):
 
         assert self.env is not None
         a = None
-        if self.total_steps <= self.start_training_steps:
+        if self.train_steps <= self.start_training_steps:
             a = torch.from_numpy(self.env.action_space.sample()).type(
                 torch.float32).to(DEVICE)
         else:
@@ -145,7 +146,7 @@ class Hiro(Algorithm):
 
         return a
 
-    def after_step_train(self, transition: TransitionTuple[State]):
+    def after_step(self, mode: Mode, transition: TransitionTuple[State]):
         (s1, s2) = transition
         self.choose_subgoal(transition)
 
@@ -153,38 +154,39 @@ class Hiro(Algorithm):
         self.sr = self.low_reward(s1.state, self.sg, s2.state)
         self.episode_subreward += self.sr
 
-        self.replay_buffer_low.append(
-            Transition((NotNoneStep(
-                s1.state, s1.action, self.sr,
-                dict(goal=self.sg, next_goal=self.n_sg, end=False)),
-                        Step(s2.state, None, None, dict(end=s2.is_end())))))
+        if mode == 'train':
 
-        if self.inner_steps != 0 and self.inner_steps % self.buffer_freq == 1:
-            if len(self.buf[6]) == self.buffer_freq:
-                self.buf[4] = s1.state
-                self.buf[5] = s2.is_end()
-                self.replay_buffer_high.append(
-                    Transition((NotNoneStep(
-                        self.buf[0], self.buf[2], self.buf[3],
-                        dict(goal=self.buf[1],
-                             state_arr=torch.stack(self.buf[6]),
-                             action_arr=torch.stack(self.buf[7]),
-                             end=False)),
-                                Step(self.buf[4], None, None,
-                                     dict(end=self.buf[5])))))
+            self.replay_buffer_low.append(
+                Transition((NotNoneStep(
+                    s1.state, s1.action, self.sr,
+                    dict(goal=self.sg, next_goal=self.n_sg, end=False)),
+                            Step(s2.state, None, None,
+                                 dict(end=s2.is_end())))))
 
-            self.buf = [s1.state, self.fg, self.sg, 0, None, None, [], []]
+            if self.inner_steps != 0 and self.inner_steps % self.buffer_freq == 1:
+                if len(self.buf[6]) == self.buffer_freq:
+                    self.buf[4] = s1.state
+                    self.buf[5] = s2.is_end()
+                    self.replay_buffer_high.append(
+                        Transition((NotNoneStep(
+                            self.buf[0], self.buf[2], self.buf[3],
+                            dict(goal=self.buf[1],
+                                 state_arr=torch.stack(self.buf[6]),
+                                 action_arr=torch.stack(self.buf[7]),
+                                 end=False)),
+                                    Step(self.buf[4], None, None,
+                                         dict(end=self.buf[5])))))
 
-        self.buf[3] += self.reward_scale * s1.reward
-        self.buf[6].append(s1.state)
-        self.buf[7].append(s1.action)
+                self.buf = [s1.state, self.fg, self.sg, 0, None, None, [], []]
 
-        self.train()
+            self.buf[3] += self.reward_scale * s1.reward
+            self.buf[6].append(s1.state)
+            self.buf[7].append(s1.action)
 
+            if self.train_steps > self.start_training_steps:
+                self.train()
 
-    def after_step(self, trx: TransitionTuple[State]):
-        if self.eval:
-            self.choose_subgoal(trx)
+            self.train_steps += 1
 
         assert self.n_sg is not None
         self.sg = self.n_sg
@@ -194,11 +196,9 @@ class Hiro(Algorithm):
         self.total_steps += 1
 
     def train(self):
-        if self.total_steps <= self.start_training_steps:
-            return
 
         self.low_network.train(self.replay_buffer_low)
-        if self.total_steps % self.train_freq == 0:
+        if self.train_steps % self.train_freq == 0:
             self.high_network.train(self.replay_buffer_high, self.low_network)
 
     def low_reward(self, s: torch.Tensor, sg: torch.Tensor,
@@ -215,7 +215,7 @@ class Hiro(Algorithm):
             return
 
         assert not self.high_network.eval
-        if self.total_steps <= self.start_training_steps:
+        if self.train_steps <= self.start_training_steps:
             self.n_sg = torch.from_numpy(self.subgoal.sample()).type(
                 torch.float32).to(DEVICE)
             return
@@ -227,7 +227,7 @@ class Hiro(Algorithm):
         new_sg = None
         assert self.fg is not None
 
-        if self.total_steps % self.buffer_freq == 0:
+        if self.train_steps % self.buffer_freq == 0:
             new_sg = self.high_network.take_action(s, self.fg)
         else:
             new_sg = s[:sg.shape[0]] + sg - n_s[:sg.shape[0]]
@@ -239,8 +239,9 @@ class Hiro(Algorithm):
         self.high_network.set_reporter(reporter)
         self.low_network.set_reporter(reporter)
 
-    def on_episode_termination(self, sari: Tuple[List[State], List[Action],
-                                                 List[Reward], List[Info]]):
+    def on_episode_termination(self, mode: Mode,
+                               sari: Tuple[List[State], List[Action],
+                                           List[Reward], List[Info]]):
 
         (s, _, _, i) = sari
         assert len(s) == MAX_TIMESTEPS + 1

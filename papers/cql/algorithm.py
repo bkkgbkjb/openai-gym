@@ -1,6 +1,6 @@
 import setup
 from utils.transition import (Transition, TransitionTuple, resolve_transitions)
-from utils.algorithm import ActionInfo
+from utils.algorithm import ActionInfo, Mode
 from torch import nn
 from collections import deque
 import torch
@@ -187,7 +187,7 @@ class CQL_SAC(Algorithm[State]):
         action, _, _ = self.policy.sample(state.unsqueeze(0))
         return action.cpu().squeeze(0).numpy()
 
-    def after_step(self, transition: TransitionTuple[State]):
+    def after_step(self, _: Mode, transition: TransitionTuple[State]):
         self.times += 1
 
     def manual_train(self, info: Dict[str, Any]):

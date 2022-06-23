@@ -147,7 +147,7 @@ class DDPG(Algorithm[State]):
 
         self.mini_batch_size = 64
 
-        self.start_train_ratio = 0.1
+        self.start_train_ratio = 0.01
 
         self.eval = False
         self.reset()
