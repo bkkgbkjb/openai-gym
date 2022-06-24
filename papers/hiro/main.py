@@ -14,10 +14,15 @@ from envs import EnvWithGoal
 # train_env = gym.make('AntMaze1-v1')
 # eval_env = gym.make('AntMaze1Test-v1')
 eval_env = train_env = EnvWithGoal(create_maze_env('AntMaze'), 'AntMaze')
+train_env = RecordVideo(
+    train_env,
+    'vlog/hiro',
+    episode_trigger=lambda episode_id: episode_id % 100 == 0,
+    name_prefix='hiro-train')
 eval_env = RecordVideo(eval_env,
                        'vlog/hiro',
                        episode_trigger=lambda episode_id: episode_id % 5 == 0,
-                       name_prefix='hiro')
+                       name_prefix='hiro-eval')
 eval_env.evaluate = True
 
 train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [],

@@ -109,12 +109,18 @@ def train_and_eval(
         single_train_frames=int(1e4),
         eval_repeats=10,
         total_train_frames=int(1e6),
+        eval_per_train = 1
 ) -> Agent[O, S]:
     s = math.ceil(total_train_frames / single_train_frames)
 
+    t = 0
+
     for _ in tqdm(range(s)):
         train(agent, train_env, single_train_frames)
-        eval(agent, eval_env, eval_repeats)
+        t += 1
+        if t == eval_per_train:
+            eval(agent, eval_env, eval_repeats)
+            t = 0
 
     return agent
 

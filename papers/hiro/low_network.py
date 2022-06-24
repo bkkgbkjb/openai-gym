@@ -72,7 +72,7 @@ class LowNetwork(Algorithm):
         self.action_dim = action_dim
         self.action_scale = action_scale
 
-        self.expl_noise = 1.0
+        self.expl_noise = 0.1
         self.policy_noise = 0.2
         self.noise_clip = 0.5
         self.gamma = 0.99
