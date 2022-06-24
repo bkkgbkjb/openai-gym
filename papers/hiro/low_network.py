@@ -89,7 +89,7 @@ class LowNetwork(Algorithm):
         self.critic1 = LowCritic(self.state_dim, self.goal_dim,
                                  self.action_dim)
         self.critic1_target = self.critic1.clone().no_grad()
-        self.critic1_loss = nn.MSELoss()
+        self.critic1_loss = nn.SmoothL1Loss()
         self.critic1_optim = torch.optim.Adam(
             self.critic1.parameters(),
             lr=1e-3,
@@ -98,7 +98,7 @@ class LowNetwork(Algorithm):
         self.critic2 = LowCritic(self.state_dim, self.goal_dim,
                                  self.action_dim)
         self.critic2_target = self.critic2.clone().no_grad()
-        self.critic2_loss = nn.MSELoss()
+        self.critic2_loss = nn.SmoothL1Loss()
         self.critic2_optim = torch.optim.Adam(
             self.critic2.parameters(),
             lr=1e-3,

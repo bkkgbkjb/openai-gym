@@ -90,7 +90,7 @@ class HighNetwork(Algorithm):
         self.critic1 = HighCritic(self.state_dim, self.goal_dim,
                                   self.action_dim)
         self.critic1_target = self.critic1.clone().no_grad()
-        self.critic1_loss = nn.MSELoss()
+        self.critic1_loss = nn.SmoothL1Loss()
         self.critic1_optim = torch.optim.Adam(
             self.critic1.parameters(),
             lr=1e-3,
@@ -99,7 +99,7 @@ class HighNetwork(Algorithm):
         self.critic2 = HighCritic(self.state_dim, self.goal_dim,
                                   self.action_dim)
         self.critic2_target = self.critic2.clone().no_grad()
-        self.critic2_loss = nn.MSELoss()
+        self.critic2_loss = nn.SmoothL1Loss()
         self.critic2_optim = torch.optim.Adam(
             self.critic2.parameters(),
             lr=1e-3,
@@ -143,19 +143,18 @@ class HighNetwork(Algorithm):
 
         new_batch_size = seq_len * self.batch_size
 
-        action_dim = actions.shape[2]
+        low_action_dim = actions.shape[2]
 
         obs_dim = self.state_dim
 
         ncands = candidates.shape[1]  # 10
 
-        true_actions = actions.reshape((new_batch_size, action_dim))
+        true_actions = actions.reshape((new_batch_size, low_action_dim))
 
         observations = states.reshape((new_batch_size, obs_dim))
-        goal_shape = (new_batch_size, self.action_dim)
 
         policy_actions = torch.zeros(
-            (ncands, new_batch_size, action_dim)).to(DEVICE)
+            (ncands, new_batch_size, low_action_dim)).to(DEVICE)
 
         for c in range(ncands):
             subgoal = candidates[:, c]
@@ -163,21 +162,26 @@ class HighNetwork(Algorithm):
             #              ).unsqueeze(1) - states[:, :, :self.action_dim]
             candidate = subgoal
 
-            candidate = candidate.repeat_interleave(seq_len, dim=0)
-            policy_actions[c] = low_network.policy(observations,
-                                                   candidate).detach()
+            sgs = ((candidate + states[:, 0, :self.action_dim]
+                    ).unsqueeze(1).repeat_interleave(10, dim=1) -
+                   states[:, :, :self.action_dim]).reshape(
+                       new_batch_size, self.action_dim)
+
+            # candidate = candidate.repeat_interleave(seq_len, dim=0)
+            policy_actions[c] = low_network.policy(observations, sgs).detach()
 
         difference = (policy_actions - true_actions).cpu().numpy()
-        # difference = np.where(difference != -np.inf, difference, 0)
-        # difference = difference.reshape((ncands, self.batch_size, seq_len,
-        #  action_dim)).transpose(1, 0, 2, 3)
+        # difference = torch.where(difference != -np.inf, difference,
+                                #  torch.tensor(0.0))
+        difference = difference.reshape((ncands, self.batch_size, seq_len,
+                                         low_action_dim)).transpose(1, 0, 2, 3)
 
         logprob = -0.5 * np.sum(np.linalg.norm(difference, axis=-1)**2,
                                 axis=-1)
-        assert logprob.shape == (ncands, )
+        assert logprob.shape == (self.batch_size, ncands)
         max_indices = np.argmax(logprob, axis=-1)
 
-        return candidates[:, max_indices]
+        return candidates[np.arange(self.batch_size), max_indices]
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval

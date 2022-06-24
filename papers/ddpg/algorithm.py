@@ -123,7 +123,7 @@ class DDPG(Algorithm[State]):
         self.action_scale = action_scale
 
         self.gamma = 0.99
-        self.tau = 1e-2
+        self.tau = 1e-3
 
         self.actor = Actor(self.n_states, self.n_actions, self.action_scale)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
@@ -133,9 +133,7 @@ class DDPG(Algorithm[State]):
         self.actor_target = self.actor.clone().no_grad()
 
         self.critic = Critic(self.n_states, self.n_actions)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),
-                                                 lr=1e-3,
-                                                 weight_decay=1e-2)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-4)
         self.critic_loss = nn.MSELoss()
 
         self.critic_target = self.critic.clone().no_grad()
@@ -143,9 +141,9 @@ class DDPG(Algorithm[State]):
         self.replay_buffer = ReplayBuffer(int(1e6))
 
         self.noise_generator = OrnsteinUhlenbeckActionNoise(
-            np.zeros(n_actions), sigma=0.2 * np.ones(n_actions)).reset()
+            np.zeros(n_actions), sigma=0.333 * np.ones(n_actions)).reset()
 
-        self.mini_batch_size = 64
+        self.mini_batch_size = 128
 
         self.start_train_ratio = 0.01
 

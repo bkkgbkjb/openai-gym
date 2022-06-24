@@ -221,6 +221,7 @@ class Hiro(Algorithm):
             return
 
         self.n_sg = self._choose_subgoal(s1.state, self.sg, s2.state)
+        return
 
     def _choose_subgoal(self, s: torch.Tensor, sg: torch.Tensor,
                         n_s: torch.Tensor):

@@ -17,7 +17,7 @@ eval_env = train_env = EnvWithGoal(create_maze_env('AntMaze'), 'AntMaze')
 train_env = RecordVideo(
     train_env,
     'vlog/hiro',
-    episode_trigger=lambda episode_id: episode_id % 100 == 0,
+    episode_trigger=lambda episode_id: episode_id % 25 == 0,
     name_prefix='hiro-train')
 eval_env = RecordVideo(eval_env,
                        'vlog/hiro',
@@ -34,4 +34,4 @@ agent = Agent(Hiro(31, 2, train_env.action_space.shape[0]), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent, train_env, eval_env, total_train_frames=int(1e7))
+train_and_eval(agent, train_env, eval_env, total_train_frames=int(1e7), eval_per_train=5)
