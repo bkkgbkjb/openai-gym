@@ -27,6 +27,12 @@ eval_env.evaluate = True
 
 train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [],
                                               RANDOM_SEED)
+train_env.seed(0)
+train_env.base_env.seed(0)
+train_env.base_env.wrapped_env.seed(0)
+eval_env.seed(5)
+eval_env.base_env.seed(5)
+eval_env.base_env.wrapped_env.seed(5)
 
 # %%
 

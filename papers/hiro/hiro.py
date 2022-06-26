@@ -74,10 +74,6 @@ class Hiro(Algorithm):
         self.goal_dim = goal_dim
         self.subgoal_dim = SUBGOAL_DIM
 
-        self.gamma = 0.99
-
-        self.mini_batch_size = 128
-
         self.subgoal = Subgoal(self.subgoal_dim)
         high_action_scale = self.subgoal.high * np.ones(self.subgoal_dim)
 
@@ -151,6 +147,7 @@ class Hiro(Algorithm):
         self.choose_subgoal(transition)
 
         assert self.sg is not None
+        assert self.n_sg is not None
         self.sr = self.low_reward(s1.state, self.sg, s2.state)
         self.episode_subreward += self.sr
 
@@ -246,7 +243,7 @@ class Hiro(Algorithm):
 
         (s, _, _, i) = sari
         assert len(s) == MAX_TIMESTEPS + 1
-        self.report(dict(episode_subreward=self.episode_subreward))
+        self.report({mode + '_' + 'episode_subreward': self.episode_subreward})
         self.reset_episode_info()
 
         self.epoch += 1
