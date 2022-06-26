@@ -110,10 +110,9 @@ class LowNetwork(Algorithm):
         self.critic_loss = nn.MSELoss()
 
         self.critic_optim = torch.optim.Adam(self.critic.parameters(),
-                                             lr=2e-4,
-                                             weight_decay=1e-5)
+                                             lr=2e-4)
 
-        self.training = True
+        self.eval = False
         self.eps = 0.2
         self.gamma = 0.99
 
@@ -122,23 +121,27 @@ class LowNetwork(Algorithm):
         self.train_times = 0
 
     def on_toggle_eval(self, isEval: bool):
-        self.training = not isEval
+        self.eval = isEval
 
     @torch.no_grad()
     def take_action(self, s: torch.Tensor, g: torch.Tensor):
-        if self.training and np.random.rand() < self.eps:
+        if self.eval:
+            return self.actor(s, g).squeeze()
+
+        if np.random.rand() < self.eps:
             return torch.from_numpy( np.random.uniform(-self.action_scale, self.action_scale,
-                                     self.action_dim)).type(torch.float32)
+                                     self.action_dim)).type(torch.float32).to(DEVICE)
 
-        act = self.actor(s, g).cpu().detach().squeeze()
-        if self.training:
-            return self.pertub(act)
+        act = self.actor(s, g).squeeze()
+        # if self.training:
+        # act += self.pertub(act)
 
-        return act
+        return (self.pertub(act)).clip(-self.action_scale, self.action_scale)
 
     def pertub(self, act: Action):
-        act += 0.2 * self.action_scale * torch.randn(self.action_dim)
-        return act.clip(-self.action_scale, self.action_scale)
+        noise = 0.2 * self.action_scale * torch.randn(self.action_dim).to(DEVICE)
+        # return act.clip(-self.action_scale, self.action_scale)
+        return noise + act
 
     def sample(self, buffers: ReplayBuffer[Episodes[State]]):
         episodes = buffers.sample(128)

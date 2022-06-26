@@ -1,5 +1,5 @@
 import setup
-from utils.algorithm import ActionInfo
+from utils.algorithm import ActionInfo, Mode
 from utils.common import Info, Reward, Action
 from utils.transition import (
     TransitionTuple,
@@ -43,25 +43,35 @@ class HighNetwork(Algorithm):
     def reset(self):
         self.times = 0
         self.epoch = 0
+        self.eval = False
+    
+    def on_toggle_eval(self, isEval: bool):
+        self.eval = isEval
+        self.sac.on_toggle_eval(isEval)
 
     @torch.no_grad()
-    def take_action(self, s: State, dg: Goal, rg: Goal) -> ActionInfo:
+    def take_action(self, s: State, dg: Goal) -> Action:
+        if self.eval:
+            assert self.sac.eval
+            obs = torch.cat([s, dg])
+            return self.sac.take_action(obs)
 
         act = None
         if self.epoch <= self.random_episode:
-            act = torch.from_numpy( np.random.uniform(-20, 20, self.goal_dim)).type(torch.float32)
+            act = torch.from_numpy( np.random.uniform(-20, 20, self.goal_dim)).type(torch.float32).to(DEVICE)
 
         else:
+            assert not self.sac.eval
             obs = torch.cat([s, dg])
             assert obs.shape == (self.state_dim + self.goal_dim,)
             act = self.sac.take_action(obs)
 
         assert act.shape == (self.goal_dim,)
-        return ((rg.cpu() + act).clip(-200, 200), dict(raw_action=act))
+        return act
 
-    def after_step_train(self, transition: TransitionTuple[State]):
-        self.sac.after_step_train(transition)
-        if self.sac.replay_memory.len >= 128:
+    def after_step(self, mode: Mode, transition: TransitionTuple[State]):
+        self.sac.after_step(mode, transition)
+        if mode == 'train' and self.sac.replay_memory.len >= 128:
             self.sac.train()
 
         self.times += 1
