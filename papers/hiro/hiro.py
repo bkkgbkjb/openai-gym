@@ -113,7 +113,7 @@ class Hiro(Algorithm):
             torch.float32).to(DEVICE))
 
         assert self.sg is None
-        obs = info['observation']
+        obs = torch.from_numpy(info['observation']).type(torch.float32).to(DEVICE)
         if mode == 'eval':
             self.sg = self.high_network.take_action(mode, obs, self.fg)
         else:
