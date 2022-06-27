@@ -134,12 +134,13 @@ class Hiro(Algorithm):
         self.sr = 0
         self.buf = [None, None, None, 0, None, None, [], []]
 
-    def take_action(self, state: State) -> Action:
+    def take_action(self, mode: Mode, state: State) -> Action:
         s = state.to(DEVICE)
-        if self.eval:
+        if mode == 'eval':
+            assert self.eval
             assert self.low_network.eval
             assert self.sg is not None
-            return self.low_network.take_action(s, self.sg)
+            return self.low_network.take_action(mode, s, self.sg)
 
         assert self.env is not None
         a = None
@@ -149,7 +150,7 @@ class Hiro(Algorithm):
         else:
             assert not self.low_network.eval
             assert self.sg is not None
-            a = self.low_network.take_action(s, self.sg)
+            a = self.low_network.take_action(mode, s, self.sg)
         assert a is not None
 
         return a

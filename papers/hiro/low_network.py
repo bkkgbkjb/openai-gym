@@ -3,7 +3,7 @@ from utils.episode import Episodes
 from utils.replay_buffer import ReplayBuffer
 from torch import nn
 import torch
-from utils.algorithm import Algorithm
+from utils.algorithm import Algorithm, Mode
 from utils.nets import NeuralNetworks, layer_init
 import torch.nn.functional as F
 import numpy as np
@@ -110,10 +110,11 @@ class LowNetwork(Algorithm):
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
-    def take_action(self, s: torch.Tensor, g: torch.Tensor):
+    def take_action(self, mode: Mode, s: torch.Tensor, g: torch.Tensor):
         s = s.unsqueeze(0)
         g = g.unsqueeze(0)
-        if self.eval:
+        if mode == 'eval':
+            assert self.eval
             return self.actor(s, g).squeeze()
 
         act = self.actor(s, g)
