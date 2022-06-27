@@ -163,7 +163,7 @@ class HighNetwork(Algorithm):
             candidate = subgoal
 
             sgs = ((candidate + states[:, 0, :self.action_dim]
-                    ).unsqueeze(1).repeat_interleave(10, dim=1) -
+                    ).unsqueeze(1).repeat_interleave(seq_len, dim=1) -
                    states[:, :, :self.action_dim]).reshape(
                        new_batch_size, self.action_dim)
 
