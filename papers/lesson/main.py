@@ -25,6 +25,15 @@ eval_env = RecordVideo(
 )
 train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [], RANDOM_SEED)
 
+train_env.seed(0)
+train_env.goal_space.seed(0)
+train_env.env.seed(0)
+train_env.env.wrapped_env.seed(0)
+
+eval_env.seed(5)
+eval_env.goal_space.seed(5)
+eval_env.env.seed(5)
+eval_env.env.wrapped_env.seed(5)
 
 # %%
 

@@ -145,9 +145,12 @@ class LESSON(Algorithm):
                     Step(torch.cat([s, self.desired_goal]), None, None,
                          dict(end=self.has_achieved_goal)),
                 ))
+                if not self.eval and self.high_network.sac.replay_memory.len >= 128:
+                    self.high_network.sac.train()
 
             self.high_reward = 0.0
 
+            assert self.eval == self.high_network.eval
             act = self.high_network.take_action(s, self.desired_goal)
 
             self.current_high_act = (self.representation_goal + act).clip(-200, 200)
@@ -159,6 +162,7 @@ class LESSON(Algorithm):
 
         with torch.no_grad():
             assert self.current_high_act is not None
+            assert self.eval == self.low_network.eval
             act = self.low_network.take_action(
                 s.unsqueeze(0),
                 self.current_high_act.unsqueeze(0).to(DEVICE)
@@ -269,8 +273,8 @@ class LESSON(Algorithm):
     def get_episodes(
         self, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]
     ) -> Episodes[State]:
-        episode = Episodes[State]()
-        episode.from_list(sari)
+        # episode = Episodes[State]()
+        episode = Episodes[State].from_list(sari)
 
         for i in range(episode.len - 1):
             episode.get_step(i).info['next_obs'] = episode.get_step(i +

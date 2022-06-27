@@ -59,18 +59,20 @@ class Episodes(Generic[EPS]):
 
         return self
 
-    def from_list(self, sari: Tuple[List[EPS], List[Action], List[Reward],
+    @classmethod
+    def from_list(cls, sari: Tuple[List[EPS], List[Action], List[Reward],
                                     List[Info]]):
+        inst = cls()
         (s, a, r, info) = sari
         assert len(s) == len(a) + 1 == len(r) + 1 == len(info)
 
         for i in range(len(a)):
 
-            self.append_step(Step(s[i], a[i], r[i], info[i]))
+            inst.append_step(Step(s[i], a[i], r[i], info[i]))
 
-        self.append_step(Step(s[-1], None, None, info[-1]))
+        inst.append_step(Step(s[-1], None, None, info[-1]))
 
-        return self
+        return inst
 
     def get_steps(self, s_list: List[int]) -> List[Step[EPS]]:
 

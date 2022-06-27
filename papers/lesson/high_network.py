@@ -71,8 +71,8 @@ class HighNetwork(Algorithm):
 
     def after_step(self, mode: Mode, transition: TransitionTuple[State]):
         self.sac.after_step(mode, transition)
-        if mode == 'train' and self.sac.replay_memory.len >= 128:
-            self.sac.train()
+        # if mode == 'train' and self.sac.replay_memory.len >= 128:
+        #     self.sac.train()
 
         self.times += 1
 
