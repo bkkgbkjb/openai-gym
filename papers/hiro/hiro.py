@@ -237,7 +237,7 @@ class Hiro(Algorithm):
         new_sg = None
         assert self.fg is not None
 
-        if self.train_steps % self.buffer_freq == 0:
+        if self.inner_steps % self.buffer_freq == 0:
             new_sg = self.high_network.take_action(mode, s, self.fg)
         else:
             new_sg = s[:sg.shape[0]] + sg - n_s[:sg.shape[0]]
