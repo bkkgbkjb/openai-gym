@@ -25,8 +25,6 @@ eval_env = RecordVideo(
 )
 train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [], RANDOM_SEED)
 
-train_env.env.visualize_goal = False
-eval_env.env.visualize_goal = False
 
 # %%
 

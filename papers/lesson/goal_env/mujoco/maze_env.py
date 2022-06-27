@@ -436,7 +436,7 @@ class MazeEnv(gym.Env):
     def reset(self, goal):
         self.goal = goal
 
-        if self.visualize_goal:  # remove the prev goal and add a new goal
+        if False:  # remove the prev goal and add a new goal
             goal_x, goal_y = goal[0], goal[1]
             size_scaling = self.MAZE_SIZE_SCALING
             # remove the original goal
