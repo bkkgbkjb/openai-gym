@@ -133,7 +133,8 @@ class DDPG(Algorithm[State]):
         self.actor_target = self.actor.clone().no_grad()
 
         self.critic = Critic(self.n_states, self.n_actions)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=1e-4)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(),
+                                                 lr=1e-4)
         self.critic_loss = nn.MSELoss()
 
         self.critic_target = self.critic.clone().no_grad()
@@ -184,11 +185,11 @@ class DDPG(Algorithm[State]):
         self.noise_generator.reset()
 
     @torch.no_grad()
-    def take_action(self, state: State) -> Action:
+    def take_action(self, mode: Mode, state: State) -> Action:
         self.actor.eval()
         act = self.actor(state)
         self.actor.train()
-        if not self.eval:
+        if mode == 'train':
             noise = self.noise_generator.noise()
             act += torch.from_numpy(noise).to(DEVICE)
         return act.squeeze(0).clip(-self.action_scale, self.action_scale)

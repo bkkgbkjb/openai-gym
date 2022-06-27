@@ -192,9 +192,9 @@ class NewSAC(Algorithm):
         self.replay_memory = ReplayBuffer()
 
     @torch.no_grad()
-    def take_action(self, state: State) -> Action:
+    def take_action(self, mode: Mode, state: State) -> Action:
         action, _, max_actions = self.policy.sample(state.unsqueeze(0))
-        return (max_actions if self.eval else action).squeeze()
+        return (max_actions if mode == 'eval' else action).squeeze()
 
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval

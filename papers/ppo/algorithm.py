@@ -113,11 +113,12 @@ class PPO(Algorithm[State]):
         self.batch_size = 64
 
     @torch.no_grad()
-    def take_action(self, state: LazyFrames) -> ActionInfo:
+    def take_action(self, mode: Mode, state: LazyFrames) -> ActionInfo:
 
         (log_act_probs,
          value) = self.network(resolve_lazy_frames(state).unsqueeze(0))
         dist = Categorical(logits=log_act_probs)
+        # TODO: eval的时候直接取最大概率的act
         act = dist.sample()
 
         return (

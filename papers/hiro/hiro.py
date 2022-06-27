@@ -105,17 +105,29 @@ class Hiro(Algorithm):
 
         self.reset_episode_info()
 
-    def on_env_reset(self, info: Dict[str, Any]):
+    def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
         assert self.env is None
         self.env = info['env']
         assert self.fg is None
         self.fg = (torch.from_numpy(info["desired_goal"]).type(
             torch.float32).to(DEVICE))
 
+        assert self.sg is None
+        obs = info['observation']
+        if mode == 'eval':
+            self.sg = self.high_network.take_action(mode, obs, self.fg)
+        else:
+            if self.train_steps <= self.start_training_steps:
+                self.sg = torch.from_numpy(self.subgoal.sample()).type(
+                    torch.float32).to(DEVICE)
+            else:
+                self.sg = self.high_network.take_action(mode, obs, self.fg)
+
+        assert self.sg is not None
+
     def reset_episode_info(self):
         self.env = None
-        self.sg = torch.from_numpy(self.subgoal.sample()).type(
-            torch.float32).to(DEVICE)
+        self.sg = None
         self.n_sg = None
         self.fg = None
         self.episode_subreward = 0.0
@@ -144,7 +156,7 @@ class Hiro(Algorithm):
 
     def after_step(self, mode: Mode, transition: TransitionTuple[State]):
         (s1, s2) = transition
-        self.choose_subgoal(transition)
+        self.n_sg = self.choose_subgoal(mode, transition)
 
         assert self.sg is not None
         assert self.n_sg is not None
@@ -203,30 +215,29 @@ class Hiro(Algorithm):
         abs_s = s[:sg.shape[0]] + sg
         return -torch.sqrt(torch.sum((abs_s - n_s[:sg.shape[0]])**2)).item()
 
-    def choose_subgoal(self, trx: TransitionTuple[State]):
+    def choose_subgoal(self, mode: Mode, trx: TransitionTuple[State]):
         assert self.n_sg is None
+        assert self.sg is not None
         (s1, s2) = trx
-        if self.eval:
+        if mode == 'eval':
+            assert self.eval
             assert self.high_network.eval
-            self.n_sg = self._choose_subgoal(s1.state, self.sg, s2.state)
-            return
+            return self._choose_subgoal(mode, s1.state, self.sg, s2.state)
 
         assert not self.high_network.eval
         if self.train_steps <= self.start_training_steps:
-            self.n_sg = torch.from_numpy(self.subgoal.sample()).type(
+            return torch.from_numpy(self.subgoal.sample()).type(
                 torch.float32).to(DEVICE)
-            return
 
-        self.n_sg = self._choose_subgoal(s1.state, self.sg, s2.state)
-        return
+        return self._choose_subgoal(mode, s1.state, self.sg, s2.state)
 
-    def _choose_subgoal(self, s: torch.Tensor, sg: torch.Tensor,
+    def _choose_subgoal(self, mode: Mode, s: torch.Tensor, sg: torch.Tensor,
                         n_s: torch.Tensor):
         new_sg = None
         assert self.fg is not None
 
         if self.train_steps % self.buffer_freq == 0:
-            new_sg = self.high_network.take_action(s, self.fg)
+            new_sg = self.high_network.take_action(mode, s, self.fg)
         else:
             new_sg = s[:sg.shape[0]] + sg - n_s[:sg.shape[0]]
 

@@ -59,7 +59,8 @@ class EnvWithGoal(object):
         obs = self.base_env.reset()
         self.count = 0
         self.goal = self.goal_sample_fn()
-        return np.r_[obs.copy(), self.count], dict(desired_goal = self.goal, achieved_goal = obs[:2])
+        obs = np.r_[obs.copy(), self.count]
+        return obs, dict(desired_goal = self.goal, achieved_goal = obs[:2], observation = obs.copy())
 
     def step(self, a):
         obs, _, done, info = self.base_env.step(a)
@@ -73,8 +74,10 @@ class EnvWithGoal(object):
         }
         assert 'desired_goal' not in info
         assert 'achieved_goal' not in info
+        assert 'observation' not in info
         info['desired_goal'] = self.goal
         info['achieved_goal'] = obs[:2]
+        info['observation'] = next_obs['observation']
         return next_obs['observation'], reward, done or self.count >= 500, info
 
     def render(self, *args, **kwargs):

@@ -183,9 +183,10 @@ class CQL_SAC(Algorithm[State]):
         return self.log_alpha.exp()
 
     @torch.no_grad()
-    def take_action(self, state: State) -> Action:
-        action, _, _ = self.policy.sample(state.unsqueeze(0))
-        return action.cpu().squeeze(0).numpy()
+    def take_action(self, mode: Mode, state: State) -> Action:
+        assert mode == 'eval'
+        action, _, max_acts = self.policy.sample(state.unsqueeze(0))
+        return (max_acts if mode == 'eval' else action).squeeze(0)
 
     def after_step(self, _: Mode, transition: TransitionTuple[State]):
         self.times += 1

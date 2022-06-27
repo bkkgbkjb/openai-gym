@@ -1,5 +1,5 @@
 import setup
-from utils.algorithm import (ActionInfo)
+from utils.algorithm import (ActionInfo, Mode)
 from utils.step import NotNoneStep, Step
 from utils.transition import (Transition, resolve_transitions)
 from torch import nn
@@ -155,13 +155,13 @@ class BCQ(Algorithm[S]):
         self.replay_buffer = ReplayBuffer(None)
 
     @torch.no_grad()
-    def take_action(self, state: S) -> Union[ActionInfo, Action]:
+    def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
         s = state.unsqueeze(0).repeat_interleave(100, 0).to(DEVICE)
         # state = torch.FloatTensor(state.reshape(1,-1).cpu()).repeat(100,1).to(DEVICE)
 
         a = self.actor(s, self.vae.decode(s))
         q1 = self.q1(s, a)
-        act = a[q1.argmax(0)].squeeze(0).cpu().numpy()
+        act = a[q1.argmax(0)].squeeze(0)
         return act
 
     def get_data(self, dataloader: DataLoader):

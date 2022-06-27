@@ -182,8 +182,9 @@ class TD3(Algorithm[State]):
         self.replay_buffer.clear()
 
     @torch.no_grad()
-    def take_action(self, state: State) -> Action:
-        if self.eval:
+    def take_action(self, mode: Mode, state: State) -> Action:
+        # if self.eval:
+        if mode == 'eval':
             return self.actor(state.unsqueeze(0)).squeeze()
 
         if self.train_times <= self.start_timestamp:

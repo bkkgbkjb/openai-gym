@@ -26,11 +26,11 @@ class Algorithm(Generic[S]):
     def on_toggle_eval(self, isEval: bool):
         pass
 
-    def on_env_reset(self, info: Dict[str, Any]):
+    def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
         pass
 
     @abstractmethod
-    def take_action(self, state: S) -> Union[ActionInfo, Action]:
+    def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
         raise NotImplementedError()
 
     @abstractmethod

@@ -93,8 +93,8 @@ class DQNAlgorithm(Algorithm[State]):
         self.eval = isEval
 
     @torch.no_grad()
-    def take_action(self, state: State) -> Action:
-        if self.eval:
+    def take_action(self, mode: Mode, state: State) -> Action:
+        if mode == 'eval':
             act_vals = self.online_network(
                 resolve_lazy_frames(state).unsqueeze(0))
             maxi = torch.argmax(act_vals)

@@ -17,7 +17,7 @@ from typing import (
     Union,
     TypeVar,
 )
-from utils.algorithm import Algorithm, ActionInfo
+from utils.algorithm import Algorithm, ActionInfo, Mode
 from utils.preprocess import PreprocessI
 from utils.common import Action, Info, Reward
 from torch.utils.data import DataLoader
@@ -73,8 +73,8 @@ class Agent(Generic[AO, AS]):
         assert isinstance(a, torch.Tensor)
         return (a.detach(), dict(end=False))
 
-    def get_action(self, state: AS, env: gym.Env) -> ActionInfo:
-        actinfo = self.format_action(self.algm.take_action(state))
+    def get_action(self, state: AS, env: gym.Env, mode: Mode) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(mode, state))
         act = actinfo[0]
 
         action_space = env.action_space
@@ -90,18 +90,22 @@ class Agent(Generic[AO, AS]):
 
         return actinfo
 
-    def reset_env(self, env: gym.Env) -> AO:
+    def reset_env(self, env: gym.Env, mode: Mode) -> AO:
         o = env.reset()
 
         if not isinstance(o, tuple):
-            self.algm.on_env_reset(dict(env=env))
+            self.algm.on_env_reset(mode, dict(env=env, mode=mode))
             return o
 
         assert len(o) == 2
         assert isinstance(o[1], dict)
+
         assert 'env' not in o[1]
         o[1]['env'] = env
-        self.algm.on_env_reset(o[1])
+        assert 'mode' not in o[1]
+        o[1]['mode'] = mode
+
+        self.algm.on_env_reset(mode, o[1])
         return cast(AO, o[0])
 
     def train(self, env: gym.Env):
@@ -123,7 +127,7 @@ class Agent(Generic[AO, AS]):
         reward_episode: List[R] = []
         info_episode: List[Info] = []
 
-        o = self.reset_env(env)
+        o = self.reset_env(env, mode)
         observation_episode.append(o)
         state_episode.append(self.get_current_state(observation_episode))
 
@@ -131,7 +135,7 @@ class Agent(Generic[AO, AS]):
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env)
+            actinfo = self.get_action(state_episode[-1], env, mode)
 
             act, info = actinfo
             (obs, rwd, stop,
@@ -230,8 +234,8 @@ class OfflineAgent(Generic[OO, OS]):
             return (a[0].detach(), a[1])
         return (a.detach(), dict())
 
-    def get_action(self, state: OS, env: gym.Env) -> ActionInfo:
-        actinfo = self.format_action(self.algm.take_action(state))
+    def get_action(self, state: OS, env: gym.Env, mode: Mode) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(mode, state))
         act = actinfo[0]
 
         action_space = env.action_space
@@ -247,18 +251,22 @@ class OfflineAgent(Generic[OO, OS]):
 
         return actinfo
 
-    def reset_env(self, env: gym.Env) -> OO:
+    def reset_env(self, env: gym.Env, mode: Mode) -> OO:
         o = env.reset()
 
         if not isinstance(o, tuple):
-            self.algm.on_env_reset(dict(env=env))
+            self.algm.on_env_reset(mode, dict(env=env, mode=mode))
             return o
 
         assert len(o) == 2
         assert isinstance(o[1], dict)
+
         assert 'env' not in o[1]
         o[1]['env'] = env
-        self.algm.on_env_reset(o[1])
+        assert 'mode' not in o[1]
+        o[1]['mode'] = mode
+
+        self.algm.on_env_reset(mode, o[1])
         return o[0]
 
     def train(self, dataloader: DataLoader) -> int:
@@ -277,7 +285,7 @@ class OfflineAgent(Generic[OO, OS]):
         reward_episode: List[R] = []
         info_episode: List[Info] = []
 
-        o = self.reset_env(env)
+        o = self.reset_env(env, 'eval')
         observation_episode.append(o)
         state_episode.append(self.get_current_state(observation_episode))
 
@@ -285,7 +293,7 @@ class OfflineAgent(Generic[OO, OS]):
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env)
+            actinfo = self.get_action(state_episode[-1], env, 'eval')
 
             act, info = actinfo
             (obs, rwd, stop,
