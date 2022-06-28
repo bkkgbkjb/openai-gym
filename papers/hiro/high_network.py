@@ -73,8 +73,8 @@ class HighNetwork(Algorithm):
         self.action_scale = torch.from_numpy(action_scale).type(
             torch.float32).to(DEVICE)
 
-        self.expl_noise = 0.333
-        self.policy_noise = 0.2
+        self.expl_noise = 0.7
+        self.policy_noise = 0.3
         self.noise_clip = 0.5
         self.gamma = 0.99
         self.policy_freq = 2
