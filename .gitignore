@@ -5,3 +5,4 @@ venv
 wandb
 vlog
 saved_models
+out.log
