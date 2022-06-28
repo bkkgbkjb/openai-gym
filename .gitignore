@@ -4,3 +4,4 @@ runs/
 venv
 wandb
 vlog
+saved_models
