@@ -14,7 +14,6 @@ MAX_TIMESTEPS = 500
 
 Observation = torch.Tensor
 Action = np.ndarray
-
 State = Observation
 Goal = torch.Tensor
 
