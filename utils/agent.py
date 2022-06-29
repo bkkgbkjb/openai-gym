@@ -154,7 +154,7 @@ class Agent(Generic[AO, AS]):
 
             assert len(state_episode) == len(observation_episode)
 
-            self.algm.after_step(mode, (
+            report_info = self.algm.after_step(mode, (
                 NotNoneStep(
                     state_episode[-2],
                     action_episode[-1],
@@ -164,21 +164,31 @@ class Agent(Generic[AO, AS]):
                 Step(state_episode[-1], None, None, dict(end=stop)),
             ))
 
+            if report_info is not None:
+                for (k, v) in report_info:
+                    self.report({f'{mode}/after_step/{k}': v})
+
         info_episode.append(dict(end=True))
         assert (len(state_episode) == len(observation_episode) ==
                 len(action_episode) + 1 == len(reward_episode) + 1 ==
                 len(info_episode))
 
-        self.algm.on_episode_termination(mode, (
-            state_episode,
-            action_episode,
-            reward_episode,
-            info_episode,
-        ))
+        end_report_info = self.algm.on_episode_termination(
+            mode, (
+                state_episode,
+                action_episode,
+                reward_episode,
+                info_episode,
+            ))
+        if end_report_info is not None:
+            for (k, v) in end_report_info:
+                self.report({f'{mode}/end_episode/{k}': v})
 
         total_rwd = np.sum([r for r in reward_episode])
 
-        self.report({f"{mode}_return": total_rwd})
+        self.report({f"{mode}/return": total_rwd})
+
+        env.close()
 
         return total_rwd, (
             observation_episode,
@@ -187,9 +197,6 @@ class Agent(Generic[AO, AS]):
             reward_episode,
             info_episode,
         )
-
-    def close(self):
-        self.reset()
 
 
 OS = TypeVar("OS", bound=Union[torch.Tensor, LazyFrames])
@@ -312,7 +319,7 @@ class OfflineAgent(Generic[OO, OS]):
 
             assert len(state_episode) == len(observation_episode)
 
-            self.algm.after_step('eval', (
+            report_info = self.algm.after_step('eval', (
                 NotNoneStep(
                     state_episode[-2],
                     action_episode[-1],
@@ -321,23 +328,32 @@ class OfflineAgent(Generic[OO, OS]):
                 ),
                 Step(state_episode[-1], None, None, dict(end=stop)),
             ))
+            if report_info is not None:
+                for (k, v) in report_info:
+                    self.report({f'eval/after_step/{k}': v})
 
         info_episode.append(dict(end=True))
         assert (len(state_episode) == len(observation_episode) ==
                 len(action_episode) + 1 == len(reward_episode) + 1 ==
                 len(info_episode))
 
-        self.algm.on_episode_termination('eval', (
-            state_episode,
-            action_episode,
-            reward_episode,
-            info_episode,
-        ))
+        end_report_info = self.algm.on_episode_termination(
+            'eval', (
+                state_episode,
+                action_episode,
+                reward_episode,
+                info_episode,
+            ))
+
+        if end_report_info is not None:
+            for (k, v) in end_report_info:
+                self.report({f'eval/end_episode/{k}': v})
 
         total_rwd = np.sum([r for r in reward_episode])
 
-        self.report({f"eval_return": total_rwd})
+        self.report({f"eval/return": total_rwd})
 
+        env.close()
         return total_rwd, (
             observation_episode,
             state_episode,

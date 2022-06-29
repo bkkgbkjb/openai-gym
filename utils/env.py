@@ -22,7 +22,8 @@ from torch.utils.data import DataLoader
 from utils.agent import Agent, OfflineAgent
 from utils.agent import AllAgent
 from utils.common import Action
-from utils.env_sb3 import LazyFrames, resolve_lazy_frames
+from datetime import datetime
+from utils.env_sb3 import LazyFrames, RecordVideo, resolve_lazy_frames
 
 O = TypeVar('O')
 S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
@@ -102,15 +103,13 @@ def eval(agent: AllAgent[O, S], env: gym.Env, repeats=10) -> AllAgent[O, S]:
     return agent
 
 
-def train_and_eval(
-        agent: Agent[O, S],
-        train_env: gym.Env,
-        eval_env: gym.Env,
-        single_train_frames=int(1e4),
-        eval_repeats=10,
-        total_train_frames=int(1e6),
-        eval_per_train = 1
-) -> Agent[O, S]:
+def train_and_eval(agent: Agent[O, S],
+                   train_env: gym.Env,
+                   eval_env: gym.Env,
+                   single_train_frames=int(1e4),
+                   eval_repeats=10,
+                   total_train_frames=int(1e6),
+                   eval_per_train=1) -> Agent[O, S]:
     s = math.ceil(total_train_frames / single_train_frames)
 
     t = 0
@@ -166,3 +165,13 @@ def make_train_and_eval_env(envs: Union[str, Tuple[gym.Env, gym.Env]],
         eval_env = w(eval_env)
 
     return train_env, eval_env
+
+
+def record_video(env: gym.Env,
+                 algo_name: str,
+                 activate_per_episode: int = 1) -> gym.Env:
+    return RecordVideo(env,
+                       f'vlog/{algo_name}_{datetime.now().strftime("%m-%d_%H-%M")}',
+                       episode_trigger=lambda episode_id: episode_id %
+                       activate_per_episode == 0,
+                       name_prefix=algo_name)

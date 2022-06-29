@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Callable, Dict, Generic, Literal, Tuple, TypeVar, List, Union, Any, Union
+from typing import Callable, Dict, Generic, Literal, Tuple, TypeVar, List, Union, Any, Union, Optional
 from utils.common import Action, Info, Reward, ActionInfo
 from utils.env_sb3 import LazyFrames
 from utils.transition import TransitionTuple
@@ -9,6 +9,7 @@ import torch
 S = TypeVar("S", bound=Union[torch.Tensor, LazyFrames])
 
 Mode = Union[Literal['train'], Literal['eval']]
+ReportInfo = Info
 
 
 class Algorithm(Generic[S]):
@@ -37,12 +38,12 @@ class Algorithm(Generic[S]):
     def manual_train(self, info: Dict[str, Any]):
         raise NotImplementedError()
 
-    def after_step(self, mode: Mode, transition: TransitionTuple[S]):
+    def after_step(self, mode: Mode, transition: TransitionTuple[S]) -> Optional[ReportInfo]:
         pass
 
     def on_episode_termination(self, mode: Mode,
                                sari: Tuple[List[S], List[Action], List[Reward],
-                                           List[Info]]):
+                                           List[Info]]) -> Optional[ReportInfo]:
         pass
 
     def set_reporter(self, reporter: Callable[[Dict[str, Any]], None]):
@@ -51,4 +52,4 @@ class Algorithm(Generic[S]):
     def report(self, info: Dict[str, Any]):
         assert hasattr(self, "name")
         if self.reporter:
-            self.reporter({(self.name + "/" + k): v for k, v in info.items()})
+            self.reporter({(self.name + "/" + k): v for (k, v) in info.items()})
