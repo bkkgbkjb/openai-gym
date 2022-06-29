@@ -7,19 +7,20 @@ from utils.reporter import get_reporter
 from utils.env import train_and_eval, make_train_and_eval_env
 from goal_env.mujoco import *
 from utils.env_sb3 import RecordVideo, RescaleAction
+from datetime import datetime
 
 # %%
 train_env = gym.make("AntMaze1-v1")
-train_env = RecordVideo(
-    train_env,
-    'vlog/lesson',
-    episode_trigger= lambda episode_id: episode_id % 25 ==0,
-    name_prefix='lesson-train'
-)
+# train_env = RecordVideo(
+#     train_env,
+#     'vlog/lesson',
+#     episode_trigger= lambda episode_id: episode_id % 25 ==0,
+#     name_prefix='lesson-train'
+# )
 eval_env = gym.make("AntMaze1Test-v1")
 eval_env = RecordVideo(
     eval_env,
-    "vlog/lesson",
+    "vlog/lesson" + '_' + datetime.now().strftime('%m-%d_%H-%M'),
     episode_trigger=lambda episode_id: episode_id % 5 == 0,
     name_prefix="lesson-eval",
 )

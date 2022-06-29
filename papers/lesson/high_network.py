@@ -50,21 +50,21 @@ class HighNetwork(Algorithm):
         self.sac.on_toggle_eval(isEval)
 
     @torch.no_grad()
-    def take_action(self, s: State, dg: Goal) -> Action:
-        if self.eval:
+    def take_action(self, mode: Mode, s: State, dg: Goal) -> Action:
+        if mode == 'eval':
             assert self.sac.eval
             obs = torch.cat([s, dg])
-            return self.sac.take_action(obs)
+            return self.sac.take_action(mode, obs)
 
         act = None
         if self.epoch <= self.random_episode:
-            act = torch.from_numpy( np.random.uniform(-20, 20, self.goal_dim)).type(torch.float32).to(DEVICE)
+            act = torch.from_numpy(np.random.uniform(-20, 20, self.goal_dim)).type(torch.float32).to(DEVICE)
 
         else:
             assert not self.sac.eval
             obs = torch.cat([s, dg])
             assert obs.shape == (self.state_dim + self.goal_dim,)
-            act = self.sac.take_action(obs)
+            act = self.sac.take_action(mode, obs)
 
         assert act.shape == (self.goal_dim,)
         return act
@@ -76,7 +76,8 @@ class HighNetwork(Algorithm):
 
         self.times += 1
 
-    def on_episode_termination_train(
-        self, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]
+    def on_episode_termination(
+        self, mode: Mode, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]
     ):
-        self.epoch += 1
+        if mode == 'train':
+            self.epoch += 1

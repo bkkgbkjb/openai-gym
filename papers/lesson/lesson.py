@@ -104,7 +104,7 @@ class LESSON(Algorithm):
         self.desired_goal = None
         self.representation_goal = None
 
-        self.low_buffer = ReplayBuffer[Episodes](300)
+        self.low_buffer = ReplayBuffer[Episodes](2000)
 
         self.reset_episode_info()
 
@@ -113,12 +113,12 @@ class LESSON(Algorithm):
         self.representation_goal = None
 
         self.has_achieved_goal = False
-        self.current_high_act = None
+        self.current_low_input = None
         self.last_high_obs = None
         self.last_high_act = None
         self.high_reward = 0.0
 
-    def on_env_reset(self, info: Dict[str, Any]):
+    def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
         assert self.desired_goal is None
         self.desired_goal = (torch.from_numpy(info["desired_goal"]).type(
             torch.float32).to(DEVICE))
@@ -131,29 +131,29 @@ class LESSON(Algorithm):
             obs.unsqueeze(0)).squeeze(0)).detach()
 
 
-    def take_action(self, state: State) -> ActionInfo:
+    def take_action(self, mode: Mode, state: State) -> ActionInfo:
         s = state.to(DEVICE)
         assert self.desired_goal is not None
         if self.inner_steps % self.c == 0:
             if self.last_high_act is not None:
-                assert self.current_high_act is not None
                 assert self.last_high_obs is not None
 
-                self.high_network.after_step('train' if not self.eval else 'eval', (
+                self.high_network.after_step(mode, (
                     NotNoneStep(self.last_high_obs, self.last_high_act,
                                 self.high_reward),
                     Step(torch.cat([s, self.desired_goal]), None, None,
                          dict(end=self.has_achieved_goal)),
                 ))
-                if not self.eval and self.high_network.sac.replay_memory.len >= 128:
+                if mode == 'train' and self.high_network.sac.replay_memory.len >= 128:
                     self.high_network.sac.train()
 
             self.high_reward = 0.0
+            self.has_achieved_goal = False
 
             assert self.eval == self.high_network.eval
-            act = self.high_network.take_action(s, self.desired_goal)
+            act = self.high_network.take_action(mode, s, self.desired_goal)
 
-            self.current_high_act = (self.representation_goal + act).clip(-200, 200)
+            self.current_low_input = (self.representation_goal + act).clip(-200, 200)
             self.last_high_obs = torch.cat([
                 state,
                 self.desired_goal,
@@ -161,15 +161,16 @@ class LESSON(Algorithm):
             self.last_high_act = act
 
         with torch.no_grad():
-            assert self.current_high_act is not None
+            assert self.current_low_input is not None
             assert self.eval == self.low_network.eval
             act = self.low_network.take_action(
+                mode,
                 s.unsqueeze(0),
-                self.current_high_act.unsqueeze(0).to(DEVICE)
+                self.current_low_input.unsqueeze(0).to(DEVICE)
             )
 
             return act, dict(rg=self.representation_goal,
-                             high_act=self.current_high_act)
+                             low_input=self.current_low_input)
 
     def after_step(self, mode: Mode, transition: TransitionTuple[State]):
         (s1, s2) = transition

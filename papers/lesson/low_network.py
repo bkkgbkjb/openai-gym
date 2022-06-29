@@ -4,7 +4,7 @@ from utils.replay_buffer import ReplayBuffer
 from utils.common import Action
 from torch import nn
 import torch
-from utils.algorithm import Algorithm
+from utils.algorithm import Algorithm, Mode
 from utils.nets import NeuralNetworks, layer_init
 from typing import cast
 import numpy as np
@@ -46,6 +46,7 @@ class LowCritic(NeuralNetworks):
         assert s.size(1) == self.state_dim
         assert a.size(1) == self.action_dim
         assert g.size(1) == self.goal_dim
+        assert s.size(0) == g.size(0) == a.size(0)
         return self.net(
             torch.cat([s.to(DEVICE), g.to(DEVICE),
                        a.to(DEVICE)], 1))
@@ -124,8 +125,8 @@ class LowNetwork(Algorithm):
         self.eval = isEval
 
     @torch.no_grad()
-    def take_action(self, s: torch.Tensor, g: torch.Tensor):
-        if self.eval:
+    def take_action(self, mode: Mode, s: torch.Tensor, g: torch.Tensor):
+        if mode == 'eval':
             return self.actor(s, g).squeeze()
 
         if np.random.rand() < self.eps:
@@ -161,26 +162,24 @@ class LowNetwork(Algorithm):
             for s in sampled_steps
         ])
 
-        rgs = torch.stack([s.info['rg'] for s in sampled_steps])
+        # rgs = torch.stack([s.info['rg'] for s in sampled_steps])
 
         rg_next = torch.stack([s.info['next_rg'] for s in sampled_steps])
 
         g = torch.stack([
-            s.info['high_act'].to(DEVICE)
+            s.info['low_input'].to(DEVICE)
             for s in sampled_steps
         ])
 
-        reward = torch.from_numpy(
-            -np.linalg.norm(rg_next.cpu().numpy() - g.cpu().numpy(), axis=-1) *
-            0.1).type(torch.float32).to(DEVICE)
+        reward = -torch.norm(rg_next - g, dim=-1) * 0.1
 
         g_next = g
         not_done = (torch.norm(
-            (rg_next - g_next), dim=1) > 0.1).type(torch.int8).reshape(-1, 1)
-        return (obs, obs_next, rgs, rg_next, acts, reward, g, g_next, not_done)
+            (rg_next - g_next), dim=1) > 0.1).type(torch.int8).unsqueeze(1)
+        return (obs, obs_next, acts, reward, g, g_next, not_done)
 
     def train(self, low_buffer: ReplayBuffer[Episodes]):
-        (obs, obs_next, rgs, rg_next, acts, reward, g, g_next,
+        (obs, obs_next, acts, reward, g, g_next,
          not_done) = self.sample(low_buffer)
 
         with torch.no_grad():
