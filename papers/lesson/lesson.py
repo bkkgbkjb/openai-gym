@@ -10,7 +10,7 @@ from torch import nn
 import torch
 from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
-from typing import Union
+from typing import Literal, Union
 from utils.nets import NeuralNetworks, layer_init
 
 from typing import List, Tuple, Any, Optional, Callable, Dict
@@ -118,6 +118,8 @@ class LESSON(Algorithm):
         self.last_high_act = None
         self.high_reward = 0.0
 
+        self.env_id = None
+
     def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
         assert self.desired_goal is None
         self.desired_goal = (torch.from_numpy(info["desired_goal"]).type(
@@ -129,6 +131,9 @@ class LESSON(Algorithm):
         assert self.representation_goal is None
         self.representation_goal = (self.representation_network(
             obs.unsqueeze(0)).squeeze(0)).detach()
+        
+        assert self.env_id = None
+        self.env_id: Union[Literal['eval'], Literal['train']] = info['env']._env_id
 
 
     def take_action(self, mode: Mode, state: State) -> ActionInfo:

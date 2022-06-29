@@ -3,6 +3,7 @@ import math
 from typing import (
     Callable,
     Literal,
+    Dict,
     Optional,
     Tuple,
     List,
@@ -94,22 +95,44 @@ def offline_train(
     return agent
 
 
-def eval(agent: AllAgent[O, S], env: gym.Env, repeats=10) -> AllAgent[O, S]:
+def eval(agent: AllAgent[O, S],
+         env: Union[gym.Env, List[gym.Env]],
+         repeats=10,
+         env_weights: Optional[List[float]] = None) -> AllAgent[O, S]:
+
+    report_dict: Dict[str, Tuple[Any, int]] = dict()
 
     for _ in tqdm(range(repeats)):
 
-        agent.eval(env)
+        (report_info,
+         _) = agent.eval(env if not isinstance(env, list) else env[
+             np.random.choice(len(env), p=env_weights)])
+
+        for (k, v) in report_info.items():
+
+            if k not in report_dict:
+                report_dict[k] = (v, 1)
+            else:
+                old_v = report_dict[k][0]
+                n = report_dict[k][1] + 1
+
+                report_dict[k] = (old_v + (v - old_v) / n, n)
+
+    for (k, (v, _)) in report_dict.items():
+        agent.report({f'eval/{k}': v})
 
     return agent
 
 
-def train_and_eval(agent: Agent[O, S],
-                   train_env: gym.Env,
-                   eval_env: gym.Env,
-                   single_train_frames=int(1e4),
-                   eval_repeats=10,
-                   total_train_frames=int(1e6),
-                   eval_per_train=1) -> Agent[O, S]:
+def train_and_eval(
+        agent: Agent[O, S],
+        train_env: gym.Env,
+        eval_env: Union[gym.Env, List[gym.Env]],
+        single_train_frames=int(1e4),
+        eval_repeats=10,
+        total_train_frames=int(1e6),
+        eval_per_train=1,
+        eval_env_weights: Optional[List[float]] = None) -> Agent[O, S]:
     s = math.ceil(total_train_frames / single_train_frames)
 
     t = 0
@@ -118,25 +141,31 @@ def train_and_eval(agent: Agent[O, S],
         train(agent, train_env, single_train_frames)
         t += 1
         if t == eval_per_train:
-            eval(agent, eval_env, eval_repeats)
+            eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
             t = 0
 
     return agent
 
 
 def offline_train_and_eval(
-    agent: OfflineAgent[O, S],
-    dataloader: DataLoader,
-    eval_env: gym.Env,
-    single_train_frames=int(1e4),
-    eval_repeats=10,
-    total_train_frames=int(1e6)) -> OfflineAgent[O, S]:
+        agent: OfflineAgent[O, S],
+        dataloader: DataLoader,
+        eval_env: Union[gym.Env, List[gym.Env]],
+        single_train_frames=int(1e4),
+        eval_repeats=10,
+        total_train_frames=int(1e6),
+        eval_per_train=1,
+        eval_env_weights: Optional[List[float]] = None) -> OfflineAgent[O, S]:
 
     s = math.ceil(total_train_frames / single_train_frames)
+    t = 0
 
     for _ in tqdm(range(s)):
         offline_train(agent, dataloader, single_train_frames)
-        eval(agent, eval_env, eval_repeats)
+        t += 1
+        if t == eval_per_train:
+            eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
+            t = 0
 
     return agent
 
@@ -167,11 +196,34 @@ def make_train_and_eval_env(envs: Union[str, Tuple[gym.Env, gym.Env]],
     return train_env, eval_env
 
 
+def make_envs(
+        envs: Union[Tuple[str, int], List[gym.Env]],
+        wrappers: List[Callable[[gym.Env], gym.Env]] = []) -> List[gym.Env]:
+    es = []
+    if isinstance(envs, tuple):
+        for _ in range(envs[1]):
+            es.append(gym.make(envs[0]))
+    else:
+        es = envs
+
+    for w in wrappers:
+        es = list(map(w, es))
+
+    seed = 0
+    for i, e in enumerate(es):
+        e.seed(seed + i * 5)
+
+    return es
+
+
 def record_video(env: gym.Env,
                  algo_name: str,
-                 activate_per_episode: int = 1) -> gym.Env:
-    return RecordVideo(env,
-                       f'vlog/{algo_name}_{datetime.now().strftime("%m-%d_%H-%M")}',
-                       episode_trigger=lambda episode_id: episode_id %
-                       activate_per_episode == 0,
-                       name_prefix=algo_name)
+                 activate_per_episode: int = 1,
+                 name_prefix: str = '') -> gym.Env:
+    return RecordVideo(
+        env,
+        f'vlog/{algo_name}_{datetime.now().strftime("%m-%d_%H-%M")}',
+        episode_trigger=lambda episode_id: episode_id % activate_per_episode ==
+        0,
+        name_prefix=
+        f'{algo_name}{f"_{name_prefix}" if name_prefix != "" else ""}')

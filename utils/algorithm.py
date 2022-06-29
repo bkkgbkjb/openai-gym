@@ -38,7 +38,7 @@ class Algorithm(Generic[S]):
     def manual_train(self, info: Dict[str, Any]):
         raise NotImplementedError()
 
-    def after_step(self, mode: Mode, transition: TransitionTuple[S]) -> Optional[ReportInfo]:
+    def after_step(self, mode: Mode, transition: TransitionTuple[S]):
         pass
 
     def on_episode_termination(self, mode: Mode,

@@ -143,6 +143,10 @@ class GoalWrapper(Wrapper):
         info = dict(desired_goal = out['desired_goal'], achieved_goal = out['achieved_goal'], observation = out['observation'])
         return out['observation'], info
 
+    def seed(self, seed=None):
+        self.env.seed(seed)
+        self.goal_space.seed(seed)
+        self.env.wrapped_env.seed(seed)
 
 def create_maze_env(env_name=None, top_down_view=False, maze_size_scaling=4, random_start=True, goal_args=None,
                     fix_goal=True, test=None):

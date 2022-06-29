@@ -4,39 +4,13 @@ from utils.agent import Agent
 import gym
 from setup import RANDOM_SEED
 from utils.reporter import get_reporter
-from utils.env import train_and_eval, make_train_and_eval_env
+from utils.env import make_envs, record_video, train_and_eval, make_train_and_eval_env
 from goal_env.mujoco import *
 from utils.env_sb3 import RecordVideo, RescaleAction
 from datetime import datetime
 
 # %%
 train_env = gym.make("AntMaze1-v1")
-# train_env = RecordVideo(
-#     train_env,
-#     'vlog/lesson',
-#     episode_trigger= lambda episode_id: episode_id % 25 ==0,
-#     name_prefix='lesson-train'
-# )
-eval_env = gym.make("AntMaze1Test-v1")
-eval_env = RecordVideo(
-    eval_env,
-    "vlog/lesson" + '_' + datetime.now().strftime('%m-%d_%H-%M'),
-    episode_trigger=lambda episode_id: episode_id % 5 == 0,
-    name_prefix="lesson-eval",
-)
-train_env, eval_env = make_train_and_eval_env((train_env, eval_env), [], RANDOM_SEED)
-
-train_env.seed(0)
-train_env.goal_space.seed(0)
-train_env.env.seed(0)
-train_env.env.wrapped_env.seed(0)
-
-eval_env.seed(5)
-eval_env.goal_space.seed(5)
-eval_env.env.seed(5)
-eval_env.env.wrapped_env.seed(5)
-
-# %%
 
 agent = Agent(
     LESSON(
@@ -47,6 +21,19 @@ agent = Agent(
     Preprocess(),
 )
 
+eval_env1 = gym.make("AntMaze1Test-v1")
+eval_env2 = gym.make("AntMaze1-v1")
+
+eval_env1 = record_video(eval_env1, agent.name, 5, name_prefix='eval')
+eval_env1._env_id = 'eval'
+eval_env2 = record_video(eval_env2, agent.name, 5, name_prefix='train')
+eval_env2._env_id = 'train'
+
+train_env, eval_env1, eval_env2 = make_envs([train_env, eval_env1, eval_env2])
+
 agent.set_algm_reporter(get_reporter(agent.name))
 
-train_and_eval(agent, train_env, eval_env, total_train_frames=int(1e7), eval_per_train=5)
+train_and_eval(agent,
+               train_env, [eval_env1, eval_env2],
+               total_train_frames=int(1e7),
+               eval_per_train=5)

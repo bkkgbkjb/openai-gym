@@ -17,7 +17,7 @@ from typing import (
     Union,
     TypeVar,
 )
-from utils.algorithm import Algorithm, ActionInfo, Mode
+from utils.algorithm import Algorithm, ActionInfo, Mode, ReportInfo
 from utils.preprocess import PreprocessI
 from utils.common import Action, Info, Reward
 from torch.utils.data import DataLoader
@@ -116,8 +116,8 @@ class Agent(Generic[AO, AS]):
 
     def run(
         self, env: gym.Env, mode: Union[Literal['eval'], Literal['train']]
-    ) -> Tuple[float, Tuple[List[AO], List[AS], List[Action], List[R],
-                            List[Info]]]:
+    ) -> Tuple[ReportInfo, Tuple[List[AO], List[AS], List[Action], List[R],
+                                 List[Info]]]:
         assert mode == 'train' or mode == 'eval'
         self.toggleEval(mode == 'eval')
 
@@ -154,7 +154,7 @@ class Agent(Generic[AO, AS]):
 
             assert len(state_episode) == len(observation_episode)
 
-            report_info = self.algm.after_step(mode, (
+            self.algm.after_step(mode, (
                 NotNoneStep(
                     state_episode[-2],
                     action_episode[-1],
@@ -164,33 +164,28 @@ class Agent(Generic[AO, AS]):
                 Step(state_episode[-1], None, None, dict(end=stop)),
             ))
 
-            if report_info is not None:
-                for (k, v) in report_info:
-                    self.report({f'{mode}/after_step/{k}': v})
-
         info_episode.append(dict(end=True))
         assert (len(state_episode) == len(observation_episode) ==
                 len(action_episode) + 1 == len(reward_episode) + 1 ==
                 len(info_episode))
 
-        end_report_info = self.algm.on_episode_termination(
-            mode, (
-                state_episode,
-                action_episode,
-                reward_episode,
-                info_episode,
-            ))
-        if end_report_info is not None:
-            for (k, v) in end_report_info:
-                self.report({f'{mode}/end_episode/{k}': v})
+        report_info = self.algm.on_episode_termination(mode, (
+            state_episode,
+            action_episode,
+            reward_episode,
+            info_episode,
+        )) or dict()
 
         total_rwd = np.sum([r for r in reward_episode])
 
-        self.report({f"{mode}/return": total_rwd})
+        if mode == 'train':
+            self.report({f"train/return": total_rwd})
 
         env.close()
 
-        return total_rwd, (
+        report_info['return'] = total_rwd
+
+        return report_info, (
             observation_episode,
             state_episode,
             action_episode,
@@ -282,8 +277,8 @@ class OfflineAgent(Generic[OO, OS]):
 
     def eval(
         self, env: gym.Env
-    ) -> Tuple[float, Tuple[List[OO], List[OS], List[Action], List[R],
-                            List[Info]]]:
+    ) -> Tuple[ReportInfo, Tuple[List[OO], List[OS], List[Action], List[R],
+                                 List[Info]]]:
         self.toggleEval(True)
 
         observation_episode: List[OO] = []
@@ -319,7 +314,7 @@ class OfflineAgent(Generic[OO, OS]):
 
             assert len(state_episode) == len(observation_episode)
 
-            report_info = self.algm.after_step('eval', (
+            self.algm.after_step('eval', (
                 NotNoneStep(
                     state_episode[-2],
                     action_episode[-1],
@@ -328,33 +323,25 @@ class OfflineAgent(Generic[OO, OS]):
                 ),
                 Step(state_episode[-1], None, None, dict(end=stop)),
             ))
-            if report_info is not None:
-                for (k, v) in report_info:
-                    self.report({f'eval/after_step/{k}': v})
 
         info_episode.append(dict(end=True))
         assert (len(state_episode) == len(observation_episode) ==
                 len(action_episode) + 1 == len(reward_episode) + 1 ==
                 len(info_episode))
 
-        end_report_info = self.algm.on_episode_termination(
-            'eval', (
-                state_episode,
-                action_episode,
-                reward_episode,
-                info_episode,
-            ))
-
-        if end_report_info is not None:
-            for (k, v) in end_report_info:
-                self.report({f'eval/end_episode/{k}': v})
+        report_info = self.algm.on_episode_termination('eval', (
+            state_episode,
+            action_episode,
+            reward_episode,
+            info_episode,
+        )) or dict()
 
         total_rwd = np.sum([r for r in reward_episode])
 
-        self.report({f"eval/return": total_rwd})
+        report_info['return'] = total_rwd
 
         env.close()
-        return total_rwd, (
+        return report_info, (
             observation_episode,
             state_episode,
             action_episode,
