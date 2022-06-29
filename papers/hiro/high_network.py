@@ -136,6 +136,9 @@ class HighNetwork(Algorithm):
                                              action_scale.cpu().numpy())).type(
                                                  torch.float32).to(DEVICE)
 
+        assert original_goal.shape == (self.batch_size, 1, self.action_dim) == diff_goal.shape
+        assert random_goals.shape == (self.batch_size, self.candidate_goals, self.action_dim)
+
         candidates = torch.cat([original_goal, diff_goal, random_goals], dim=1)
 
         # seq_len = states.shape[1]
@@ -211,8 +214,13 @@ class HighNetwork(Algorithm):
                                       (self.state_dim, ), (self.action_dim, ))
 
         goals = torch.stack([i['goal'] for i in infos]).detach()
+        assert goals.shape == (self.batch_size, self.goal_dim)
+
         states_arr = torch.stack([i['state_arr'] for i in infos]).detach()
         actions_arr = torch.stack([i['action_arr'] for i in infos]).detach()
+
+        assert states_arr.shape == (self.batch_size, 10, self.state_dim)
+        assert actions_arr.shape == (self.batch_size, 10, 8)
 
         actions = self.off_policy_correct(low_con, actions, states_arr,
                                           actions_arr).detach()

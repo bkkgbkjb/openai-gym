@@ -145,9 +145,10 @@ class LowNetwork(Algorithm):
         return noise + act
 
     def sample(self, buffers: ReplayBuffer[Episodes[State]]):
-        episodes = buffers.sample(128)
+        batch_size = 128
+        episodes = buffers.sample(batch_size)
 
-        time_stamps = np.random.randint(MAX_TIMESTEPS - 1, size=128)
+        time_stamps = np.random.randint(MAX_TIMESTEPS - 1, size=batch_size)
 
         sampled_steps = [
             e.get_step(time_stamps[i]) for i, e in enumerate(episodes)
@@ -171,11 +172,17 @@ class LowNetwork(Algorithm):
             for s in sampled_steps
         ])
 
-        reward = -torch.norm(rg_next - g, dim=-1) * 0.1
+        reward = (-torch.norm(rg_next - g, dim=-1) * 0.1).unsqueeze(1)
 
         g_next = g
         not_done = (torch.norm(
             (rg_next - g_next), dim=1) > 0.1).type(torch.int8).unsqueeze(1)
+        
+        assert obs.shape == (batch_size, self.state_dim) == obs_next.shape
+        assert acts.shape == (batch_size, self.action_dim)
+        assert reward.shape == (batch_size, 1) == not_done.shape
+        assert g.shape == (batch_size, self.goal_dim) == g_next.shape
+
         return (obs, obs_next, acts, reward, g, g_next, not_done)
 
     def train(self, low_buffer: ReplayBuffer[Episodes]):

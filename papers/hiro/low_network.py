@@ -137,6 +137,7 @@ class LowNetwork(Algorithm):
 
         goals = torch.stack([i['goal'] for i in infos]).detach()
         n_goals = torch.stack([i['next_goal'] for i in infos]).detach()
+        assert goals.shape == n_goals.shape == (self.batch_size,  self.goal_dim )
         not_done = 1 - done
 
         with torch.no_grad():

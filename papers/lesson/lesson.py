@@ -230,9 +230,10 @@ class LESSON(Algorithm):
     def collect_samples(
         self,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        episodes = self.low_buffer.sample(100)
+        batch_size = 100
+        episodes = self.low_buffer.sample(batch_size)
 
-        ts = np.random.randint(MAX_TIMESTEPS - self.c, size=100)
+        ts = np.random.randint(MAX_TIMESTEPS - self.c, size=batch_size)
 
         hi_obs = obs = torch.stack(
             [e.get_step(ts[i]).state for i, e in enumerate(episodes)])
@@ -242,6 +243,7 @@ class LESSON(Algorithm):
         obs_next = torch.stack(
             [e.get_step(ts[i] + 1).state for i, e in enumerate(episodes)])
 
+        assert obs.shape == obs_next.shape == hi_obs.shape == hi_obs_next.shape == (batch_size, self.state_dim)
         return (obs, obs_next, hi_obs, hi_obs_next)
 
     def update_phi(self):
