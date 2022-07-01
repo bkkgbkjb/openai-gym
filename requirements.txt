@@ -63,6 +63,7 @@ pathtools==0.1.2
 pexpect==4.8.0
 pickleshare==0.7.5
 Pillow==9.1.1
+plotly==5.9.0
 promise==2.3
 prompt-toolkit==3.0.29
 protobuf==3.20.1
@@ -94,6 +95,7 @@ six==1.16.0
 sklearn==0.0
 smmap==5.0.0
 stack-data==0.2.0
+tenacity==8.0.1
 tensorboard==2.9.0
 tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
