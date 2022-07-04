@@ -11,6 +11,7 @@ Here are the param for the training
 def get_args_ant():
     parser = argparse.ArgumentParser()
     # the environment setting
+    parser.add_argument('--collect-samples', type=bool, default=False)
     parser.add_argument('--env-name', type=str, default='AntMaze1-v1', help='the environment name')
     parser.add_argument('--test', type=str, default='AntMaze1Test-v1')
     parser.add_argument('--n-epochs', type=int, default=20000, help='the number of epochs to train the agent')

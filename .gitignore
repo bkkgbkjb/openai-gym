@@ -7,5 +7,5 @@ vlog
 saved_models
 out.log
 experiment_A1
-models
 tensorboard_log
+dataset

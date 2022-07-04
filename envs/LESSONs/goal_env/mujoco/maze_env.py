@@ -6,11 +6,13 @@ import xml.etree.ElementTree as ET
 import math
 import numpy as np
 import gym
-
-from environments import maze_env_utils
+from . import maze_env_utils
+from gym.utils import seeding
+from gym import wrappers
 
 # Directory that contains mujoco xml files.
-MODEL_DIR = 'environments/assets'
+# MODEL_DIR = '/home/hza/ToolBox/tools/fancy/data/mujoco/assets'
+MODEL_DIR = os.path.join(os.path.dirname(__file__), 'assets')
 
 
 class MazeEnv(gym.Env):
@@ -31,20 +33,19 @@ class MazeEnv(gym.Env):
             put_spin_near_agent=False,
             top_down_view=False,
             manual_collision=False,
+            goal=None,
             *args,
             **kwargs):
         self._maze_id = maze_id
 
         model_cls = self.__class__.MODEL_CLASS
         if model_cls is None:
-            raise Exception("MODEL_CLASS unspecified!")
-        proj_name = "impl_hiro"
-        proj_path = os.getcwd()
-        proj_path = os.path.join(proj_path.split("/"+proj_name)[0], proj_name)
-        xml_path = os.path.join(proj_path, MODEL_DIR, model_cls.FILE)
-        tree = ET.parse(os.path.dirname(__file__)+'/assets/ant.xml')
-        worldbody = tree.find(".//worldbody")
+            raise "MODEL_CLASS unspecified!"
+        xml_path = os.path.join(MODEL_DIR, model_cls.FILE)
+        self.tree = tree = ET.parse(xml_path)
+        self.worldbody = worldbody = tree.find(".//worldbody")
 
+        self.t = 0
         self.MAZE_HEIGHT = height = maze_height
         self.MAZE_SIZE_SCALING = size_scaling = maze_size_scaling
         self._n_bins = n_bins
@@ -55,13 +56,15 @@ class MazeEnv(gym.Env):
         self._top_down_view = top_down_view
         self._manual_collision = manual_collision
 
-        self.MAZE_STRUCTURE = structure = maze_env_utils.construct_maze(maze_id=self._maze_id)
-        self.elevated = any(-1 in row for row in structure)  # Elevate the maze to allow for falling.
+        self.MAZE_STRUCTURE = structure = maze_env_utils.construct_maze(
+            maze_id=self._maze_id)
+        # Elevate the maze to allow for falling.
+        self.elevated = any(-1 in row for row in structure)
         self.blocks = any(
             any(maze_env_utils.can_move(r) for r in row)
             for row in structure)  # Are there any movable blocks?
 
-        torso_x, torso_y = self._find_robot()
+        torso_x, torso_y = self._find_robot()  # x, y coordinates
         self._init_torso_x = torso_x
         self._init_torso_y = torso_y
         self._init_positions = [
@@ -69,8 +72,9 @@ class MazeEnv(gym.Env):
             for x, y in self._find_all_robots()]
 
         self._xy_to_rowcol = lambda x, y: (2 + (y + size_scaling / 2) / size_scaling,
-                                           2 + (x + size_scaling / 2) / size_scaling)
-        self._view = np.zeros([5, 5, 3])  # walls (immovable), chasms (fall), movable blocks
+                                          2 + (x + size_scaling / 2) / size_scaling)
+        # walls (immovable), chasms (fall), movable blocks
+        self._view = np.zeros([5, 5, 3])
 
         height_offset = 0.
         if self.elevated:
@@ -85,6 +89,7 @@ class MazeEnv(gym.Env):
             default.find('.//geom').set('solimp', '.995 .995 .01')
 
         self.movable_blocks = []
+        self.not_thin = True
         for i in range(len(structure)):
             for j in range(len(structure[0])):
                 struct = structure[i][j]
@@ -109,6 +114,10 @@ class MazeEnv(gym.Env):
                     )
                 if struct == 1:  # Unmovable block.
                     # Offset all coordinates so that robot starts at the origin.
+                    if self.not_thin or (i == 0 or i == len(structure) - 1) or (j == 0 or j == len(structure[0])-1) or maze_id != "Maze1":
+                        y_size = 0.5 * size_scaling
+                    else:
+                        y_size = 0.25
                     ET.SubElement(
                         worldbody, "geom",
                         name="block_%d_%d" % (i, j),
@@ -117,7 +126,7 @@ class MazeEnv(gym.Env):
                                           height_offset +
                                           height / 2 * size_scaling),
                         size="%f %f %f" % (0.5 * size_scaling,
-                                           0.5 * size_scaling,
+                                           y_size,
                                            height / 2 * size_scaling),
                         type="box",
                         material="",
@@ -134,8 +143,8 @@ class MazeEnv(gym.Env):
                     spinning = maze_env_utils.can_spin(struct)
                     x_offset = 0.25 * size_scaling if spinning else 0.0
                     y_offset = 0.0
-                    shrink = 0.1 if spinning else 0.99 if falling else 1.0
-                    height_shrink = 0.1 if spinning else 1.0
+                    shrink = 0.2 if spinning else 0.99 if falling else 1.0
+                    height_shrink = 0.2 if spinning else 1.0
                     movable_body = ET.SubElement(
                         worldbody, "body",
                         name=name,
@@ -220,6 +229,17 @@ class MazeEnv(gym.Env):
         tree.write(file_path)
 
         self.wrapped_env = model_cls(*args, file_path=file_path, **kwargs)
+        self.args = args
+        self.kwargs = kwargs
+        self.visualize_goal = True
+        self.GOAL = goal
+        if self.GOAL is not None:
+            self.GOAL = self.unwrapped._rowcol_to_xy(*self.GOAL)
+            self.EPS = self.unwrapped.MAZE_SIZE_SCALING ** 2
+
+        contain_r = [1 if "r" in row else 0 for row in self.MAZE_STRUCTURE]
+        self.init_row_r = contain_r.index(1)
+        self.init_col_r = self.MAZE_STRUCTURE[self.init_row_r].index("r")
 
     def get_ori(self):
         return self.wrapped_env.get_ori()
@@ -343,7 +363,8 @@ class MazeEnv(gym.Env):
         # Get line segments (corresponding to outer boundary) of each movable
         # block within the agent's z-view.
         for block_name, block_type in self.movable_blocks:
-            block_x, block_y, block_z = self.wrapped_env.get_body_com(block_name)[:3]
+            block_x, block_y, block_z = self.wrapped_env.get_body_com(block_name)[
+                                        :3]
             if (block_z + height * size_scaling / 2 >= robot_z and
                     robot_z >= block_z - height * size_scaling / 2):  # Block in view.
                 x1 = block_x - 0.5 * size_scaling
@@ -362,7 +383,8 @@ class MazeEnv(gym.Env):
                         type=block_type,
                     ))
 
-        sensor_readings = np.zeros((self._n_bins, 3))  # 3 for wall, drop-off, block
+        # 3 for wall, drop-off, block
+        sensor_readings = np.zeros((self._n_bins, 3))
         for ray_idx in range(self._n_bins):
             ray_ori = (ori - self._sensor_span * 0.5 +
                        (2 * ray_idx + 1.0) / (2 * self._n_bins) * self._sensor_span)
@@ -377,11 +399,13 @@ class MazeEnv(gym.Env):
                         segment=seg["segment"],
                         type=seg["type"],
                         ray_ori=ray_ori,
-                        distance=maze_env_utils.point_distance(p, (robot_x, robot_y)),
+                        distance=maze_env_utils.point_distance(
+                            p, (robot_x, robot_y)),
                     ))
             if len(ray_segments) > 0:
                 # Find out which segment is intersected first.
-                first_seg = sorted(ray_segments, key=lambda x: x["distance"])[0]
+                first_seg = sorted(
+                    ray_segments, key=lambda x: x["distance"])[0]
                 seg_type = first_seg["type"]
                 idx = (0 if seg_type == 1 else  # Wall.
                        1 if seg_type == -1 else  # Drop-off.
@@ -389,34 +413,74 @@ class MazeEnv(gym.Env):
                        None)
                 if first_seg["distance"] <= self._sensor_range:
                     sensor_readings[ray_idx][idx] = (self._sensor_range - first_seg["distance"]) / self._sensor_range
-
         return sensor_readings
 
     def _get_obs(self):
         wrapped_obs = self.wrapped_env._get_obs()
-        if self._top_down_view:
-            view = [self.get_top_down_view().flat]
-        else:
-            view = []
-
         if self._observe_blocks:
             additional_obs = []
             for block_name, block_type in self.movable_blocks:
                 additional_obs.append(self.wrapped_env.get_body_com(block_name))
-            wrapped_obs = np.concatenate([wrapped_obs[:3]] + additional_obs +
-                                         [wrapped_obs[3:]])
+            wrapped_obs = np.concatenate((additional_obs[0], wrapped_obs))
 
-        range_sensor_obs = self.get_range_sensor_obs()
-        return np.concatenate([wrapped_obs,
-                               range_sensor_obs.flat] +
-                              view + [[self.t * 0.001]])
+        if self._top_down_view:
+            view = self.get_top_down_view().flatten()
+            wrapped_obs = np.concatenate((wrapped_obs, view))
 
-    def reset(self):
+        return wrapped_obs
+
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
+
+    def reset(self, goal):
+        self.goal = goal
+
+        if False:  # remove the prev goal and add a new goal
+            goal_x, goal_y = goal[0], goal[1]
+            size_scaling = self.MAZE_SIZE_SCALING
+            # remove the original goal
+            try:
+                self.worldbody.remove(self.goal_element)
+            except AttributeError:
+                pass
+            # offset all coordinates so that robot starts at the origin
+            self.goal_element = \
+                ET.SubElement(
+                    self.worldbody, "geom",
+                    name="goal_%d_%d" % (goal_x, goal_y),
+                    pos="%f %f %f" % (goal_x,
+                                      goal_y,
+                                      self.MAZE_HEIGHT / 2 * size_scaling),
+                    size="%f %f %f" % (0.1 * size_scaling,  # smaller than the block to prevent collision
+                                       0.1 * size_scaling,
+                                       self.MAZE_HEIGHT / 2 * size_scaling),
+                    type="box",
+                    material="",
+                    contype="1",
+                    conaffinity="1",
+                    rgba="0.0 1.0 0.0 0.5"
+                )
+            # Note: running the lines below will make the robot position wrong! (because the graph is rebuilt)
+            torso = self.tree.find(".//body[@name='torso']")
+            geoms = torso.findall(".//geom")
+            for geom in geoms:
+                if 'name' not in geom.attrib:
+                    raise Exception("Every geom of the torso must have a name "
+                                    "defined")
+            _, file_path = tempfile.mkstemp(text=True, suffix='.xml')
+            self.tree.write(
+                file_path)  # here we write a temporal file with the robot specifications. Why not the original one??
+
+            model_cls = self.__class__.MODEL_CLASS
+            self.wrapped_env = model_cls(*self.args, file_path=file_path,
+                                         **self.kwargs)  # file to the robot specifications; model_cls is AntEnv
+
         self.t = 0
         self.trajectory = []
         self.wrapped_env.reset()
         if len(self._init_positions) > 1:
-            xy = random.choice(self._init_positions)
+            xy = self._init_positions[self.np_random.randint(len(self._init_positions))]
             self.wrapped_env.set_xy(xy)
         return self._get_obs()
 
@@ -458,6 +522,21 @@ class MazeEnv(gym.Env):
         return coords
 
     def _is_in_collision(self, pos):
+        i, j = self.new_xy_to_rowcol(pos)
+        if self.MAZE_STRUCTURE[i][j] == 1:
+            return True
+        else:
+            return False
+
+    def invalid_goal(self, pos):
+        i, j = self.new_xy_to_rowcol(pos)
+        if self.MAZE_STRUCTURE[i][j] in [1, -1]:
+            return True
+        else:
+            return False
+
+    # recover the best setting for push
+    def old_is_in_collision(self, pos):
         x, y = pos
         structure = self.MAZE_STRUCTURE
         size_scaling = self.MAZE_SIZE_SCALING
@@ -469,19 +548,62 @@ class MazeEnv(gym.Env):
                     miny = i * size_scaling - size_scaling * 0.5 - self._init_torso_y
                     maxy = i * size_scaling + size_scaling * 0.5 - self._init_torso_y
                     if minx <= x <= maxx and miny <= y <= maxy:
+                        # print(i, j, minx, maxx, miny, maxy, x, y)
                         return True
         return False
 
+    def old_invalid_goal(self, pos):
+        x, y = pos
+        structure = self.MAZE_STRUCTURE
+        size_scaling = self.MAZE_SIZE_SCALING
+        for i in range(len(structure)):
+            for j in range(len(structure[0])):
+                if structure[i][j] in [1, -1]:
+                    minx = j * size_scaling - size_scaling * 0.5 - self._init_torso_x
+                    maxx = j * size_scaling + size_scaling * 0.5 - self._init_torso_x
+                    miny = i * size_scaling - size_scaling * 0.5 - self._init_torso_y
+                    maxy = i * size_scaling + size_scaling * 0.5 - self._init_torso_y
+                    if minx <= x <= maxx and miny <= y <= maxy:
+                        # print(i, j, minx, maxx, miny, maxy, x, y)
+                        return True
+        return False
+
+
+    def new_xy_to_rowcol(self, pos):
+        x, y = pos
+        relative_col = math.ceil(x / self.MAZE_SIZE_SCALING - 0.5)
+        relative_row = math.ceil(y / self.MAZE_SIZE_SCALING - 0.5)
+        return self.init_row_r + relative_row, self.init_col_r + relative_col
+
+    def _rowcol_to_xy(self, j, i):
+        size_scaling = self.MAZE_SIZE_SCALING
+        minx = j * size_scaling - size_scaling * 0.5 - self._init_torso_x
+        maxx = j * size_scaling + size_scaling * 0.5 - self._init_torso_x
+        miny = i * size_scaling - size_scaling * 0.5 - self._init_torso_y
+        maxy = i * size_scaling + size_scaling * 0.5 - self._init_torso_y
+        return (minx + maxx) / 2, (miny + maxy) / 2
+
     def step(self, action):
         self.t += 1
+
         if self._manual_collision:
             old_pos = self.wrapped_env.get_xy()
-            inner_next_obs, inner_reward, done, info = self.wrapped_env.step(action)
+            inner_next_obs, inner_reward, done, info = self.wrapped_env.step(
+                action)
             new_pos = self.wrapped_env.get_xy()
-            if self._is_in_collision(new_pos):
-                self.wrapped_env.set_xy(old_pos)
+            if self._maze_id == "Push":
+                if self.old_is_in_collision(new_pos):
+                    self.wrapped_env.set_xy(old_pos)
+            else:
+                if self._is_in_collision(new_pos):
+                    self.wrapped_env.set_xy(old_pos)
         else:
-            inner_next_obs, inner_reward, done, info = self.wrapped_env.step(action)
+            inner_next_obs, inner_reward, done, info = self.wrapped_env.step(
+                action)
         next_obs = self._get_obs()
         done = False
+        if self.GOAL is not None:
+            # print(self.EPS, next_obs[:2], self.GOAL[:2])
+            done = bool(((next_obs[:2] - self.GOAL[:2]) ** 2).sum() < self.EPS)
+            inner_reward = int(done)
         return next_obs, inner_reward, done, info

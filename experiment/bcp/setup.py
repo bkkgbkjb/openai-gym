@@ -4,6 +4,7 @@ spath.append(opath.dirname(opath.abspath(__file__)) + "/../..")
 
 import numpy as np
 import torch
+import d4rl
 
 RANDOM_SEED = 0
 np.random.seed(RANDOM_SEED)
