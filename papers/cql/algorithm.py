@@ -164,6 +164,7 @@ class CQL_SAC(Algorithm[State]):
 
     def reset(self):
         self.times = 0
+        self.data_loader = None
         self.replay_memory = ReplayBuffer(None)
 
     def get_data(self, dataloader: DataLoader):
@@ -174,7 +175,7 @@ class CQL_SAC(Algorithm[State]):
             for (s, a, r, sn, done) in zip(states, actions, rewards,
                                            next_states, dones):
                 self.replay_memory.append(
-                    Transition((NotNoneStep(s, a.numpy(), r.item()),
+                    Transition((NotNoneStep(s, a, r.item()),
                                 Step(sn, None, None,
                                      dict(end=done.item() == 1)))))
 
@@ -194,7 +195,9 @@ class CQL_SAC(Algorithm[State]):
     def manual_train(self, info: Dict[str, Any]):
         assert "dataloader" in info
         dataloader: DataLoader = info['dataloader']
-        self.get_data(dataloader)
+        if self.data_loader != dataloader:
+            self.get_data(dataloader)
+            self.data_loader = dataloader
 
         self.train()
         return self.mini_batch_size
