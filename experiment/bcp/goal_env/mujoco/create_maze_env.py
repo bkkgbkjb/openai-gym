@@ -99,7 +99,7 @@ class GoalWrapper(Wrapper):
                # 'achieved_goal': observation[..., 3:5]}
                'achieved_goal': observation[..., :self.goal_dim]}
         distance = np.linalg.norm(observation[..., :self.goal_dim] - self.goal[..., :self.goal_dim], axis=-1)
-        info['is_success'] = done = (distance < self.distance_threshold)
+        info['is_success'] = done = bool(distance < self.distance_threshold)
         if self.reward_type == "sparse":
             reward = -(distance > self.distance_threshold).astype(np.float32)
         else:
@@ -108,7 +108,7 @@ class GoalWrapper(Wrapper):
         if self.top_down:
             mask = np.array([0.0] * 2 + [1.0] * (out['observation'].shape[0] - 2))
             out['observation'] = out['observation'] * mask
-        return out, reward, done, info
+        return out['observation'], reward, done, info
 
     def reset(self):
         if self.fix_goal:
@@ -140,7 +140,8 @@ class GoalWrapper(Wrapper):
             # print("obs", out['observation'].shape)
             mask = np.array([0.0] * 2 + [1.0] * (out['observation'].shape[0] - 2))
             out['observation'] = out['observation'] * mask
-        return out
+        info = dict(desired_goal= out['desired_goal'])
+        return out['observation'], info
 
     def seed(self, seed=None):
         self.env.seed(seed)

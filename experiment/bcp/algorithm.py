@@ -80,7 +80,7 @@ class BCP(Algorithm[S]):
                            self.action_scale).to(DEVICE)
 
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
-                                                lr=3e-4)
+                                                lr=3e-3)
 
         self.actor_loss = nn.MSELoss()
 
@@ -92,7 +92,7 @@ class BCP(Algorithm[S]):
         self.times = 0
         self.data_loader = None
         self.replay_buffer = ReplayBuffer(None)
-        self.fg = None
+        self.reset_episode_info()
 
     def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
 
@@ -106,10 +106,16 @@ class BCP(Algorithm[S]):
         self.fg = None
 
     def on_episode_termination(
-        self, _: Mode, __: Tuple[List[S], List[Action], List[Reward],
-                                 List[Info]]
+        self, mode: Mode, sari: Tuple[List[S], List[Action], List[Reward],
+                                      List[Info]]
     ) -> Optional[ReportInfo]:
+        (_, _, _, i) = sari
+        assert i[-1]['end']
+        assert len(i[-1].keys()) == 1
+        success = i[-2]['env_info']['is_success']
         self.reset_episode_info()
+
+        return dict(success_rate=1 if success else 0)
 
     @torch.no_grad()
     def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
@@ -144,7 +150,7 @@ class BCP(Algorithm[S]):
         (states, actions, _, _, _, infos) = resolve_transitions(
             self.replay_buffer.sample(self.batch_size), (self.state_dim, ),
             (self.action_dim, ))
-        goals = torch.stack([i['goal'] for i in infos])
+        goals = torch.stack([i['goal'] for i in infos]).to(DEVICE)
 
         pred_actions = self.actor(states, goals)
         loss = self.actor_loss(pred_actions, actions)
