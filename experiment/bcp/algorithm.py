@@ -1,5 +1,6 @@
 import setup
-from utils.algorithm import (ActionInfo, Mode)
+from utils.algorithm import (ActionInfo, Mode, ReportInfo)
+from utils.common import Info
 from utils.step import NotNoneStep, Step
 from utils.transition import (Transition, resolve_transitions)
 from torch import nn
@@ -45,32 +46,37 @@ class Actor(NeuralNetworks):
 
     def __init__(self,
                  state_dim: int,
+                 goal_dim: int,
                  action_dim: int,
                  action_scale: float = 1.0):
         super(Actor, self).__init__()
-        self.net = nn.Sequential(layer_init(nn.Linear(state_dim, 400)),
-                                 nn.ReLU(), layer_init(nn.Linear(400, 300)),
-                                 nn.ReLU(),
-                                 layer_init(nn.Linear(300, action_dim)),
-                                 nn.Tanh())
         self.action_scale = action_scale
+        self.goal_dim = goal_dim
+        self.state_dim = state_dim
 
-    def forward(self, s: torch.Tensor):
-        return self.action_scale * self.net(s)
+        self.net = nn.Sequential(
+            layer_init(nn.Linear(self.state_dim + self.goal_dim, 400)),
+            nn.ReLU(), layer_init(nn.Linear(400, 300)), nn.ReLU(),
+            layer_init(nn.Linear(300, action_dim)), nn.Tanh())
+
+    def forward(self, s: torch.Tensor, g: torch.Tensor):
+        return self.action_scale * self.net(torch.cat([s, g], dim=1))
 
 
-class BC(Algorithm[S]):
+class BCP(Algorithm[S]):
 
     def __init__(self,
                  state_dim: int,
+                 goal_dim: int,
                  action_dim: int,
                  action_scale: float = 1.0):
-        self.set_name('bc')
+        self.set_name('bcp')
         self.state_dim = state_dim
+        self.goal_dim = goal_dim
         self.action_dim = action_dim
         self.action_scale = action_scale
 
-        self.actor = Actor(self.state_dim, self.action_dim,
+        self.actor = Actor(self.state_dim, self.goal_dim, self.action_dim,
                            self.action_scale).to(DEVICE)
 
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
@@ -86,20 +92,43 @@ class BC(Algorithm[S]):
         self.times = 0
         self.data_loader = None
         self.replay_buffer = ReplayBuffer(None)
+        self.fg = None
+
+    def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
+
+        assert mode == 'eval'
+
+        assert self.fg is None
+        self.fg = torch.from_numpy(info['desired_goal']).type(
+            torch.float32).to(DEVICE)
+
+    def reset_episode_info(self):
+        self.fg = None
+
+    def on_episode_termination(
+        self, _: Mode, __: Tuple[List[S], List[Action], List[Reward],
+                                 List[Info]]
+    ) -> Optional[ReportInfo]:
+        self.reset_episode_info()
 
     @torch.no_grad()
     def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
+        assert mode == 'eval'
         s = state.unsqueeze(0).to(DEVICE)
 
-        return self.actor(s).squeeze()
+        assert self.fg is not None
+
+        return self.actor(s, self.fg.unsqueeze(0)).squeeze()
 
     def get_data(self, dataloader: DataLoader):
 
-        for (states, actions, rewards, next_states, dones) in dataloader:
-            for (s, a, r, sn, done) in zip(states, actions, rewards,
-                                           next_states, dones):
+        for (states, actions, rewards, next_states, dones,
+             goals) in dataloader:
+            for (s, a, r, sn, done, goal) in zip(states, actions, rewards,
+                                                 next_states, dones, goals):
                 self.replay_buffer.append(
-                    Transition((NotNoneStep(s, a, r.item()),
+                    Transition((NotNoneStep(s, a, r.item(),
+                                            dict(goal=goal, end=False)),
                                 Step(sn, None, None,
                                      dict(end=done.item() == 1)))))
 
@@ -108,14 +137,16 @@ class BC(Algorithm[S]):
         dataloader = info['dataloader']
 
         if self.data_loader != dataloader:
+            assert self.data_loader is None
             self.get_data(dataloader)
             self.data_loader = dataloader
 
-        (states, actions, _, _, _,
-         _) = resolve_transitions(self.replay_buffer.sample(self.batch_size),
-                                  (self.state_dim, ), (self.action_dim, ))
+        (states, actions, _, _, _, infos) = resolve_transitions(
+            self.replay_buffer.sample(self.batch_size), (self.state_dim, ),
+            (self.action_dim, ))
+        goals = torch.stack([i['goal'] for i in infos])
 
-        pred_actions = self.actor(states)
+        pred_actions = self.actor(states, goals)
         loss = self.actor_loss(pred_actions, actions)
 
         self.actor_optimizer.zero_grad()
