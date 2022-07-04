@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from typing import Callable, Dict, Generic, Literal, Tuple, TypeVar, List, Union, Any, Union, Optional
 from utils.common import Action, Info, Reward, ActionInfo
 from utils.env_sb3 import LazyFrames
@@ -12,7 +12,7 @@ Mode = Union[Literal['train'], Literal['eval']]
 ReportInfo = Info
 
 
-class Algorithm(Generic[S]):
+class Algorithm(ABC, Generic[S]):
 
     def set_name(self, name: str):
         assert not hasattr(self, "name")

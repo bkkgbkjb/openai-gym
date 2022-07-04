@@ -206,6 +206,7 @@ class OfflineAgent(Generic[OO, OS]):
         preprocess: PreprocessI[OO, OS],
     ):
         self.algm = algm
+        assert self.algm.name, "agent必须有一个名称(name)"
         self.preprocess = preprocess
         self.name: str = algm.name
         self.algm.on_agent_init({})
@@ -229,12 +230,15 @@ class OfflineAgent(Generic[OO, OS]):
             LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
         return state
 
-    def format_action(
-            self, a: Union[Action,
-                           ActionInfo]) -> Tuple[Action, Dict[str, Any]]:
+    def format_action(self, a: Union[Action, ActionInfo]) -> ActionInfo:
         if isinstance(a, tuple):
+            assert "end" not in a[1]
+            assert isinstance(a[0], torch.Tensor)
+            a[1]["end"] = False
             return (a[0].detach(), a[1])
-        return (a.detach(), dict())
+
+        assert isinstance(a, torch.Tensor)
+        return (a.detach(), dict(end=False))
 
     def get_action(self, state: OS, env: gym.Env, mode: Mode) -> ActionInfo:
         actinfo = self.format_action(self.algm.take_action(mode, state))

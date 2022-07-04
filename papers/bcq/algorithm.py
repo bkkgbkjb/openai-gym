@@ -114,7 +114,7 @@ class VAE(NeuralNetworks):
 class BCQ(Algorithm[S]):
 
     def __init__(self, state_dim: int, action_dim: int):
-        self.name = 'bcq'
+        self.set_name('bcq')
         self.state_dim = state_dim
         self.action_dim = action_dim
 
@@ -152,6 +152,7 @@ class BCQ(Algorithm[S]):
 
     def reset(self):
         self.times = 0
+        self.data_loader = None
         self.replay_buffer = ReplayBuffer(None)
 
     @torch.no_grad()
@@ -170,14 +171,17 @@ class BCQ(Algorithm[S]):
             for (s, a, r, sn, done) in zip(states, actions, rewards,
                                            next_states, dones):
                 self.replay_buffer.append(
-                    Transition((NotNoneStep(s, a.numpy(), r.item()),
+                    Transition((NotNoneStep(s, a, r.item()),
                                 Step(sn, None, None,
                                      dict(end=done.item() == 1)))))
 
     def manual_train(self, info: Dict[str, Any]):
         assert 'dataloader' in info
         dataloader = info['dataloader']
-        self.get_data(dataloader)
+
+        if self.data_loader != dataloader:
+            self.get_data(dataloader)
+            self.data_loader = dataloader
 
         (states, actions, rewards, next_states, done,
          _) = resolve_transitions(self.replay_buffer.sample(100),
