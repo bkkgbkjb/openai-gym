@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 
 from utils.agent import Agent, OfflineAgent
 from utils.agent import AllAgent
-from utils.common import Action
+from utils.common import Action, Info
 from datetime import datetime
 from utils.env_sb3 import LazyFrames, RecordVideo, resolve_lazy_frames
 
@@ -80,14 +80,14 @@ def train(agent: Agent[O, S], train_env: gym.Env,
 
 def offline_train(
     agent: OfflineAgent[O, S],
-    dataloader: DataLoader,
+    info: Info,
     single_train_frames=int(1e6)) -> OfflineAgent[O, S]:
 
     with tqdm(total=single_train_frames) as pbar:
         frames = 0
 
         while frames <= single_train_frames:
-            l = agent.train(dataloader)
+            l = agent.train(info)
 
             pbar.update(l)
             frames += l
@@ -97,16 +97,28 @@ def offline_train(
 
 def eval(agent: AllAgent[O, S],
          env: Union[gym.Env, List[gym.Env]],
-         repeats=10,
+         repeats: int = 10,
          env_weights: Optional[List[float]] = None) -> AllAgent[O, S]:
 
-    report_dict: Dict[str, Tuple[Any, int]] = dict()
+    if isinstance(env, list):
+        weight = ([1 / len(env)] *
+                  len(env)) if env_weights is None else env_weights
+        e_w = [repeats * w for w in weight]
+        for w in e_w:
+            assert w.is_integer()
 
-    for _ in tqdm(range(repeats)):
+        envs = []
+
+        for i, w in enumerate(e_w):
+            for _ in range(int(w)):
+                envs.append(env[i])
+        assert len(envs) == repeats
+
+    report_dict: Dict[str, Tuple[Any, int]] = dict()
+    for i in tqdm(range(repeats)):
 
         (report_info,
-         _) = agent.eval(env if not isinstance(env, list) else env[
-             np.random.choice(len(env), p=env_weights)])
+         _) = agent.eval(env if not isinstance(env, list) else envs[i])
 
         for (k, v) in report_info.items():
 
@@ -150,7 +162,7 @@ def train_and_eval(
 
 def offline_train_and_eval(
         agent: OfflineAgent[O, S],
-        dataloader: DataLoader,
+        info: Info,
         eval_env: Union[gym.Env, List[gym.Env]],
         single_train_frames=int(1e4),
         eval_repeats=10,
@@ -163,7 +175,7 @@ def offline_train_and_eval(
 
     eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
     for _ in tqdm(range(s)):
-        offline_train(agent, dataloader, single_train_frames)
+        offline_train(agent, info, single_train_frames)
         t += 1
         if t == eval_per_train:
             eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
@@ -198,9 +210,9 @@ def make_train_and_eval_env(envs: Union[str, Tuple[gym.Env, gym.Env]],
     return train_env, eval_env
 
 
-def make_envs(
-        envs: Union[Tuple[str, int], List[gym.Env]],
-        wrappers: List[Callable[[gym.Env], gym.Env]] = []) -> List[gym.Env]:
+def make_envs(envs: Union[Tuple[str, int], List[gym.Env]],
+              wrappers: List[Callable[[gym.Env], gym.Env]] = [],
+              seed: int = 0) -> List[gym.Env]:
     es = []
     if isinstance(envs, tuple):
         for _ in range(envs[1]):
@@ -211,7 +223,6 @@ def make_envs(
     for w in wrappers:
         es = list(map(w, es))
 
-    seed = 0
     for i, e in enumerate(es):
         e.seed(seed + i * 5)
 

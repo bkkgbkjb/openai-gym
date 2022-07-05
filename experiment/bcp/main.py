@@ -5,7 +5,7 @@ from utils.agent import Agent, OfflineAgent
 import gym
 from setup import RANDOM_SEED
 from utils.reporter import get_reporter
-from utils.env import offline_train_and_eval, make_train_and_eval_env
+from utils.env import make_envs, offline_train_and_eval, make_train_and_eval_env
 from torch.utils.data import TensorDataset, DataLoader
 from goal_env.mujoco import *
 import h5py
@@ -13,35 +13,26 @@ import h5py
 # %%
 dataset = h5py.File('./dataset/AntMaze.hdf5', 'r')
 
-tensor_data = TensorDataset(
-    torch.from_numpy(dataset['state'][:]).type(torch.float32),
-    torch.from_numpy(dataset['action'][:]).type(torch.float32),
-    torch.from_numpy(dataset['reward'][:]).type(torch.float32),
-    torch.from_numpy(dataset['next_state'][:]).type(torch.float32),
-    torch.from_numpy(dataset['done'][:]).type(torch.float32),
-    torch.from_numpy(dataset['info']['goal'][:]).type(torch.float32),
-)
-
-dataloader = DataLoader(
-    tensor_data,
-    batch_size=256,
-)
 # %%
 
-test_env = gym.make('AntMaze1Test-v1')
+test_env1 = gym.make('AntMaze1Test-v1')
+test_env1.env_info = dict(goal_type='farthest')
+test_env2 = gym.make('AntMaze1-v1')
+test_env2.env_info = dict(goal_type='random')
+
+test_env1, test_env2 = make_envs([test_env1, test_env2])
 
 agent = OfflineAgent(
-    BCP(test_env.observation_space['observation'].shape[0],
-        test_env.observation_space['desired_goal'].shape[0],
-        test_env.action_space.shape[0], 16), Preprocess())
+    BCP(test_env1.observation_space['observation'].shape[0],
+        test_env1.observation_space['desired_goal'].shape[0],
+        test_env1.action_space.shape[0], 16), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
 offline_train_and_eval(agent,
-                       dataloader,
-                       test_env,
-                       single_train_frames=100 * 128,
-                       eval_per_train=5,
-                       total_train_frames=333 * 3 * 100 * 128)
+                       dict(dataset=dataset), [test_env1, test_env2],
+                       single_train_frames=100 * 196,
+                       eval_per_train=2,
+                       total_train_frames=333 * 3 * 100 * 196)
 
 dataset.close()

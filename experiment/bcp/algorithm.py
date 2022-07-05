@@ -80,7 +80,15 @@ class BCP(Algorithm[S]):
                            self.action_scale).to(DEVICE)
 
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
-                                                lr=3e-3)
+                                                lr=5e-3)
+
+        self.actor_optim_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.actor_optimizer,
+            patience=500,
+            factor=0.25,
+            verbose=True,
+            threshold=1e-4,
+            cooldown=100)
 
         self.actor_loss = nn.MSELoss()
 
@@ -90,7 +98,7 @@ class BCP(Algorithm[S]):
 
     def reset(self):
         self.times = 0
-        self.data_loader = None
+        self.dataset = None
         self.replay_buffer = ReplayBuffer(None)
         self.reset_episode_info()
 
@@ -102,8 +110,12 @@ class BCP(Algorithm[S]):
         self.fg = torch.from_numpy(info['desired_goal']).type(
             torch.float32).to(DEVICE)
 
+        assert self.env_goal_type is None
+        self.env_goal_type = info['env'].env_info['goal_type']
+
     def reset_episode_info(self):
         self.fg = None
+        self.env_goal_type = None
 
     def on_episode_termination(
         self, mode: Mode, sari: Tuple[List[S], List[Action], List[Reward],
@@ -113,9 +125,11 @@ class BCP(Algorithm[S]):
         assert i[-1]['end']
         assert len(i[-1].keys()) == 1
         success = i[-2]['env_info']['is_success']
-        self.reset_episode_info()
 
-        return dict(success_rate=1 if success else 0)
+        report = {f'{self.env_goal_type}_success_rate': 1 if success else 0}
+
+        self.reset_episode_info()
+        return report
 
     @torch.no_grad()
     def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
@@ -126,26 +140,40 @@ class BCP(Algorithm[S]):
 
         return self.actor(s, self.fg.unsqueeze(0)).squeeze()
 
-    def get_data(self, dataloader: DataLoader):
+    def get_data(self, dataset: Any):
 
-        for (states, actions, rewards, next_states, dones,
-             goals) in dataloader:
-            for (s, a, r, sn, done, goal) in zip(states, actions, rewards,
-                                                 next_states, dones, goals):
-                self.replay_buffer.append(
-                    Transition((NotNoneStep(s, a, r.item(),
-                                            dict(goal=goal, end=False)),
-                                Step(sn, None, None,
-                                     dict(end=done.item() == 1)))))
+        states = torch.from_numpy(dataset['state'][:]).type(torch.float32)
+        actions = torch.from_numpy(dataset['action'][:]).type(torch.float32)
+        rewards = torch.from_numpy(dataset['reward'][:]).type(torch.float32)
+        next_states = torch.from_numpy(dataset['next_state'][:]).type(
+            torch.float32)
+        dones = torch.from_numpy(dataset['done'][:]).type(torch.float32)
+        goals = torch.from_numpy(dataset['info']['goal'][:]).type(
+            torch.float32)
+
+        assert len(states) == len(actions) == len(rewards) == len(
+            next_states) == len(dones) == len(goals)
+
+        for i in range(len(states)):
+            s = states[i]
+            a = actions[i]
+            r = rewards[i]
+            sn = next_states[i]
+            d = dones[i]
+            g = goals[i]
+
+            self.replay_buffer.append(
+                Transition((NotNoneStep(s, a, r.item(), dict(goal=g,
+                                                             end=False)),
+                            Step(sn, None, None, dict(end=d.item() == 1)))))
 
     def manual_train(self, info: Dict[str, Any]):
-        assert 'dataloader' in info
-        dataloader = info['dataloader']
-
-        if self.data_loader != dataloader:
-            assert self.data_loader is None
-            self.get_data(dataloader)
-            self.data_loader = dataloader
+        assert 'dataset' in info
+        dataset = info['dataset']
+        if self.dataset != dataset:
+            assert self.dataset is None
+            self.get_data(dataset)
+            self.dataset = dataset
 
         (states, actions, _, _, _, infos) = resolve_transitions(
             self.replay_buffer.sample(self.batch_size), (self.state_dim, ),
@@ -158,6 +186,8 @@ class BCP(Algorithm[S]):
         self.actor_optimizer.zero_grad()
         loss.backward()
         self.actor_optimizer.step()
+
+        self.actor_optim_scheduler.step(loss.item())
 
         self.report(dict(actor_loss=loss))
 

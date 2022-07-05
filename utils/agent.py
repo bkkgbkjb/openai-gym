@@ -275,9 +275,9 @@ class OfflineAgent(Generic[OO, OS]):
         self.algm.on_env_reset(mode, o[1])
         return o[0]
 
-    def train(self, dataloader: DataLoader) -> int:
+    def train(self, info: Info) -> int:
         self.toggleEval(False)
-        return self.algm.manual_train({'dataloader': dataloader})
+        return self.algm.manual_train(info)
 
     def eval(
         self, env: gym.Env
