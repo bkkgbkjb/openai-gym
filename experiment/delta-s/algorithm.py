@@ -82,6 +82,9 @@ class HighActor(NeuralNetworks):
             nn.ReLU(), layer_init(nn.Linear(400, 300)), nn.ReLU(),
             layer_init(nn.Linear(300, delta_state_dim)), nn.Tanh())
 
+    def set_action_scale(self, new_action_scale: Union[float, torch.Tensor]):
+        self.action_scale = new_action_scale
+
     def forward(self, s: torch.Tensor, g: torch.Tensor):
         return self.action_scale * self.net(torch.cat([s, g], dim=1))
 
@@ -99,15 +102,16 @@ class DeltaS(Algorithm[S]):
         self.action_dim = action_dim
         self.action_scale = action_scale
 
-        self.high_actor = HighActor(self.state_dim, self.goal_dim,
-                                    self.delta_state_dim, 30).to(DEVICE)
+        self.high_actor = HighActor(self.state_dim,
+                                    self.goal_dim, self.delta_state_dim,
+                                    float('nan')).to(DEVICE)
         self.high_actor_optim = torch.optim.Adam(self.high_actor.parameters(),
-                                                 lr=5e-3)
+                                                 lr=5e-4)
         self.high_actor_optim_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.high_actor_optim,
-            patience=750,
-            factor=0.25,
-            min_lr=1e-8,
+            patience=850,
+            factor=0.5,
+            min_lr=1e-7,
             cooldown=150,
             verbose=True,
         )
@@ -124,7 +128,7 @@ class DeltaS(Algorithm[S]):
             patience=750,
             factor=0.25,
             verbose=True,
-            min_lr=1e-8,
+            min_lr=1e-6,
             cooldown=150)
 
         self.actor_loss = nn.MSELoss()
@@ -192,14 +196,23 @@ class DeltaS(Algorithm[S]):
 
     def get_data(self, dataset: Any):
 
-        states = torch.from_numpy(dataset['state'][:int(1e6)]).type(torch.float32)
-        actions = torch.from_numpy(dataset['action'][:int(1e6)]).type(torch.float32)
-        rewards = torch.from_numpy(dataset['reward'][:int(1e6)]).type(torch.float32)
+        states = torch.from_numpy(dataset['state'][:int(1e6)]).type(
+            torch.float32)
+        actions = torch.from_numpy(dataset['action'][:int(1e6)]).type(
+            torch.float32)
+        rewards = torch.from_numpy(dataset['reward'][:int(1e6)]).type(
+            torch.float32)
         next_states = torch.from_numpy(dataset['next_state'][:int(1e6)]).type(
             torch.float32)
-        dones = torch.from_numpy(dataset['done'][:int(1e6)]).type(torch.float32)
+        dones = torch.from_numpy(dataset['done'][:int(1e6)]).type(
+            torch.float32)
         goals = torch.from_numpy(dataset['info']['goal'][:int(1e6)]).type(
             torch.float32)
+        state_max = torch.max(states, dim=0).values
+        state_min = torch.min(states, dim=0).values
+        assert state_max.shape == state_min.shape == (self.state_dim, )
+        state_scale = state_max - state_min
+        self.high_actor.set_action_scale(state_scale * 1.1)
 
         assert len(states) == len(actions) == len(rewards) == len(
             next_states) == len(dones) == len(goals)
