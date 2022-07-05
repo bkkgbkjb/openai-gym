@@ -61,7 +61,7 @@ class Episodes(Generic[EPS]):
 
     @classmethod
     def from_list(cls, sari: Tuple[List[EPS], List[Action], List[Reward],
-                                    List[Info]]):
+                                   List[Info]]):
         inst = cls()
         (s, a, r, info) = sari
         assert len(s) == len(a) + 1 == len(r) + 1 == len(info)
@@ -108,6 +108,29 @@ class Episodes(Generic[EPS]):
             b.append(self.steps[i])
 
         return b
+
+    def cut(self,
+            length: int,
+            allow_last_not_align: bool = False
+            ) -> List[List[NotNoneStep[EPS]]]:
+
+        assert length >= 1
+
+        steps = self.steps
+        rl: List[List[NotNoneStep[EPS]]] = []
+        l: List[NotNoneStep[EPS]] = []
+
+        for s in steps:
+            assert s.is_not_none()
+            l.append(NotNoneStep.from_step(s))
+            if len(l) == length:
+                rl.append(l)
+                l = []
+
+        if allow_last_not_align and len(l) != 0:
+            rl.append(l)
+
+        return rl
 
     def sample_non_stop(self, batch_size: int) -> List[NotNoneStep[EPS]]:
         idx = np.random.choice(len(self.non_stop_steps), batch_size)
