@@ -2,8 +2,7 @@ from gym.envs.registration import register
 import sys
 
 print("path", sys.argv[0].split('/')[-1], "!!!")
-from arguments.arguments_hier_sac import get_args_ant
-args = get_args_ant()
+from arguments.arguments_hier_sac import args
 
 robots = ['Point', 'Ant', 'Swimmer']
 task_types = ['Maze', 'Maze1', 'Push', 'Fall', 'Block', 'BlockMaze']

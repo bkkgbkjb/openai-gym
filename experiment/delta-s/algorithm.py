@@ -3,7 +3,7 @@ from utils.algorithm import (ActionInfo, Mode, ReportInfo)
 from utils.common import Info
 from utils.episode import Episodes
 from utils.step import NotNoneStep, Step
-from utils.transition import (Transition, resolve_transitions)
+from utils.transition import (Transition, resolve_transitions, TransitionTuple)
 from torch import nn
 from collections import deque
 import torch
@@ -13,6 +13,7 @@ from torch.distributions import Categorical, Normal
 from typing import Union
 from utils.nets import NeuralNetworks, layer_init
 from torch.utils.data import DataLoader
+from arguments.arguments_hier_sac import args
 
 from typing import List, Tuple, Any, Optional, Callable, Dict, cast
 import numpy as np
@@ -142,6 +143,8 @@ class DeltaS(Algorithm[S]):
     def reset_episode_info(self):
         self.fg = None
         self.env_goal_type = None
+        self.inner_steps = 0
+        self.delta_s = None
 
     def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
 
@@ -153,6 +156,25 @@ class DeltaS(Algorithm[S]):
 
         assert self.env_goal_type is None
         self.env_goal_type = info['env'].env_info['goal_type']
+
+    @torch.no_grad()
+    def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
+        assert mode == 'eval'
+        assert self.fg is not None
+        s = state.unsqueeze(0).to(DEVICE)
+
+        if self.inner_steps % self.c == 0:
+            self.delta_s = self.high_actor(s, self.fg.unsqueeze(0))
+
+        return self.low_actor(s, self.delta_s).squeeze()
+
+    def after_step(self, mode: Mode, transition: TransitionTuple[S]):
+        (s1, s2) = transition
+
+        if args.transition_delta_s:
+            self.delta_s = s1.state + self.delta_s - s2.state
+
+        self.inner_steps += 1
 
     def on_episode_termination(
         self, mode: Mode, sari: Tuple[List[S], List[Action], List[Reward],
@@ -167,17 +189,6 @@ class DeltaS(Algorithm[S]):
 
         self.reset_episode_info()
         return report
-
-    @torch.no_grad()
-    def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
-        assert mode == 'eval'
-        assert self.fg is not None
-
-        s = state.unsqueeze(0).to(DEVICE)
-
-        delta_s = self.high_actor(s, self.fg.unsqueeze(0))
-
-        return self.low_actor(s, delta_s).squeeze()
 
     def get_data(self, dataset: Any):
 
@@ -242,21 +253,26 @@ class DeltaS(Algorithm[S]):
                   ss[0].info['goal']) for ss in e.cut(self.c)]
                 for e in episodes_sampled]
 
-        states = torch.stack([state for e in data for (state, _, _, _) in e]).to(DEVICE)
-        diffs = torch.stack([diff for e in data for (_, _, diff, _) in e]).to(DEVICE)
-        assert states.shape[1] == diffs.shape[1] == self.state_dim
+        l = len([details for e in data for details in e])
 
-        actions = torch.stack(
-            [action for e in data for (_, action, _, _) in e]).to(DEVICE)
+        steps_index = np.random.choice(l, self.batch_size)
 
-        assert actions.shape[1] == self.action_dim
+        states = torch.stack([state for e in data for (state, _, _, _) in e
+                              ]).to(DEVICE)[steps_index]
+        diffs = torch.stack([diff for e in data
+                             for (_, _, diff, _) in e]).to(DEVICE)[steps_index]
+        assert states.shape == diffs.shape == (self.batch_size, self.state_dim)
 
-        goals = torch.stack([goal for e in data for (_, _, _, goal) in e]).to(DEVICE)
+        actions = torch.stack([
+            action for e in data for (_, action, _, _) in e
+        ]).to(DEVICE)[steps_index]
 
-        assert goals.shape[1] == self.goal_dim
+        assert actions.shape == (self.batch_size, self.action_dim)
 
-        assert states.shape[0] == actions.shape[0] == diffs.shape[
-            0] == goals.shape[0]
+        goals = torch.stack([goal for e in data
+                             for (_, _, _, goal) in e]).to(DEVICE)[steps_index]
+
+        assert goals.shape == (self.batch_size, self.goal_dim)
 
         return states, actions, diffs, goals
 
