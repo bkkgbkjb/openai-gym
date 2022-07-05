@@ -129,7 +129,7 @@ class DeltaS(Algorithm[S]):
 
         self.actor_loss = nn.MSELoss()
 
-        self.batch_size = 196
+        self.batch_size = 256
         self.c = 15
 
         self.reset()
@@ -192,13 +192,13 @@ class DeltaS(Algorithm[S]):
 
     def get_data(self, dataset: Any):
 
-        states = torch.from_numpy(dataset['state'][:][:int(1e6)]).type(torch.float32)
-        actions = torch.from_numpy(dataset['action'][:][:int(1e6)]).type(torch.float32)
-        rewards = torch.from_numpy(dataset['reward'][:][:int(1e6)]).type(torch.float32)
-        next_states = torch.from_numpy(dataset['next_state'][:][:int(1e6)]).type(
+        states = torch.from_numpy(dataset['state'][:int(1e6)]).type(torch.float32)
+        actions = torch.from_numpy(dataset['action'][:int(1e6)]).type(torch.float32)
+        rewards = torch.from_numpy(dataset['reward'][:int(1e6)]).type(torch.float32)
+        next_states = torch.from_numpy(dataset['next_state'][:int(1e6)]).type(
             torch.float32)
-        dones = torch.from_numpy(dataset['done'][:][:int(1e6)]).type(torch.float32)
-        goals = torch.from_numpy(dataset['info']['goal'][:][:int(1e6)]).type(
+        dones = torch.from_numpy(dataset['done'][:int(1e6)]).type(torch.float32)
+        goals = torch.from_numpy(dataset['info']['goal'][:int(1e6)]).type(
             torch.float32)
 
         assert len(states) == len(actions) == len(rewards) == len(

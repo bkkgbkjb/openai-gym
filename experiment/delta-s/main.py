@@ -28,7 +28,7 @@ test_env2 = record_video(test_env2,
                          'delta-s',
                          activate_per_episode=10,
                          name_prefix='random')
-test_env1, test_env2 = make_envs([test_env1, test_env2])
+test_env1, test_env2 = make_envs([test_env1, test_env2], seed=RANDOM_SEED)
 
 agent = OfflineAgent(
     DeltaS(test_env1.observation_space['observation'].shape[0],
@@ -39,8 +39,8 @@ agent.set_algm_reporter(get_reporter(agent.name))
 
 offline_train_and_eval(agent,
                        dict(dataset=dataset), [test_env1, test_env2],
-                       single_train_frames=50 * 196,
+                       single_train_frames=50 * 256,
                        eval_per_train=2,
-                       total_train_frames=999 * 3 * 100 * 196)
+                       total_train_frames=999 * 3 * 100 * 256)
 
 dataset.close()

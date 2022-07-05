@@ -17,7 +17,7 @@ def get_args_ant():
     parser.add_argument('--test', type=str, default='AntMaze1Test-v1')
     parser.add_argument('--n-epochs', type=int, default=20000, help='the number of epochs to train the agent')
     parser.add_argument('--n-batches', type=int, default=200, help='the times to update the network')
-    parser.add_argument('--seed', type=int, default=125, help='random seed')
+    parser.add_argument('--seed', type=int, default=0, help='random seed')
 
     parser.add_argument('--replay-strategy', type=str, default='none', help='the HER strategy')
     parser.add_argument('--save-dir', type=str, default='saved_models/', help='the path to save the models')
