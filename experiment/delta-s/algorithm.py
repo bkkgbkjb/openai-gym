@@ -212,7 +212,7 @@ class DeltaS(Algorithm[S]):
         state_min = torch.min(states, dim=0).values
         assert state_max.shape == state_min.shape == (self.state_dim, )
         state_scale = state_max - state_min
-        self.high_actor.set_action_scale(state_scale * 1.1)
+        self.high_actor.set_action_scale((state_scale * 1.1).to(DEVICE))
 
         assert len(states) == len(actions) == len(rewards) == len(
             next_states) == len(dones) == len(goals)

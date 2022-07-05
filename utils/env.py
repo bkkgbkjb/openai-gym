@@ -149,7 +149,7 @@ def train_and_eval(
 
     t = 0
 
-    eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
+    # eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
     for _ in tqdm(range(s)):
         train(agent, train_env, single_train_frames)
         t += 1
@@ -173,7 +173,7 @@ def offline_train_and_eval(
     s = math.ceil(total_train_frames / single_train_frames)
     t = 0
 
-    eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
+    # eval(agent, eval_env, eval_repeats, env_weights=eval_env_weights)
     for _ in tqdm(range(s)):
         offline_train(agent, info, single_train_frames)
         t += 1
