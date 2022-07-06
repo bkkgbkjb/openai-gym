@@ -10,6 +10,7 @@ Here are the param for the training
 
 def get_args_ant():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset', type=str, default='AntMaze.hdf5')
     # the environment setting
     parser.add_argument('--collect-samples', type=bool, default=False)
     parser.add_argument('--transition-delta-s', type=bool, default=False)

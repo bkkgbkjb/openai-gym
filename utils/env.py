@@ -235,7 +235,7 @@ def record_video(env: gym.Env,
                  name_prefix: str = '') -> gym.Env:
     return RecordVideo(
         env,
-        f'vlog/{algo_name}_{datetime.now().strftime("%m-%d_%H-%M")}',
+        f'vlog/{algo_name}_{datetime.now().strftime("%m-%d_%H-%M-%S")}',
         episode_trigger=lambda episode_id: episode_id % activate_per_episode ==
         0,
         name_prefix=

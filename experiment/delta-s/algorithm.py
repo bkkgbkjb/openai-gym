@@ -263,7 +263,8 @@ class DeltaS(Algorithm[S]):
         episodes_sampled = episodes.sample(self.batch_size)
 
         data = [[(ss[0].state, ss[0].action, ss[-1].state - ss[0].state,
-                  ss[0].info['goal']) for ss in e.cut(self.c)]
+                  ss[0].info['goal'])
+                 for ss in e.cut(self.c, start=np.random.choice(self.c))]
                 for e in episodes_sampled]
 
         l = len([details for e in data for details in e])

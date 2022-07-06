@@ -111,12 +111,15 @@ class Episodes(Generic[EPS]):
 
     def cut(self,
             length: int,
-            allow_last_not_align: bool = False
+            allow_last_not_align: bool = False,
+            start: int = 0
             ) -> List[List[NotNoneStep[EPS]]]:
 
         assert length >= 1
 
-        steps = self.steps
+        assert 0 <= start < length
+
+        steps = self.steps[start:]
         rl: List[List[NotNoneStep[EPS]]] = []
         l: List[NotNoneStep[EPS]] = []
 
