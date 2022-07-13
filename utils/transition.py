@@ -2,7 +2,7 @@ from typing import Generic, Tuple, TypeVar, List
 from utils.common import AllowedStates, SARSAI
 import torch
 from utils.step import NotNoneStep, Step
-from utils.env_sb3 import resolve_lazy_frames
+from utils.common import resolve_lazy_frames
 import numpy as np
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

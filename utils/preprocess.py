@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from typing import Protocol, TypeVar, List, Union
-from utils.env_sb3 import LazyFrames, resolve_lazy_frames
+from utils.common import LazyFrames, resolve_lazy_frames
 import torch
 
 O = TypeVar("O")

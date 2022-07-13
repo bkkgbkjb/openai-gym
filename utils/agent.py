@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import gym
-from utils.env_sb3 import LazyFrames, resolve_lazy_frames
+from utils.common import LazyFrames, resolve_lazy_frames
 from typing import (
     Any,
     TypeVar,

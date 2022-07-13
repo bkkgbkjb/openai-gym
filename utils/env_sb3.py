@@ -1,5 +1,6 @@
 # following code is manually copied from stable-baseline3, as it depends on an older version of gym, but I don't want to solve this version conflict
 
+from utils.common import Info, Action, Reward, S
 import gym
 from torchvision import transforms as T
 import numpy as np
@@ -28,6 +29,7 @@ import distutils.version
 import numpy as np
 
 from gym import error, logger
+from utils.episode import Episodes
 
 try:
     import cv2  # pytype:disable=import-error
@@ -255,62 +257,6 @@ class EpisodicLifeEnv(gym.Wrapper):
         return obs
 
 
-class LazyFrames:
-    r"""Ensures common frames are only stored once to optimize memory use.
-
-    To further reduce the memory use, it is optionally to turn on lz4 to
-    compress the observations.
-
-    .. note::
-
-        This object should only be converted to numpy array just before forward pass.
-
-    Args:
-        lz4_compress (bool): use lz4 to compress the frames internally
-
-    """
-    __slots__ = ("frame_shape", "dtype", "shape", "lz4_compress", "_frames")
-
-    def __init__(self, frames, lz4_compress=False):
-        self.frame_shape = tuple(frames[0].shape)
-        self.shape = (len(frames), ) + self.frame_shape
-        self.dtype = frames[0].dtype
-        if lz4_compress:
-            from lz4.block import compress
-
-            frames = [compress(frame) for frame in frames]
-        self._frames = frames
-        self.lz4_compress = lz4_compress
-
-    def __array__(self, dtype=None):
-        arr = self[:]
-        if dtype is not None:
-            return arr.astype(dtype)
-        return arr
-
-    def __len__(self):
-        return self.shape[0]
-
-    def __getitem__(self, int_or_slice):
-        if isinstance(int_or_slice, int):
-            return self._check_decompress(
-                self._frames[int_or_slice])  # single frame
-        return np.stack(
-            [self._check_decompress(f) for f in self._frames[int_or_slice]],
-            axis=0)
-
-    def __eq__(self, other):
-        return self.__array__() == other
-
-    def _check_decompress(self, frame):
-        if self.lz4_compress:
-            from lz4.block import decompress
-
-            return np.frombuffer(decompress(frame),
-                                 dtype=self.dtype).reshape(self.frame_shape)
-        return frame
-
-
 class FrameStack(ObservationWrapper):
     r"""Observation wrapper that stacks the observations in a rolling manner.
 
@@ -382,18 +328,6 @@ class FrameStack(ObservationWrapper):
             return self.observation(), info
         else:
             return self.observation()
-
-
-def resolve_lazy_frames(lazy_frames: LazyFrames) -> torch.Tensor:
-
-    rlt = torch.stack(
-        cast(
-            List[torch.Tensor],
-            [lazy_frames[i] for i in range(len(lazy_frames))],
-        ))
-
-    assert rlt.size(0) == len(lazy_frames)
-    return rlt
 
 
 class ToTensorEnv(gym.ObservationWrapper):
@@ -1022,3 +956,59 @@ class RescaleAction(gym.ActionWrapper):
         action = self.scale * action
         action = np.clip(action, -self.scale, self.scale)
         return action
+
+
+def flat_to_episode(states: List[S],
+                    actions: List[Action],
+                    rewards: List[Reward],
+                    dones: List[bool],
+                    infos: List[Info],
+                    has_next_state: bool = False) -> List[Episodes[S]]:
+    assert len(states) == len(actions) == len(rewards) == len(dones) == len(
+        infos)
+
+    l = len(states)
+
+    assert dones[-1]
+
+    s = []
+    a = []
+    r = []
+    info = []
+
+    episodes = []
+
+    for i in range(l):
+        s.append(torch.from_numpy(states[i]).type(torch.float32))
+        a.append(torch.from_numpy(actions[i]).type(torch.float32))
+        r.append(rewards[i])
+
+        _i = dict(infos[i])
+        assert 'end' not in _i
+        _i['end'] = False
+        info.append(_i)
+
+        if has_next_state and dones[i]:
+            s.append(infos[i]['next_state'])
+            info.append(dict(end=True))
+
+            episodes.append(Episodes.from_list((s, a, r, info)))
+            s = []
+            a = []
+            r = []
+            info = []
+            continue
+
+        if not has_next_state and dones[i]:
+            assert not info[-1]['end']
+            a.pop(-1)
+            r.pop(-1)
+            info[-1]['end'] = True
+
+            episodes.append(Episodes.from_list((s, a, r, info)))
+            s = []
+            a = []
+            r = []
+            info = []
+
+    return episodes

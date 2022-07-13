@@ -24,7 +24,8 @@ from utils.agent import Agent, OfflineAgent
 from utils.agent import AllAgent
 from utils.common import Action, Info
 from datetime import datetime
-from utils.env_sb3 import LazyFrames, RecordVideo, resolve_lazy_frames
+from utils.common import LazyFrames,  resolve_lazy_frames
+from utils.env_sb3 import RecordVideo
 
 O = TypeVar('O')
 S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
@@ -53,6 +54,7 @@ def glance(env: gym.Env,
                 env.render(mode=render)
                 sleep(1 / 60)
 
+            env.unwrapped.viewer.add_marker(pos=np.array([3.0, 2.0, 2.0]), label='goal')
             (_, rwd, stop, _) = env.step(env.action_space.sample())
             t += 1
 

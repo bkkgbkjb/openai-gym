@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from utils.transition import Transition
-from utils.env_sb3 import LazyFrames, resolve_lazy_frames
+from utils.common import LazyFrames, resolve_lazy_frames
 
 from utils.episode import Episodes
 

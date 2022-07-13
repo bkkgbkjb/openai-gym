@@ -2,11 +2,10 @@ from abc import ABC
 from typing import Generic, Tuple, TypeVar, Optional, cast
 from typing_extensions import Self
 
-from utils.common import Info, Action, Reward, AllAllowedStates, AllowedStates
+from utils.common import Info, Action, Reward, AllAllowedStates, AllowedStates, LazyFrames
 import numpy as np
 import torch
 
-from utils.env_sb3 import LazyFrames
 
 S = TypeVar('S', bound=AllAllowedStates)
 A = TypeVar('A')
