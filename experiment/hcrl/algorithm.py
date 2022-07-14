@@ -56,9 +56,9 @@ class SAEncoder(NeuralNetworks):
         self.n_repr = repr_dim
 
         self.net = nn.Sequential(
-            layer_init(nn.Linear(self.n_state + self.n_action, 256)),
-            nn.ReLU(), layer_init(nn.Linear(256, 256)), nn.ReLU(),
-            layer_init(nn.Linear(256, self.n_repr)))
+            layer_init(nn.Linear(self.n_state + self.n_action, 1024)),
+            nn.ReLU(), layer_init(nn.Linear(1024, 1024)), nn.ReLU(),
+            layer_init(nn.Linear(1024, self.n_repr)))
 
     def forward(self, state: State, action: Action):
         return self.net(torch.cat([state, action], dim=1))
@@ -71,10 +71,10 @@ class GEncoder(NeuralNetworks):
         self.n_goal = n_goal
         self.n_repr = repr_dim
 
-        self.net = nn.Sequential(layer_init(nn.Linear(self.n_goal, 256)),
-                                 nn.ReLU(), layer_init(nn.Linear(256, 256)),
+        self.net = nn.Sequential(layer_init(nn.Linear(self.n_goal, 1024)),
+                                 nn.ReLU(), layer_init(nn.Linear(1024, 1024)),
                                  nn.ReLU(),
-                                 layer_init(nn.Linear(256, self.n_repr)))
+                                 layer_init(nn.Linear(1024, self.n_repr)))
 
     def forward(self, state: State):
         return self.net(state)
@@ -105,14 +105,14 @@ class PaiFunction(NeuralNetworks):
                  action_scale: float):
         super().__init__()
         self.net = nn.Sequential(
-            layer_init(nn.Linear(n_state + n_goal, 256)),
+            layer_init(nn.Linear(n_state + n_goal, 1024)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 256)),
+            layer_init(nn.Linear(1024, 1024)),
             nn.ReLU(),
         ).to(DEVICE)
 
-        self.mean = layer_init(nn.Linear(256, n_action)).to(DEVICE)
-        self.std = layer_init(nn.Linear(256, n_action)).to(DEVICE)
+        self.mean = layer_init(nn.Linear(1024, n_action)).to(DEVICE)
+        self.std = layer_init(nn.Linear(1024, n_action)).to(DEVICE)
 
         self.n_state = n_state
         self.n_action = n_action
@@ -149,24 +149,22 @@ class PaiFunction(NeuralNetworks):
         log_prob = (raw_log_prob - mod_log_prob).sum(1, keepdim=True)
 
         mean = self.action_scale * torch.tanh(mean)
-        return act, log_prob, mean
+        return act, log_prob, mean, normal
 
 
 class CRL(Algorithm):
 
-    def __init__(self,
-                 n_state: int,
-                 n_goals: int,
-                 n_actions: int,
-                 action_scale: float,
-                 no_auto_train: bool = False,
-                 alpha_tune: bool = True):
+    def __init__(
+        self,
+        n_state: int,
+        n_goals: int,
+        n_actions: int,
+        action_scale: float,
+    ):
         self.set_name("CRL")
         self.n_actions = n_actions
         self.n_state = n_state
         self.n_goals = n_goals
-        self.no_auto_train = no_auto_train
-        self.alpha_tune = alpha_tune
 
         self.gamma = 0.99
         self.action_scale = action_scale
@@ -190,18 +188,8 @@ class CRL(Algorithm):
         self.q1_loss = nn.BCEWithLogitsLoss()
         self.q2_loss = nn.BCEWithLogitsLoss()
 
-        self.log_alpha = torch.tensor(
-            [-1.6094],
-            requires_grad=True if self.alpha_tune else False,
-            device=DEVICE)
-
-        self.target_entropy = -n_actions
-
         self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), 3e-4)
         self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), 3e-4)
-
-        self.log_alpha_optimizer = torch.optim.Adam(params=[self.log_alpha],
-                                                    lr=3e-4)
 
         self.p_optimizer = torch.optim.Adam(self.policy.parameters(), 3e-4)
         self.c = 15
@@ -212,7 +200,7 @@ class CRL(Algorithm):
 
     def reset(self):
         self.episodes = None
-        self.replay_memory = ReplayBuffer[Episodes]()
+        self.replay_memory = ReplayBuffer[Episodes](None)
         self.reset_episode_info()
 
     def reset_episode_info(self):
@@ -232,8 +220,8 @@ class CRL(Algorithm):
     @torch.no_grad()
     def take_action(self, mode: Mode, state: State) -> Action:
         assert self.fg is not None
-        action, _, max_actions = self.policy.sample(state.unsqueeze(0),
-                                                    self.fg.unsqueeze(0))
+        action, _, max_actions, _ = self.policy.sample(state.unsqueeze(0),
+                                                       self.fg.unsqueeze(0))
 
         return (max_actions if mode == 'eval' else action).squeeze()
 
@@ -249,12 +237,11 @@ class CRL(Algorithm):
 
     def train(self):
         episodes_sampled = self.replay_memory.sample(self.mini_batch_size)
-        # sub_episodes = [e.cut(self.c) for e in episodes_sampled]
-        # sub_episodes = [se for ss in sub_episodes for se in ss]
-        # steps_idx = np.random.choice()
         future_steps = self.future_step_idx_dist.sample(
             (self.mini_batch_size, )).type(torch.int32).clamp(
                 max=torch.as_tensor([e.len - 1 for e in episodes_sampled]))
+
+        assert future_steps.shape == (self.mini_batch_size, )
 
         start_steps = [
             np.random.choice(e.len - future_steps[i])
@@ -266,16 +253,33 @@ class CRL(Algorithm):
                  for i, e in enumerate(episodes_sampled)]
 
         states = torch.stack([s.state for (s, _) in steps]).to(DEVICE)
+        assert states.shape == (self.mini_batch_size, self.n_state)
         actions = torch.stack(
             [NotNoneStep.from_step(s).action for (s, _) in steps]).to(DEVICE)
-        goals = torch.stack([
+
+        assert actions.shape == (self.mini_batch_size, self.n_actions)
+
+        current_goals = torch.stack([
+            torch.from_numpy(s.info['goal']).type(torch.float32)
+            for (s, _) in steps
+        ]).to(DEVICE)
+
+        future_goals = torch.stack([
             torch.from_numpy(s.info['goal']).type(torch.float32)
             for (_, s) in steps
         ]).to(DEVICE)
 
-        (_, (sa_1, g_1)) = self.q1(states, actions, goals)
+        assert torch.all(current_goals == future_goals)
+        assert current_goals.shape == (self.mini_batch_size, self.n_goals)
+
+        (_, (sa_1, g_1)) = self.q1(states, actions, future_goals)
+        assert sa_1.shape == g_1.shape == (self.mini_batch_size, 16)
+
         predicted_q1 = torch.inner(sa_1, g_1)
-        (_, (sa_2, g_2)) = self.q2(states, actions, goals)
+        assert predicted_q1.shape == (self.mini_batch_size,
+                                      self.mini_batch_size)
+
+        (_, (sa_2, g_2)) = self.q2(states, actions, future_goals)
         predicted_q2 = torch.inner(sa_2, g_2)
 
         q_val_loss1 = self.q1_loss(predicted_q1,
@@ -292,21 +296,19 @@ class CRL(Algorithm):
         self.q2_optimizer.step()
 
         # Training P Function
-        new_actions, new_log_probs, _ = self.policy.sample(states, goals)
-        (critic_1, _) = self.q1(states, new_actions, goals)
-        (critic_2, _) = self.q2(states, new_actions, goals)
-        policy_loss = -torch.min(critic_1, critic_2).mean()
+        new_actions, new_log_probs, _, normal = self.policy.sample(
+            states, current_goals)
+        (critic_1, _) = self.q1(states, new_actions, future_goals)
+        assert critic_1.shape == (self.mini_batch_size, )
+        (critic_2, _) = self.q2(states, new_actions, future_goals)
 
-        # policy_loss = (self.alpha * new_log_probs -
-        #                torch.min(self.q1(states, new_actions),
-        #                          self.q2(states, new_actions))).mean()
+        policy_loss = -torch.min(critic_1, critic_2).mean()
+        bc_loss = -(normal.log_prob(actions)).mean()
 
         self.p_optimizer.zero_grad()
-        policy_loss.backward()
+        # (0.95 * policy_loss + 0.05 * bc_loss).backward()
+        bc_loss.backward()
         self.p_optimizer.step()
-
-        self.q1_target.soft_update_to(self.q1, self.tau)
-        self.q2_target.soft_update_to(self.q2, self.tau)
 
         self.report(
             dict(

@@ -10,10 +10,10 @@ from utils.reporter import get_reporter
 from args import args
 import h5py
 from utils.env_sb3 import flat_to_episode
-from utils.env import glance, offline_train_and_eval
+from utils.env import glance, offline_train_and_eval, record_video
 
 # %%
-env = gym.make('antmaze-medium-diverse-v2')
+env = gym.make('antmaze-umaze-diverse-v2')
 # viewer = env.unwrapped._get_viewer('human')
 # viewer.add_marker(pos=np.array([3.0, 2.0, 2.0]), label='goal')
 
@@ -45,6 +45,8 @@ agent = OfflineAgent(
         env.action_space.shape[0], 1), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
+
+env = record_video(env, 'crl', activate_per_episode=10, name_prefix='crl')
 
 offline_train_and_eval(agent,
                        dict(episodes=episodes),
