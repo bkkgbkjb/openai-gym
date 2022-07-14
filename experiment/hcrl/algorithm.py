@@ -12,7 +12,7 @@ from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from typing import Union
-from utils.nets import NeuralNetworks, layer_init
+from utils.nets import NeuralNetworks
 from torch.utils.data import DataLoader
 from args import args
 
@@ -30,6 +30,10 @@ Reward = int
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 Goal = torch.Tensor
+
+
+def layer_init(net):
+    return net
 
 
 class Preprocess(PreprocessI[O, S]):
@@ -200,7 +204,7 @@ class CRL(Algorithm):
 
     def reset(self):
         self.episodes = None
-        self.replay_memory = ReplayBuffer[Episodes](None)
+        self.replay_memory = ReplayBuffer[Transition[State]](None)
         self.reset_episode_info()
 
     def reset_episode_info(self):
@@ -236,50 +240,38 @@ class CRL(Algorithm):
         return report
 
     def train(self):
-        episodes_sampled = self.replay_memory.sample(self.mini_batch_size)
-        future_steps = self.future_step_idx_dist.sample(
-            (self.mini_batch_size, )).type(torch.int32).clamp(
-                max=torch.as_tensor([e.len - 1 for e in episodes_sampled]))
+        (states, actions, _, _, _, infos) = resolve_transitions(
+            self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
+            (self.n_actions, ))
 
-        assert future_steps.shape == (self.mini_batch_size, )
-
-        start_steps = [
-            np.random.choice(e.len - future_steps[i])
-            for i, e in enumerate(episodes_sampled)
-        ]
-
-        steps = [(e.steps[start_steps[i]],
-                  e.steps[start_steps[i] + future_steps[i]])
-                 for i, e in enumerate(episodes_sampled)]
-
-        states = torch.stack([s.state for (s, _) in steps]).to(DEVICE)
         assert states.shape == (self.mini_batch_size, self.n_state)
-        actions = torch.stack(
-            [NotNoneStep.from_step(s).action for (s, _) in steps]).to(DEVICE)
+        # actions = torch.stack(
+        #     [NotNoneStep.from_step(s).action for (s, _) in steps]).to(DEVICE)
 
         assert actions.shape == (self.mini_batch_size, self.n_actions)
 
-        current_goals = torch.stack([
-            torch.from_numpy(s.info['goal']).type(torch.float32)
-            for (s, _) in steps
-        ]).to(DEVICE)
+        goals = torch.stack([i['future_state'] for i in infos]).to(DEVICE)
+        assert goals.shape == (self.mini_batch_size, self.n_goals)
 
-        future_goals = torch.stack([
-            torch.from_numpy(s.info['goal']).type(torch.float32)
-            for (_, s) in steps
-        ]).to(DEVICE)
+        # final_goals = torch.stack([
+        #     torch.from_numpy(s.info['goal']).type(torch.float32)
+        #     for (s, _) in steps
+        # ]).to(DEVICE)
 
-        assert torch.all(current_goals == future_goals)
-        assert current_goals.shape == (self.mini_batch_size, self.n_goals)
+        # future_goals = torch.stack([s.state[:2]
+        #                             for (_, s) in steps]).to(DEVICE)
 
-        (_, (sa_1, g_1)) = self.q1(states, actions, future_goals)
+        # assert final_goals.shape == future_goals.shape == (
+        #     self.mini_batch_size, self.n_goals)
+
+        (_, (sa_1, g_1)) = self.q1(states, actions, goals)
         assert sa_1.shape == g_1.shape == (self.mini_batch_size, 16)
 
         predicted_q1 = torch.inner(sa_1, g_1)
         assert predicted_q1.shape == (self.mini_batch_size,
                                       self.mini_batch_size)
 
-        (_, (sa_2, g_2)) = self.q2(states, actions, future_goals)
+        (_, (sa_2, g_2)) = self.q2(states, actions, goals)
         predicted_q2 = torch.inner(sa_2, g_2)
 
         q_val_loss1 = self.q1_loss(predicted_q1,
@@ -297,29 +289,61 @@ class CRL(Algorithm):
 
         # Training P Function
         new_actions, new_log_probs, _, normal = self.policy.sample(
-            states, current_goals)
-        (critic_1, _) = self.q1(states, new_actions, future_goals)
+            states, goals)
+        (critic_1, _) = self.q1(states, new_actions, goals)
         assert critic_1.shape == (self.mini_batch_size, )
-        (critic_2, _) = self.q2(states, new_actions, future_goals)
+        (critic_2, _) = self.q2(states, new_actions, goals)
 
         policy_loss = -torch.min(critic_1, critic_2).mean()
         bc_loss = -(normal.log_prob(actions)).mean()
 
+        actor_loss = (0.95 * policy_loss + 0.05 * bc_loss)
+
         self.p_optimizer.zero_grad()
-        # (0.95 * policy_loss + 0.05 * bc_loss).backward()
-        bc_loss.backward()
+        actor_loss.backward()
+        # bc_loss.backward()
         self.p_optimizer.step()
 
         self.report(
             dict(
-                policy_loss=policy_loss,
+                policy_loss=actor_loss,
                 q_loss1=q_val_loss1,
                 q_loss2=q_val_loss2,
             ))
 
     def get_episodes(self, episodes: List[Episodes]):
         for e in episodes:
-            self.replay_memory.append(e)
+            l = e.len
+            arange = torch.arange(l + 1)
+
+            is_future_mask = arange[:, None] < arange[None]
+            discount = self.gamma**(arange[None] - arange[:, None])
+            probs = is_future_mask * discount
+            goal_index = torch.distributions.Categorical(
+                logits=torch.log(probs + 1e-7)).sample()
+            assert goal_index.shape == (l + 1, )
+
+            # state = torch.stack([s.state for s in e.steps])
+            # next_state = torch.stack([s.info['next'].state for s in e.steps])
+
+            goal = torch.stack([s.state[:2] for s in e._steps])
+
+            goal = goal[goal_index[:-1]]
+
+            assert goal.shape == (l, 2)
+
+            for j, s in enumerate(e.steps):
+                s = NotNoneStep.from_step(s)
+                s.add_info('future_state', goal[j])
+
+                self.replay_memory.append(
+                    Transition((NotNoneStep(s.state, s.action, s.reward,
+                                            s.info),
+                                Step(s.info['next'].state, None, None,
+                                     s.info['next'].info))))
+                if j == l - 1:
+                    assert s.info['next'].is_end()
+            # transition = Transition(())
 
     def manual_train(self, info: Dict[str, Any]):
         assert 'episodes' in info

@@ -51,9 +51,11 @@ class Episodes(Generic[EPS]):
         (_, a, r, info) = step.details
 
         if len(self._steps) > 0:
-            (_, la, _, _) = self._steps[-1].details
+            (_, la, _, li) = self._steps[-1].details
             if la is None:
                 assert a is not None
+            assert 'next' not in li
+            li['next'] = step
 
         self._steps.append(step)
 

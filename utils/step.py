@@ -1,11 +1,10 @@
 from abc import ABC
-from typing import Generic, Tuple, TypeVar, Optional, cast
+from typing import Generic, Tuple, TypeVar, Optional, cast, Any
 from typing_extensions import Self
 
 from utils.common import Info, Action, Reward, AllAllowedStates, AllowedStates, LazyFrames
 import numpy as np
 import torch
-
 
 S = TypeVar('S', bound=AllAllowedStates)
 A = TypeVar('A')
@@ -48,6 +47,24 @@ class BaseStep(ABC, Generic[S, A, R]):
     @property
     def info(self) -> Info:
         return self.i
+
+    def add_info(self, k: str, v: Any) -> Self:
+        assert k not in self.info
+        self.info[k] = v
+
+        return self
+
+    def update_info(self, k: str, v: Any) -> Self:
+        assert k in self.info
+        self.info[k] = v
+        return self
+
+    def delete_info(self, k: str) -> bool:
+        if k not in self.info:
+            return True
+
+        del self.info[k]
+        return False
 
 
 NNS = TypeVar('NNS', bound=AllowedStates)

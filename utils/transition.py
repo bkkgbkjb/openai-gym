@@ -95,11 +95,7 @@ def resolve_transitions(trs: List[Transition[RTS]], state_shape: Tuple,
 
     infos = [s1.info for (s1, _) in trs_tuples]
 
-    return (
-        states.to(DEVICE),
-        actions.to(DEVICE),
-        rewards.to(DEVICE),
-        next_states.to(DEVICE),
-        done.to(DEVICE),
-        infos
-    )
+    assert len(infos) == l
+
+    return (states.to(DEVICE), actions.to(DEVICE), rewards.to(DEVICE),
+            next_states.to(DEVICE), done.to(DEVICE), infos)
