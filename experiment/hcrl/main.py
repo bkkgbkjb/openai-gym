@@ -51,6 +51,7 @@ env = record_video(env, 'crl', activate_per_episode=10, name_prefix='crl')
 offline_train_and_eval(agent,
                        dict(episodes=episodes),
                        env,
-                       single_train_frames=50 * 1024,
+                       single_train_frames=100 * 1024,
                        eval_per_train=4,
-                       total_train_frames=999 * 3 * 100 * 1024)
+                       eval_repeats=5,
+                       total_train_frames=999 * 6 * 100 * 1024)

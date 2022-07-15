@@ -12,7 +12,7 @@ from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from typing import Union
-from utils.nets import NeuralNetworks
+from utils.nets import NeuralNetworks, layer_init
 from torch.utils.data import DataLoader
 from args import args
 
@@ -30,10 +30,6 @@ Reward = int
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 Goal = torch.Tensor
-
-
-def layer_init(net):
-    return net
 
 
 class Preprocess(PreprocessI[O, S]):
@@ -204,7 +200,7 @@ class CRL(Algorithm):
 
     def reset(self):
         self.episodes = None
-        self.replay_memory = ReplayBuffer[Transition[State]](None)
+        self.replay_memory = ReplayBuffer[Episodes[State]](None)
         self.reset_episode_info()
 
     def reset_episode_info(self):
@@ -240,17 +236,28 @@ class CRL(Algorithm):
         return report
 
     def train(self):
-        (states, actions, _, _, _, infos) = resolve_transitions(
-            self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
-            (self.n_actions, ))
+        # (states, actions, _, _, _, infos) = resolve_transitions(
+        #     self.replay_memory.sample(self.mini_batch_size), (self.n_state, ),
+        #     (self.n_actions, ))
+        episode_sampled = self.replay_memory.sample(self.mini_batch_size)
+        L = episode_sampled[0].len
+        step_idx = np.random.choice(L, self.mini_batch_size)
+
+        steps = [e.steps[step_idx[i]] for i, e in enumerate(episode_sampled)]
+
+        states = torch.stack([s.state for s in steps]).to(DEVICE)
 
         assert states.shape == (self.mini_batch_size, self.n_state)
         # actions = torch.stack(
         #     [NotNoneStep.from_step(s).action for (s, _) in steps]).to(DEVICE)
 
+        actions = torch.stack([NotNoneStep.from_step(s).action
+                               for s in steps]).to(DEVICE)
+
         assert actions.shape == (self.mini_batch_size, self.n_actions)
 
-        goals = torch.stack([i['future_state'] for i in infos]).to(DEVICE)
+        goals = torch.stack([s.info['future_state'] for s in steps]).to(DEVICE)
+        # goals = torch.stack([i['future_state'] for i in infos]).to(DEVICE)
         assert goals.shape == (self.mini_batch_size, self.n_goals)
 
         # final_goals = torch.stack([
@@ -333,16 +340,17 @@ class CRL(Algorithm):
             assert goal.shape == (l, 2)
 
             for j, s in enumerate(e.steps):
-                s = NotNoneStep.from_step(s)
+                # s = NotNoneStep.from_step(s)
                 s.add_info('future_state', goal[j])
 
-                self.replay_memory.append(
-                    Transition((NotNoneStep(s.state, s.action, s.reward,
-                                            s.info),
-                                Step(s.info['next'].state, None, None,
-                                     s.info['next'].info))))
+                # self.replay_memory.append(
+                #     Transition((NotNoneStep(s.state, s.action, s.reward,
+                #                             s.info),
+                #                 Step(s.info['next'].state, None, None,
+                #                      s.info['next'].info))))
                 if j == l - 1:
                     assert s.info['next'].is_end()
+            self.replay_memory.append(e)
             # transition = Transition(())
 
     def manual_train(self, info: Dict[str, Any]):
