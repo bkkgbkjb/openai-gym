@@ -154,7 +154,7 @@ class DDPG(Algorithm[State]):
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
-    def train(self):
+    def manual_train(self, i: Info):
         (states, actions, rewards, next_states, done, _) = resolve_transitions(
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
@@ -207,5 +207,5 @@ class DDPG(Algorithm[State]):
 
             if self.replay_buffer.len >= math.ceil(
                     self.start_train_ratio * self.replay_buffer.size):
-                self.train()
+                self.manual_train(dict())
         self.times += 1

@@ -6,7 +6,7 @@ from torch import nn
 import math
 from collections import deque
 import torch
-from utils.env_sb3 import LazyFrames, resolve_lazy_frames
+from utils.common import LazyFrames, resolve_lazy_frames
 from utils.preprocess import PreprocessI
 from utils.algorithm import Algorithm
 from typing import List, Tuple, Optional, cast, Callable, Dict, Any
@@ -15,7 +15,7 @@ from utils.nets import NeuralNetworks, layer_init
 from utils.replay_buffer import ReplayBuffer
 
 Observation = LazyFrames
-Action = np.ndarray
+Action = torch.Tensor
 
 State = Observation
 Reward = int
@@ -98,7 +98,7 @@ class DQNAlgorithm(Algorithm[State]):
             act_vals = self.online_network(
                 resolve_lazy_frames(state).unsqueeze(0))
             maxi = torch.argmax(act_vals)
-            return np.asarray([maxi.item()], dtype=np.int64)
+            return torch.tensor([maxi])
 
         rand = np.random.random()
         max_decry_times = 100_0000
@@ -106,14 +106,13 @@ class DQNAlgorithm(Algorithm[State]):
             [self.train_times, max_decry_times])
 
         if rand < sigma:
-            return np.asarray([np.random.choice(self.n_actions)],
-                              dtype=np.int64)
+            return torch.tensor([np.random.choice(self.n_actions)], dtype=torch.int64)
 
         else:
             act_vals = self.online_network(
                 resolve_lazy_frames(state).unsqueeze(0))
             maxi = torch.argmax(act_vals)
-            return np.asarray([maxi.item()], dtype=np.int64)
+            return torch.tensor([maxi])
 
     def after_step(self, mode: Mode, transition: TransitionTuple[State]):
         if mode == 'train':
@@ -124,7 +123,7 @@ class DQNAlgorithm(Algorithm[State]):
 
                 if self.replay_memory.len >= 5 * self.batch_size:
 
-                    self.train()
+                    self.manual_train(dict())
 
             if (self.train_times != 0 and self.train_times %
                 (self.update_target * self.update_times) == 0):
@@ -136,7 +135,7 @@ class DQNAlgorithm(Algorithm[State]):
     def update_target_network(self):
         self.target_network.hard_update_to(self.online_network)
 
-    def train(self):
+    def manual_train(self, i: Info):
 
         (states, actions, rewards, next_states, done,
          _) = resolve_transitions(self.replay_memory.sample(self.batch_size),
@@ -181,7 +180,7 @@ class DDQNAlgorithm(DQNAlgorithm, Algorithm[State]):
         self.update_target = 1250
         self.name = "ddqn"
 
-    def train(self):
+    def manual_train(self, i: Info):
         (states, actions, rewards, next_states, done,
          _) = resolve_transitions(self.replay_memory.sample(self.batch_size),
                                   (4, 84, 84), (1, ))

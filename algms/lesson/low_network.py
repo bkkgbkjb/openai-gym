@@ -1,7 +1,7 @@
 import setup
 from utils.episode import Episodes
 from utils.replay_buffer import ReplayBuffer
-from utils.common import Action
+from utils.common import Action, Info
 from torch import nn
 import torch
 from utils.algorithm import Algorithm, Mode
@@ -185,7 +185,8 @@ class LowNetwork(Algorithm):
 
         return (obs, obs_next, acts, reward, g, g_next, not_done)
 
-    def train(self, low_buffer: ReplayBuffer[Episodes]):
+    def manual_train(self, i: Info):
+        low_buffer: ReplayBuffer[Episodes] = i['buffer']
         (obs, obs_next, acts, reward, g, g_next,
          not_done) = self.sample(low_buffer)
 

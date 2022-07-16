@@ -1,4 +1,5 @@
 import setup
+from utils.common import Info
 from utils.step import Step, NotNoneStep
 from utils.episode import Episodes
 from utils.algorithm import ActionInfo, Mode
@@ -19,7 +20,8 @@ from gym.spaces import Box
 from typing import List, Tuple, Literal, Any, Optional, cast, Callable, Union, Iterable, Dict
 import gym
 import numpy.typing as npt
-from utils.env_sb3 import LazyFrames, PreprocessObservation, FrameStack, resolve_lazy_frames
+from utils.env_sb3 import PreprocessObservation, FrameStack
+from utils.common import LazyFrames, resolve_lazy_frames
 import numpy as np
 
 Observation = LazyFrames
@@ -138,13 +140,13 @@ class PPO(Algorithm[State]):
             self.append_step(trs)
 
             if self.train_times != 0 and self.episode.len >= 1024:
-                self.train()
+                self.manual_train(dict())
                 self.episode.clear()
             self.train_times += 1
 
         self.times += 1
 
-    def train(self):
+    def manual_train(self, i: Info):
         self.episode.compute_advantages()
 
         for _ in range(self.epoch):

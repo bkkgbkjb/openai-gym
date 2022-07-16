@@ -14,7 +14,6 @@ from typing import Literal, Union
 from utils.nets import NeuralNetworks, layer_init
 
 from typing import List, Tuple, Any, Optional, Callable, Dict
-from papers.sac import NewSAC
 import numpy as np
 from low_network import LowNetwork
 from high_network import HighNetwork
@@ -132,8 +131,8 @@ class LESSON(Algorithm):
         self.representation_goal = (self.representation_network(
             obs.unsqueeze(0)).squeeze(0)).detach()
         
-        assert self.env_id = None
-        self.env_id: Union[Literal['eval'], Literal['train']] = info['env']._env_id
+        assert self.env_id is None
+        self.env_id: Union[Literal['eval_random'], Literal['train'], Literal['eval_farthest']] = info['env']._env_id
 
 
     def take_action(self, mode: Mode, state: State) -> ActionInfo:
@@ -150,7 +149,7 @@ class LESSON(Algorithm):
                          dict(end=self.has_achieved_goal)),
                 ))
                 if mode == 'train' and self.high_network.sac.replay_memory.len >= 128:
-                    self.high_network.sac.train()
+                    self.high_network.manual_train(dict())
 
             self.high_reward = 0.0
             self.has_achieved_goal = False
@@ -224,13 +223,15 @@ class LESSON(Algorithm):
         if mode == 'train':
             self.low_buffer.append(self.get_episodes(sari))
             for _ in range(200):
-                self.low_network.train(self.low_buffer)
+                self.low_network.manual_train(dict(buffer=self.low_buffer))
 
         self.reset_episode_info()
 
         self.epoch += 1
         self.inner_steps = 0
-
+    
+    def manual_train(self, info: Dict[str, Any]):
+        pass
 
     def collect_samples(
         self,

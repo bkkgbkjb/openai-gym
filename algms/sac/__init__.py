@@ -1,1 +1,1 @@
-from papers.sac.sac import NewSAC
+from algms.sac.sac import NewSAC

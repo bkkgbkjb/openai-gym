@@ -17,7 +17,6 @@ from typing import Union
 from utils.nets import NeuralNetworks, layer_init
 
 from typing import List, Tuple, Any, Optional, Callable, Dict
-from papers.sac import NewSAC
 import numpy as np
 from low_network import LowNetwork
 from high_network import HighNetwork
@@ -205,7 +204,7 @@ class Hiro(Algorithm):
                                  dict(end=s2.is_end())))))
 
             if self.train_steps > self.start_training_steps:
-                self.train()
+                self.manual_train(dict())
 
             self.train_steps += 1
 
@@ -216,11 +215,11 @@ class Hiro(Algorithm):
         self.inner_steps += 1
         self.total_steps += 1
 
-    def train(self):
+    def manual_train(self, i: Info):
 
-        self.low_network.train(self.replay_buffer_low)
+        self.low_network.manual_train(dict(buffer=self.replay_buffer_low))
         if self.train_steps % self.train_freq == 0:
-            self.high_network.train(self.replay_buffer_high, self.low_network)
+            self.high_network.manual_train(dict(buffer=self.replay_buffer_high,low_con= self.low_network))
 
     def low_reward(self, s: torch.Tensor, sg: torch.Tensor,
                    n_s: torch.Tensor) -> float:

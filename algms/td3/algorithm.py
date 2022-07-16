@@ -4,7 +4,7 @@ from utils.transition import (
     TransitionTuple,
     resolve_transitions,
 )
-from utils.common import Action
+from utils.common import Action, Info
 from torch import nn
 from collections import deque
 import torch
@@ -132,7 +132,7 @@ class TD3(Algorithm[State]):
     def on_toggle_eval(self, isEval: bool):
         self.eval = isEval
 
-    def train(self):
+    def manual_train(self, info: Info):
         (states, actions, rewards, next_states, done, _) = resolve_transitions(
             self.replay_buffer.sample(self.mini_batch_size), (self.n_states, ),
             (self.n_actions, ))
@@ -203,7 +203,7 @@ class TD3(Algorithm[State]):
             self.replay_buffer.append(Transition(transition))
 
             if self.train_times > self.start_timestamp:
-                self.train()
+                self.manual_train(dict())
             self.train_times += 1
 
         self.times += 1

@@ -11,6 +11,7 @@ from datetime import datetime
 
 # %%
 train_env = gym.make("AntMaze1-v1")
+train_env._env_id = 'train'
 
 agent = Agent(
     LESSON(
@@ -25,9 +26,9 @@ eval_env1 = gym.make("AntMaze1Test-v1")
 eval_env2 = gym.make("AntMaze1-v1")
 
 eval_env1 = record_video(eval_env1, agent.name, 5, name_prefix='eval')
-eval_env1._env_id = 'eval'
+eval_env1._env_id = 'eval_farthest'
 eval_env2 = record_video(eval_env2, agent.name, 5, name_prefix='train')
-eval_env2._env_id = 'train'
+eval_env2._env_id = 'eval_random'
 
 train_env, eval_env1, eval_env2 = make_envs([train_env, eval_env1, eval_env2])
 

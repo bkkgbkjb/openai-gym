@@ -1,4 +1,5 @@
 import setup
+from utils.common import Info
 from utils.episode import Episodes
 from utils.replay_buffer import ReplayBuffer
 from torch import nn
@@ -130,7 +131,8 @@ class LowNetwork(Algorithm):
         return self.action_scale * torch.normal(
             mean, self.expl_noise * var).to(DEVICE)
 
-    def train(self, buffer: ReplayBuffer[Transition]):
+    def manual_train(self, i: Info):
+        buffer: ReplayBuffer[Transition] = i['buffer']
         (states, actions, rewards, n_states, done,
          infos) = resolve_transitions(buffer.sample(self.batch_size),
                                       (self.state_dim, ), (self.action_dim, ))

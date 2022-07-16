@@ -8,7 +8,7 @@ import torch
 from utils.algorithm import Algorithm
 
 from typing import List, Tuple, Any, Optional, Callable, Dict
-from papers.sac import NewSAC
+from algms.sac import NewSAC
 import numpy as np
 
 MAX_TIMESTEPS = 500
@@ -75,6 +75,9 @@ class HighNetwork(Algorithm):
         #     self.sac.train()
 
         self.times += 1
+    
+    def manual_train(self, info: Dict[str, Any]):
+        self.sac.manual_train(dict())
 
     def on_episode_termination(
         self, mode: Mode, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]

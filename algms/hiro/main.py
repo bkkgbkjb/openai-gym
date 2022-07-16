@@ -1,5 +1,5 @@
 import setup
-from papers.hiro.hiro import Hiro, Preprocess
+from hiro import Hiro, Preprocess
 from utils.agent import Agent
 import gym
 from setup import RANDOM_SEED

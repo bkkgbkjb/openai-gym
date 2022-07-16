@@ -1,6 +1,6 @@
 # following code is manually copied from stable-baseline3, as it depends on an older version of gym, but I don't want to solve this version conflict
 
-from utils.common import Info, Action, Reward, S
+from utils.common import Info, Action, Reward, S, LazyFrames
 import gym
 from torchvision import transforms as T
 import numpy as np
