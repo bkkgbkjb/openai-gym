@@ -6,14 +6,14 @@ import torch
 from utils.transition import Transition
 from utils.common import LazyFrames, resolve_lazy_frames
 
-from utils.episode import Episodes
+from utils.episode import Episode
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
               torch.Tensor]
 
-E = TypeVar("E", bound=Union[Transition, Episodes])
+E = TypeVar("E", bound=Union[Transition, Episode])
 
 
 class ReplayBuffer(Generic[E]):

@@ -1,5 +1,5 @@
 import setup
-from utils.episode import Episodes
+from utils.episode import Episode
 from utils.replay_buffer import ReplayBuffer
 from utils.common import Action, Info
 from torch import nn
@@ -144,14 +144,14 @@ class LowNetwork(Algorithm):
         # return act.clip(-self.action_scale, self.action_scale)
         return noise + act
 
-    def sample(self, buffers: ReplayBuffer[Episodes[State]]):
+    def sample(self, buffers: ReplayBuffer[Episode[State]]):
         batch_size = 128
         episodes = buffers.sample(batch_size)
 
         time_stamps = np.random.randint(MAX_TIMESTEPS - 1, size=batch_size)
 
         sampled_steps = [
-            e.get_step(time_stamps[i]) for i, e in enumerate(episodes)
+            e.steps[time_stamps[i]] for i, e in enumerate(episodes)
         ]
 
         obs = torch.stack([s.state for s in sampled_steps])
@@ -186,7 +186,7 @@ class LowNetwork(Algorithm):
         return (obs, obs_next, acts, reward, g, g_next, not_done)
 
     def manual_train(self, i: Info):
-        low_buffer: ReplayBuffer[Episodes] = i['buffer']
+        low_buffer: ReplayBuffer[Episode] = i['buffer']
         (obs, obs_next, acts, reward, g, g_next,
          not_done) = self.sample(low_buffer)
 

@@ -29,7 +29,7 @@ import distutils.version
 import numpy as np
 
 from gym import error, logger
-from utils.episode import Episodes
+from utils.episode import Episode
 
 try:
     import cv2  # pytype:disable=import-error
@@ -963,7 +963,7 @@ def flat_to_episode(states: List[S],
                     rewards: List[Reward],
                     dones: List[bool],
                     infos: List[Info],
-                    has_next_state: bool = False) -> List[Episodes[S]]:
+                    has_next_state: bool = False) -> List[Episode[S]]:
     assert len(states) == len(actions) == len(rewards) == len(dones) == len(
         infos)
 
@@ -992,7 +992,7 @@ def flat_to_episode(states: List[S],
             s.append(infos[i]['next_state'])
             info.append(dict(end=True))
 
-            episodes.append(Episodes.from_list((s, a, r, info)))
+            episodes.append(Episode.from_list((s, a, r, info)))
             s = []
             a = []
             r = []
@@ -1005,7 +1005,7 @@ def flat_to_episode(states: List[S],
             r.pop(-1)
             info[-1]['end'] = True
 
-            episodes.append(Episodes.from_list((s, a, r, info)))
+            episodes.append(Episode.from_list((s, a, r, info)))
             s = []
             a = []
             r = []

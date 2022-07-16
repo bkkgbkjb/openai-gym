@@ -1,7 +1,7 @@
 import setup
 from utils.algorithm import ActionInfo, Mode
 from utils.common import Info, Reward, Action
-from utils.episode import Episodes
+from utils.episode import Episode
 from utils.replay_buffer import ReplayBuffer
 from utils.step import NotNoneStep, Step
 from utils.transition import (
@@ -103,7 +103,7 @@ class LESSON(Algorithm):
         self.desired_goal = None
         self.representation_goal = None
 
-        self.low_buffer = ReplayBuffer[Episodes](2000)
+        self.low_buffer = ReplayBuffer[Episode](2000)
 
         self.reset_episode_info()
 
@@ -242,12 +242,12 @@ class LESSON(Algorithm):
         ts = np.random.randint(MAX_TIMESTEPS - self.c, size=batch_size)
 
         hi_obs = obs = torch.stack(
-            [e.get_step(ts[i]).state for i, e in enumerate(episodes)])
+            [e.steps[ts[i]].state for i, e in enumerate(episodes)])
 
         hi_obs_next = torch.stack(
-            [e.get_step(ts[i] + self.c).state for i, e in enumerate(episodes)])
+            [e.steps[ts[i] + self.c].state for i, e in enumerate(episodes)])
         obs_next = torch.stack(
-            [e.get_step(ts[i] + 1).state for i, e in enumerate(episodes)])
+            [e.steps[ts[i] + 1].state for i, e in enumerate(episodes)])
 
         assert obs.shape == obs_next.shape == hi_obs.shape == hi_obs_next.shape == (batch_size, self.state_dim)
         return (obs, obs_next, hi_obs, hi_obs_next)
@@ -281,15 +281,15 @@ class LESSON(Algorithm):
 
     def get_episodes(
         self, sari: Tuple[List[State], List[Action], List[Reward], List[Info]]
-    ) -> Episodes[State]:
+    ) -> Episode[State]:
         # episode = Episodes[State]()
-        episode = Episodes[State].from_list(sari)
+        episode = Episode[State].from_list(sari)
 
         for i in range(episode.len - 1):
-            episode.get_step(i).info['next_obs'] = episode.get_step(i +
-                                                                    1).state
-            episode.get_step(i).info['next_rg'] = episode.get_step(
-                i + 1).info['rg']
+            episode.steps[i].info['next_obs'] = episode.steps[i +
+                                                                    1].state
+            episode.steps[i].info['next_rg'] = episode.steps[
+                i + 1].info['rg']
 
         return episode
 

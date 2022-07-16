@@ -2,7 +2,7 @@ from inspect import GEN_CLOSED
 import setup
 from utils.algorithm import (ActionInfo, Mode, ReportInfo)
 from utils.common import Info
-from utils.episode import Episodes
+from utils.episode import Episode
 from utils.step import NotNoneStep, Step
 from utils.transition import (Transition, resolve_transitions, TransitionTuple)
 from torch import Tensor, nn
@@ -200,7 +200,7 @@ class CRL(Algorithm):
 
     def reset(self):
         self.episodes = None
-        self.replay_memory = ReplayBuffer[Episodes[State]](None)
+        self.replay_memory = ReplayBuffer[Episode[State]](None)
         self.reset_episode_info()
 
     def reset_episode_info(self):
@@ -318,7 +318,7 @@ class CRL(Algorithm):
                 q_loss2=q_val_loss2,
             ))
 
-    def get_episodes(self, episodes: List[Episodes]):
+    def get_episodes(self, episodes: List[Episode]):
         for e in episodes:
             l = e.len
             arange = torch.arange(l + 1)

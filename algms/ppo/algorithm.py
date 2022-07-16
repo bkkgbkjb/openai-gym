@@ -1,7 +1,7 @@
 import setup
 from utils.common import Info
 from utils.step import Step, NotNoneStep
-from utils.episode import Episodes
+from utils.episode import Episode
 from utils.algorithm import ActionInfo, Mode
 from utils.transition import (Transition, TransitionTuple)
 from torch import nn
@@ -111,7 +111,7 @@ class PPO(Algorithm[State]):
         self.c1 = c1
         self.c2 = c2
 
-        self.episode = Episodes[State]()
+        self.episode = Episode[State]()
         self.batch_size = 64
 
     @torch.no_grad()
