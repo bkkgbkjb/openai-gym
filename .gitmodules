@@ -4,6 +4,3 @@
 [submodule "tianshou"]
 	path = tianshou
 	url = https://github.com/thu-ml/tianshou.git
-[submodule "LESSON_NEW"]
-	path = LESSON_NEW
-	url = ../LESSON.git
