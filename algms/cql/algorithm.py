@@ -159,25 +159,18 @@ class CQL_SAC(Algorithm[State]):
         self.num_repeat_actions = 10
         self.temperature = 1.0
         self.cql_weight = 1.0
+        self.mini_batch_size = 256
 
         self.reset()
 
     def reset(self):
         self.times = 0
-        self.data_loader = None
+        self.transitions = None
         self.replay_memory = ReplayBuffer(None)
 
-    def get_data(self, dataloader: DataLoader):
-        self.mini_batch_size = cast(int, dataloader.batch_size)
-        assert self.mini_batch_size == 256
-
-        for (states, actions, rewards, next_states, dones) in dataloader:
-            for (s, a, r, sn, done) in zip(states, actions, rewards,
-                                           next_states, dones):
-                self.replay_memory.append(
-                    Transition((NotNoneStep(s, a, r.item()),
-                                Step(sn, None, None,
-                                     dict(end=done.item() == 1)))))
+    def get_data(self, transitions: List[Transition]):
+        for transition in transitions:
+            self.replay_memory.append(transition)
 
     @property
     def alpha(self):
@@ -193,11 +186,11 @@ class CQL_SAC(Algorithm[State]):
         self.times += 1
 
     def manual_train(self, info: Dict[str, Any]):
-        assert "dataloader" in info
-        dataloader: DataLoader = info['dataloader']
-        if self.data_loader != dataloader:
-            self.get_data(dataloader)
-            self.data_loader = dataloader
+        assert "transitions" in info
+        transitions: List[Transition] = info['transitions']
+        if self.transitions != transitions:
+            self.get_data(transitions)
+            self.transitions = transitions
 
         self.train()
         return self.mini_batch_size

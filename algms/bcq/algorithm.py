@@ -1,7 +1,7 @@
 import setup
-from utils.algorithm import (ActionInfo, Mode)
+from utils.algorithm import ActionInfo, Mode
 from utils.step import NotNoneStep, Step
-from utils.transition import (Transition, resolve_transitions)
+from utils.transition import Transition, resolve_transitions
 from torch import nn
 from collections import deque
 import torch
@@ -27,7 +27,6 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class Preprocess(PreprocessI[O, S]):
-
     def __init__(self):
         pass
 
@@ -42,13 +41,16 @@ class Preprocess(PreprocessI[O, S]):
 
 
 class Actor(NeuralNetworks):
-
     def __init__(self, state_dim: int, action_dim: int, phi=0.05):
         super(Actor, self).__init__()
         self.net = nn.Sequential(
-            layer_init(nn.Linear(state_dim + action_dim, 400)), nn.ReLU(),
-            layer_init(nn.Linear(400, 300)), nn.ReLU(),
-            layer_init(nn.Linear(300, action_dim)), nn.Tanh())
+            layer_init(nn.Linear(state_dim + action_dim, 400)),
+            nn.ReLU(),
+            layer_init(nn.Linear(400, 300)),
+            nn.ReLU(),
+            layer_init(nn.Linear(300, action_dim)),
+            nn.Tanh(),
+        )
         self.phi = phi
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
@@ -57,7 +59,6 @@ class Actor(NeuralNetworks):
 
 
 class Critic(NeuralNetworks):
-
     def __init__(self, state_dim: int, action_dim: int):
         super(Critic, self).__init__()
         self.net = nn.Sequential(
@@ -74,20 +75,26 @@ class Critic(NeuralNetworks):
 
 
 class VAE(NeuralNetworks):
-
     def __init__(self, state_dim: int, action_dim: int, latent_dim: int):
         super(VAE, self).__init__()
         self.encoder = nn.Sequential(
-            layer_init(nn.Linear(state_dim + action_dim, 750)), nn.ReLU(),
-            layer_init(nn.Linear(750, 750)), nn.ReLU())
+            layer_init(nn.Linear(state_dim + action_dim, 750)),
+            nn.ReLU(),
+            layer_init(nn.Linear(750, 750)),
+            nn.ReLU(),
+        )
 
         self.mean = nn.Linear(750, latent_dim)
         self.log_std = nn.Linear(750, latent_dim)
 
         self.decoder = nn.Sequential(
-            layer_init(nn.Linear(state_dim + latent_dim, 750)), nn.ReLU(),
-            layer_init(nn.Linear(750, 750)), nn.ReLU(),
-            layer_init(nn.Linear(750, action_dim)), nn.Tanh())
+            layer_init(nn.Linear(state_dim + latent_dim, 750)),
+            nn.ReLU(),
+            layer_init(nn.Linear(750, 750)),
+            nn.ReLU(),
+            layer_init(nn.Linear(750, action_dim)),
+            nn.Tanh(),
+        )
 
         self.latent_dim = latent_dim
 
@@ -104,17 +111,15 @@ class VAE(NeuralNetworks):
 
     def decode(self, s: torch.Tensor, z=None):
         if z is None:
-            z = torch.randn(
-                (s.shape[0], self.latent_dim)).clamp(-0.5, 0.5).to(DEVICE)
+            z = torch.randn((s.shape[0], self.latent_dim)).clamp(-0.5, 0.5).to(DEVICE)
 
         a = self.decoder(torch.cat([s, z], 1))
         return a
 
 
 class BCQ(Algorithm[S]):
-
     def __init__(self, state_dim: int, action_dim: int):
-        self.set_name('bcq')
+        self.set_name("bcq")
         self.state_dim = state_dim
         self.action_dim = action_dim
 
@@ -125,11 +130,9 @@ class BCQ(Algorithm[S]):
         self.phi = 5e-2
 
         self.latent_dim = self.action_dim * 2
-        self.actor = Actor(self.state_dim, self.action_dim,
-                           self.phi).to(DEVICE)
+        self.actor = Actor(self.state_dim, self.action_dim, self.phi).to(DEVICE)
         self.actor_target = self.actor.clone().no_grad()
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
-                                                lr=1e-3)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
 
         self.q1 = Critic(self.state_dim, self.action_dim).to(DEVICE)
         self.q1_target = self.q1.clone().no_grad()
@@ -143,8 +146,7 @@ class BCQ(Algorithm[S]):
         self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), lr=1e-3)
         self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), lr=1e-3)
 
-        self.vae = VAE(self.state_dim, self.action_dim,
-                       self.latent_dim).to(DEVICE)
+        self.vae = VAE(self.state_dim, self.action_dim, self.latent_dim).to(DEVICE)
         self.recon_loss = nn.MSELoss()
 
         self.vae_optimizer = torch.optim.Adam(self.vae.parameters())
@@ -152,7 +154,7 @@ class BCQ(Algorithm[S]):
 
     def reset(self):
         self.times = 0
-        self.data_loader = None
+        self.transitions = None
         self.replay_buffer = ReplayBuffer(None)
 
     @torch.no_grad()
@@ -165,32 +167,26 @@ class BCQ(Algorithm[S]):
         act = a[q1.argmax(0)].squeeze(0)
         return act
 
-    def get_data(self, dataloader: DataLoader):
+    def get_data(self, transitions: List[Transition]):
 
-        for (states, actions, rewards, next_states, dones) in dataloader:
-            for (s, a, r, sn, done) in zip(states, actions, rewards,
-                                           next_states, dones):
-                self.replay_buffer.append(
-                    Transition((NotNoneStep(s, a, r.item()),
-                                Step(sn, None, None,
-                                     dict(end=done.item() == 1)))))
+        for transition in transitions:
+            self.replay_buffer.append(transition)
 
     def manual_train(self, info: Dict[str, Any]):
-        assert 'dataloader' in info
-        dataloader = info['dataloader']
+        assert "transitions" in info
+        transitions = info["transitions"]
 
-        if self.data_loader != dataloader:
-            self.get_data(dataloader)
-            self.data_loader = dataloader
+        if self.transitions != transitions:
+            self.get_data(transitions)
+            self.transitions = transitions
 
-        (states, actions, rewards, next_states, done,
-         _) = resolve_transitions(self.replay_buffer.sample(100),
-                                  (self.state_dim, ), (self.action_dim, ))
+        (states, actions, rewards, next_states, done, _) = resolve_transitions(
+            self.replay_buffer.sample(100), (self.state_dim,), (self.action_dim,)
+        )
 
         recon, mean, std = self.vae(states, actions)
         recon_loss = self.recon_loss(recon, actions)
-        KL_loss = -0.5 * (1 + std.pow(2).log() - mean.pow(2) -
-                          std.pow(2)).mean()
+        KL_loss = -0.5 * (1 + std.pow(2).log() - mean.pow(2) - std.pow(2)).mean()
         vae_loss = recon_loss + 0.5 * KL_loss
 
         self.vae_optimizer.zero_grad()
@@ -201,20 +197,21 @@ class BCQ(Algorithm[S]):
             next_states = next_states.repeat_interleave(10, 0)
 
             next_actions_repeats = self.actor_target(
-                next_states, self.vae.decode(next_states))
+                next_states, self.vae.decode(next_states)
+            )
 
             q1_target = self.q1_target(next_states, next_actions_repeats)
             q2_target = self.q2_target(next_states, next_actions_repeats)
 
             q_target = self.lmbda * torch.min(q1_target, q2_target) + (
-                1.0 - self.lmbda) * torch.max(q1_target, q2_target)
+                1.0 - self.lmbda
+            ) * torch.max(q1_target, q2_target)
 
             q_target = q_target.reshape(100, -1).max(1)[0].unsqueeze(1)
 
             assert q_target.shape == (100, 1)
 
-            q_target = (rewards +
-                        (1.0 - done) * self.discount * q_target).detach()
+            q_target = (rewards + (1.0 - done) * self.discount * q_target).detach()
 
         q1 = self.q1(states, actions)
         q2 = self.q2(states, actions)
@@ -242,7 +239,6 @@ class BCQ(Algorithm[S]):
         self.q2_target.soft_update_to(self.q2, self.tau)
         self.actor_target.soft_update_to(self.actor, self.tau)
 
-        self.report(
-            dict(q_loss=q_loss, vae_loss=vae_loss, actor_loss=actor_loss))
+        self.report(dict(q_loss=q_loss, vae_loss=vae_loss, actor_loss=actor_loss))
 
         return 100

@@ -6,7 +6,7 @@ from torchvision import transforms as T
 import numpy as np
 from gym import spaces
 from collections import deque
-from typing import Optional, Any, cast, List, Union
+from typing import Optional, Any, TypeVar, cast, List, Union
 import torch
 import numpy as np
 from gym.spaces import Box
@@ -30,6 +30,8 @@ import numpy as np
 
 from gym import error, logger
 from utils.episode import Episode
+from utils.step import NotNoneStep, Step
+from utils.transition import Transition
 
 try:
     import cv2  # pytype:disable=import-error
@@ -1012,3 +1014,48 @@ def flat_to_episode(states: List[S],
             info = []
 
     return episodes
+
+
+def flat_to_transitions(states: List[S],
+                    actions: List[Action],
+                    rewards: List[Reward],
+                    dones: List[bool],
+                    infos: Optional[List[Info]] = None,
+                    has_next_state: bool = False) -> List[Transition[S]]:
+
+    assert len(states) == len(actions) == len(rewards) == len(dones)
+    if infos is not None:
+        assert len(infos) == len(states)
+
+    if has_next_state:
+        assert infos is not None
+
+    l = len(states)
+    transitions: List[Transition]  = []
+
+    _states = torch.from_numpy(states).type(torch.float32)
+    _actions = torch.from_numpy(actions).type(torch.float32)
+    _dones = torch.from_numpy(dones).type(torch.float32)
+
+
+    for i in range(l):
+        s = _states[i]
+        a = _actions[i]
+        r = rewards[i]
+        d = _dones[i]
+
+        if has_next_state:
+            # _info = infos[i]
+            sn: torch.Tensor = info[i]['next_state']
+
+            transitions.append(Transition((NotNoneStep(s,a,r), Step(sn, None, None, dict(end=d.item() == 1)))))
+            continue
+    
+        if i == l - 1:
+            continue
+
+        if not d:
+            transitions.append(Transition((NotNoneStep(s,a,r), Step(_states[i+1], None, None, dict(end=False)))))
+
+    return transitions
+

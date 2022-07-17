@@ -84,7 +84,7 @@ class BC(Algorithm[S]):
 
     def reset(self):
         self.times = 0
-        self.data_loader = None
+        self.transitions = None
         self.replay_buffer = ReplayBuffer(None)
 
     @torch.no_grad()
@@ -93,23 +93,18 @@ class BC(Algorithm[S]):
 
         return self.actor(s).squeeze()
 
-    def get_data(self, dataloader: DataLoader):
+    def get_data(self, transitions: List[Transition]):
 
-        for (states, actions, rewards, next_states, dones) in dataloader:
-            for (s, a, r, sn, done) in zip(states, actions, rewards,
-                                           next_states, dones):
-                self.replay_buffer.append(
-                    Transition((NotNoneStep(s, a, r.item()),
-                                Step(sn, None, None,
-                                     dict(end=done.item() == 1)))))
+        for t in transitions:
+            self.replay_buffer.append(t)
 
     def manual_train(self, info: Dict[str, Any]):
-        assert 'dataloader' in info
-        dataloader = info['dataloader']
+        assert 'transitions' in info
+        transitions = info['transitions']
 
-        if self.data_loader != dataloader:
-            self.get_data(dataloader)
-            self.data_loader = dataloader
+        if self.transitions != transitions:
+            self.get_data(transitions)
+            self.transitions = transitions
 
         (states, actions, _, _, _,
          _) = resolve_transitions(self.replay_buffer.sample(self.batch_size),
