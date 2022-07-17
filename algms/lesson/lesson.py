@@ -225,11 +225,15 @@ class LESSON(Algorithm):
             for _ in range(200):
                 self.low_network.manual_train(dict(buffer=self.low_buffer))
 
+        report_info = {f'{self.env_id}_success_rate': 1 if self.has_achieved_goal else 0}
+
         self.reset_episode_info()
 
         self.epoch += 1
         self.inner_steps = 0
-    
+
+        return report_info
+
     def manual_train(self, info: Dict[str, Any]):
         pass
 
@@ -242,12 +246,12 @@ class LESSON(Algorithm):
         ts = np.random.randint(MAX_TIMESTEPS - self.c, size=batch_size)
 
         hi_obs = obs = torch.stack(
-            [e.steps[ts[i]].state for i, e in enumerate(episodes)])
+            [e[ts[i]].state for i, e in enumerate(episodes)])
 
         hi_obs_next = torch.stack(
-            [e.steps[ts[i] + self.c].state for i, e in enumerate(episodes)])
+            [e[ts[i] + self.c].state for i, e in enumerate(episodes)])
         obs_next = torch.stack(
-            [e.steps[ts[i] + 1].state for i, e in enumerate(episodes)])
+            [e[ts[i] + 1].state for i, e in enumerate(episodes)])
 
         assert obs.shape == obs_next.shape == hi_obs.shape == hi_obs_next.shape == (batch_size, self.state_dim)
         return (obs, obs_next, hi_obs, hi_obs_next)
@@ -286,10 +290,8 @@ class LESSON(Algorithm):
         episode = Episode[State].from_list(sari)
 
         for i in range(episode.len - 1):
-            episode.steps[i].info['next_obs'] = episode.steps[i +
-                                                                    1].state
-            episode.steps[i].info['next_rg'] = episode.steps[
-                i + 1].info['rg']
+            episode[i].info['next_obs'] = episode[i + 1].state
+            episode[i].info['next_rg'] = episode[i + 1].info['rg']
 
         return episode
 

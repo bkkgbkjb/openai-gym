@@ -13,7 +13,7 @@ train_env, eval_env = make_train_and_eval_env("Walker2d-v2", [], RANDOM_SEED)
 
 agent = Agent(
     NewSAC(train_env.observation_space.shape[0],
-           train_env.action_space.shape[0], 1, False, False), Preprocess())
+           train_env.action_space.shape[0], 1, False, True), Preprocess())
 
 agent.set_algm_reporter(get_reporter(agent.name))
 

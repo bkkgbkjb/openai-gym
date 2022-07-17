@@ -151,7 +151,7 @@ class LowNetwork(Algorithm):
         time_stamps = np.random.randint(MAX_TIMESTEPS - 1, size=batch_size)
 
         sampled_steps = [
-            e.steps[time_stamps[i]] for i, e in enumerate(episodes)
+            e[time_stamps[i]] for i, e in enumerate(episodes)
         ]
 
         obs = torch.stack([s.state for s in sampled_steps])
