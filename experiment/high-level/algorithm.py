@@ -65,7 +65,7 @@ class H(Algorithm):
 
         self.high_level = None
 
-        self.c = 25
+        self.c = 50
 
         self.reset()
 
@@ -113,6 +113,11 @@ class H(Algorithm):
             self.add_marker((x, y, 0.5), f"{self.inner_steps}")
 
         assert self.action_space is not None
+
+        if self.inner_steps != 0 and self.inner_steps % self.c == self.c - 1:
+            x, y = self.sub_goal.cpu().detach().numpy()[:2]
+            return torch.tensor([x, y] + [-999] * (self.n_actions -2 ))
+
         return torch.from_numpy(self.action_space.sample()).type(torch.float32)
 
     def after_step(self, mode: Mode, transition: TransitionTuple[S]):

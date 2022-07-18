@@ -11,6 +11,7 @@ from args import args
 import h5py
 from utils.env_sb3 import flat_to_episode
 from utils.env import glance, offline_train_and_eval, record_video
+from teleport import Teleport
 
 # %%
 env = gym.make("antmaze-umaze-diverse-v2")
@@ -48,12 +49,14 @@ agent.set_algm_reporter(get_reporter(agent.name))
 
 env = record_video(env, algm.name, activate_per_episode=5, name_prefix=algm.name)
 
+env = Teleport(env, np.array([-999] * 6))
+
 offline_train_and_eval(
     agent,
     dict(episodes=episodes),
     env,
     single_train_frames=100 * 1024,
-    eval_per_train=4,
+    eval_per_train=3,
     eval_repeats=5,
     total_train_frames=999 * 6 * 100 * 1024,
 )
