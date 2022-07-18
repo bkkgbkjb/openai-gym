@@ -103,7 +103,7 @@ class H(Algorithm):
         assert self.high_level is not None
 
         if self.inner_steps % self.c == 0:
-            self.sub_goal = self.high_level.take_action(mode, torch.cat([state, self.fg]))
+            self.sub_goal = self.high_level.take_action(mode, torch.cat([state, self.fg])) + state
 
             assert self.del_markers is not None
             self.del_markers()
@@ -119,11 +119,18 @@ class H(Algorithm):
             return torch.tensor([x, y] + [-999] * (self.n_actions -2 ))
 
         return torch.from_numpy(self.action_space.sample()).type(torch.float32)
+    
+    def transition_subgoal(self, s: torch.Tensor, sn: torch.Tensor):
+        assert self.sub_goal is not None
+        self.sub_goal = s + self.sub_goal - sn
+
 
     def after_step(self, mode: Mode, transition: TransitionTuple[S]):
+        (s1, s2) = transition
         assert mode == "eval"
 
 
+        self.transition_subgoal(s1.state, s2.state)
         self.inner_steps += 1
 
     def on_episode_termination(
@@ -131,6 +138,9 @@ class H(Algorithm):
     ) -> Optional[ReportInfo]:
         (_, _, r, _) = sari
         report = {"success_rate": 1 if any([_r >= 0.7 for _r in r]) else 0}
+
+        assert self.del_markers is not None
+        self.del_markers()
 
         self.reset_episode_info()
         return report
