@@ -47,112 +47,6 @@ class Preprocess(PreprocessI[O, S]):
         return torch.from_numpy(h[-1]).type(torch.float32).to(DEVICE)
 
 
-class SAEncoder(NeuralNetworks):
-    def __init__(self, n_state: int, n_action: int, repr_dim: int = 16):
-        super().__init__()
-        self.n_state = n_state
-        self.n_action = n_action
-        self.n_repr = repr_dim
-
-        self.net = nn.Sequential(
-            layer_init(nn.Linear(self.n_state + self.n_action, 1024)),
-            nn.ReLU(),
-            layer_init(nn.Linear(1024, 1024)),
-            nn.ReLU(),
-            layer_init(nn.Linear(1024, self.n_repr)),
-        )
-
-    def forward(self, state: State, action: Action):
-        return self.net(torch.cat([state, action], dim=1))
-
-
-class GEncoder(NeuralNetworks):
-    def __init__(self, n_goal: int, repr_dim: int = 16):
-        super().__init__()
-        self.n_goal = n_goal
-        self.n_repr = repr_dim
-
-        self.net = nn.Sequential(
-            layer_init(nn.Linear(self.n_goal, 1024)),
-            nn.ReLU(),
-            layer_init(nn.Linear(1024, 1024)),
-            nn.ReLU(),
-            layer_init(nn.Linear(1024, self.n_repr)),
-        )
-
-    def forward(self, state: State):
-        return self.net(state)
-
-
-class QFunction(NeuralNetworks):
-    def __init__(self, n_state: int, n_action: int, n_goal: int):
-        super().__init__()
-        self.sa_encoder = SAEncoder(n_state, n_action)
-        self.g_encoder = GEncoder(n_goal)
-
-        self.n_state = n_state
-        self.n_action = n_action
-        self.n_goal = n_goal
-
-    def forward(
-        self, s: State, a: Action, goal: Goal
-    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        sa_value = self.sa_encoder(s, a)
-        g_value = self.g_encoder(goal)
-        return torch.einsum("bi,bi->b", sa_value, g_value), (sa_value, g_value)
-
-
-class PaiFunction(NeuralNetworks):
-    def __init__(self, n_state: int, n_action: int, n_goal: int, action_scale: float):
-        super().__init__()
-        self.net = nn.Sequential(
-            layer_init(nn.Linear(n_state + n_goal, 1024)),
-            nn.ReLU(),
-            layer_init(nn.Linear(1024, 1024)),
-            nn.ReLU(),
-        ).to(DEVICE)
-
-        self.mean = layer_init(nn.Linear(1024, n_action)).to(DEVICE)
-        self.std = layer_init(nn.Linear(1024, n_action)).to(DEVICE)
-
-        self.n_state = n_state
-        self.n_action = n_action
-        self.action_scale = action_scale
-        self.n_goal = n_goal
-
-    def forward(self, s: State, g: Goal) -> Tuple[torch.Tensor, torch.Tensor]:
-        x = self.net(torch.cat([s.to(DEVICE), g.to(DEVICE)], dim=1))
-        mean = self.mean(x)
-        log_std = self.std(x)
-        log_std = torch.clamp(log_std, min=-12, max=6)
-
-        assert mean.shape == (s.size(0), self.n_action)
-        assert log_std.shape == (s.size(0), self.n_action)
-
-        return mean, log_std
-
-    def sample(self, s: State, g: Goal):
-        mean, log_std = self.forward(s, g)
-        std = log_std.exp()
-        normal = Normal(mean, std)
-        raw_act = normal.rsample()
-        assert raw_act.shape == (s.size(0), self.n_action)
-
-        y_t = torch.tanh(raw_act)
-        act = y_t * self.action_scale
-
-        raw_log_prob = normal.log_prob(raw_act)
-        assert raw_log_prob.shape == (s.size(0), self.n_action)
-
-        mod_log_prob = (self.action_scale * (1 - y_t.pow(2)) + 1e-6).log()
-        assert mod_log_prob.shape == (s.size(0), self.n_action)
-
-        log_prob = (raw_log_prob - mod_log_prob).sum(1, keepdim=True)
-
-        mean = self.action_scale * torch.tanh(mean)
-        return act, log_prob, mean, normal
-
-
 class H(Algorithm):
     def __init__(
         self,
@@ -182,7 +76,9 @@ class H(Algorithm):
 
     def reset_episode_info(self):
         self.inner_steps = 0
+        self.action_space = None
         self.fg = None
+        self.sub_goal = None
         self.add_marker = None
         self.del_markers = None
 
@@ -191,6 +87,8 @@ class H(Algorithm):
 
         assert self.fg is None
         env = info["env"]
+        assert self.action_space is None
+        self.action_space = env.action_space
 
         self.fg = torch.tensor(env.target_goal, dtype=torch.float32, device=DEVICE)
 
@@ -202,20 +100,24 @@ class H(Algorithm):
     @torch.no_grad()
     def take_action(self, mode: Mode, state: State) -> Action:
         assert self.fg is not None
-        action, _, max_actions, _ = self.policy.sample(
-            state.unsqueeze(0), self.fg.unsqueeze(0)
-        )
+        assert self.high_level is not None
 
-        return (max_actions if mode == "eval" else action).squeeze()
+        if self.inner_steps % self.c == 0:
+            self.sub_goal = self.high_level.take_action(mode, torch.cat([state, self.fg]))
+
+            assert self.del_markers is not None
+            self.del_markers()
+
+            assert self.add_marker is not None
+            x, y = self.sub_goal.cpu().detach().numpy()[:2]
+            self.add_marker((x, y, 0.5), f"{self.inner_steps}")
+
+        assert self.action_space is not None
+        return torch.from_numpy(self.action_space.sample()).type(torch.float32)
 
     def after_step(self, mode: Mode, transition: TransitionTuple[S]):
         assert mode == "eval"
 
-        if self.inner_steps % 5 == 0:
-            assert self.del_markers is not None
-            self.del_markers()
-            assert self.add_marker is not None
-            self.add_marker((0.5, 0.5, 0.5), f"{self.inner_steps}")
 
         self.inner_steps += 1
 
@@ -230,7 +132,7 @@ class H(Algorithm):
 
     def train(self):
         assert self.high_level is not None
-        self.high_level.manual_train(dict(transitions=self.high_replay_memory))
+        self.high_level.manual_train(dict(transitions=self.high_replay_memory.as_list()))
 
     def get_episodes(self, episodes: List[Episode]):
         action_scale = [-float("inf")] * self.n_state
@@ -247,21 +149,28 @@ class H(Algorithm):
                     if a > action_scale[i]:
                         action_scale[i] = a
 
+                goal = torch.from_numpy(se[0].info['goal']).type(torch.float32)
                 self.high_replay_memory.append(
                     Transition(
                         (
                             NotNoneStep(
-                                se[0].state,
+                                torch.cat([se[0].state, goal]),
                                 act,
                                 se[0].info["return"],
                             ),
-                            Step(se.last_state, None, None, dict(end=se.end)),
+                            Step(
+                                torch.cat([se.last_state, goal]),
+                                None,
+                                None,
+                                dict(end=se.end),
+                            ),
                         )
                     )
                 )
-        
-        self.action_scale = torch.Tensor(action_scale)
-        self.high_level = BCQ(self.n_state, self.n_state, self.action_scale)
+
+        self.action_scale = torch.Tensor(action_scale).to(DEVICE)
+        self.high_level = BCQ(self.n_state + self.n_goals, self.n_state, self.action_scale)
+        self.high_level.set_reporter(self.reporter)
 
     def manual_train(self, info: Dict[str, Any]):
         assert "episodes" in info
@@ -270,5 +179,6 @@ class H(Algorithm):
             self.episodes = info["episodes"]
             self.get_episodes(self.episodes)
 
+        assert self.high_level is not None
         self.train()
         return self.high_level.batch_size

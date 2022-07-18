@@ -17,7 +17,7 @@ class Episode(Generic[EPS]):
         self._steps: List[Step[EPS]] = []
         self.returns_computed = False
         self.advantage_computed = False
-        self.end = False
+        self._end = False
 
     @property
     def steps(self) -> List[NotNoneStep[EPS]]:
@@ -38,7 +38,7 @@ class Episode(Generic[EPS]):
 
     @property
     def end(self) -> bool:
-        return self.end
+        return self._end
 
     @property
     def len(self) -> int:
@@ -59,7 +59,7 @@ class Episode(Generic[EPS]):
         if step.is_end():
             assert step.action is None
             assert step.reward is None
-            self.end = True
+            self._end = True
 
         return self
 
@@ -134,6 +134,7 @@ class Episode(Generic[EPS]):
 
         steps = episode.steps[start:]
         for s in steps:
+            del s.info['next']
             e.append_step(s.to_step())
             if e.len == length:
                 re.append(e)

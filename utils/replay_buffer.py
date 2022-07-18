@@ -23,6 +23,9 @@ class ReplayBuffer(Generic[E]):
             capacity: Optional[int] = int(1e6),
     ):
         self.buffer: Deque[E] = deque(maxlen=capacity)
+    
+    def as_list(self) -> List[E]:
+        return list(self.buffer)
 
     def append(self, e: E):
         self.buffer.append(e)

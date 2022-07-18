@@ -56,6 +56,8 @@ class Actor(NeuralNetworks):
         self.action_scale = action_scale
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
+        s = s.to(DEVICE)
+        a = a.to(DEVICE)
         pertub = self.action_scale * self.phi * self.net(torch.cat([s, a], 1))
         return (pertub + a).clamp(-self.action_scale, self.action_scale)
 
@@ -72,6 +74,8 @@ class Critic(NeuralNetworks):
         )
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
+        s = s.to(DEVICE)
+        a = a.to(DEVICE)
         val = self.net(torch.cat([s, a], dim=1))
         return val
 
@@ -102,6 +106,8 @@ class VAE(NeuralNetworks):
         self.action_scale = action_scale
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
+        s = s.to(DEVICE)
+        a = a.to(DEVICE)
         l = self.encoder(torch.cat([s, a], dim=1))
 
         mean = self.mean(l)
@@ -113,6 +119,7 @@ class VAE(NeuralNetworks):
         return u, mean, std
 
     def decode(self, s: torch.Tensor, z=None):
+        s = s.to(DEVICE)
         if z is None:
             z = torch.randn((s.shape[0], self.latent_dim)).clamp(-0.5, 0.5).to(DEVICE)
 
