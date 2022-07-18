@@ -46,7 +46,7 @@ agent = OfflineAgent(
 
 agent.set_algm_reporter(get_reporter(agent.name))
 
-env = record_video(env, 'crl', activate_per_episode=10, name_prefix='crl')
+env = record_video(env, 'crl', activate_per_episode=5, name_prefix='crl')
 
 offline_train_and_eval(agent,
                        dict(episodes=episodes),

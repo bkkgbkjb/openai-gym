@@ -2,6 +2,7 @@ from inspect import GEN_CLOSED
 import setup
 from utils.algorithm import (ActionInfo, Mode, ReportInfo)
 from utils.common import Info
+from utils.env import expose_markers
 from utils.episode import Episode
 from utils.step import NotNoneStep, Step
 from utils.transition import (Transition, resolve_transitions, TransitionTuple)
@@ -206,6 +207,8 @@ class CRL(Algorithm):
     def reset_episode_info(self):
         self.inner_steps = 0
         self.fg = None
+        self.add_marker = None
+        self.del_markers = None
 
     def on_env_reset(self, mode: Mode, info: Dict[str, Any]):
         assert mode == 'eval'
@@ -216,6 +219,11 @@ class CRL(Algorithm):
         self.fg = torch.tensor(env.target_goal,
                                dtype=torch.float32,
                                device=DEVICE)
+        
+        assert self.add_marker is None
+        assert self.del_markers is None
+
+        self.add_marker, self.del_markers = expose_markers(env.unwrapped.viewer)
 
     @torch.no_grad()
     def take_action(self, mode: Mode, state: State) -> Action:
@@ -224,6 +232,17 @@ class CRL(Algorithm):
                                                        self.fg.unsqueeze(0))
 
         return (max_actions if mode == 'eval' else action).squeeze()
+    
+    def after_step(self, mode: Mode, transition: TransitionTuple[S]):
+        assert mode == 'eval'
+
+        if self.inner_steps % 5 == 0:
+            assert self.del_markers is not None
+            self.del_markers()
+            assert self.add_marker is not None
+            self.add_marker((0.5,0.5,0.5), f'{self.inner_steps}')
+
+        self.inner_steps +=1
 
     def on_episode_termination(
         self, mode: Mode, sari: Tuple[List[S], List[Action], List[Reward],
@@ -243,7 +262,7 @@ class CRL(Algorithm):
         L = episode_sampled[0].len
         step_idx = np.random.choice(L, self.mini_batch_size)
 
-        steps = [e.steps[step_idx[i]] for i, e in enumerate(episode_sampled)]
+        steps = [e[step_idx[i]] for i, e in enumerate(episode_sampled)]
 
         states = torch.stack([s.state for s in steps]).to(DEVICE)
 
@@ -251,7 +270,7 @@ class CRL(Algorithm):
         # actions = torch.stack(
         #     [NotNoneStep.from_step(s).action for (s, _) in steps]).to(DEVICE)
 
-        actions = torch.stack([NotNoneStep.from_step(s).action
+        actions = torch.stack([s.action
                                for s in steps]).to(DEVICE)
 
         assert actions.shape == (self.mini_batch_size, self.n_actions)

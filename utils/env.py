@@ -24,19 +24,20 @@ from utils.agent import Agent, OfflineAgent
 from utils.agent import AllAgent
 from utils.common import Action, Info
 from datetime import datetime
-from utils.common import LazyFrames,  resolve_lazy_frames
+from utils.common import LazyFrames, resolve_lazy_frames
 from utils.env_sb3 import RecordVideo
 
-O = TypeVar('O')
-S = TypeVar('S', bound=Union[torch.Tensor, LazyFrames])
+O = TypeVar("O")
+S = TypeVar("S", bound=Union[torch.Tensor, LazyFrames])
 
 
-def glance(env: gym.Env,
-           render: Union[Literal['rgb_array'], Literal['none'],
-                         Literal['human']] = 'human',
-           random_seed=0,
-           repeats=3) -> gym.Env:
-    assert render in ['rgb_array', 'none', 'human']
+def glance(
+    env: gym.Env,
+    render: Union[Literal["rgb_array"], Literal["none"], Literal["human"]] = "human",
+    random_seed=0,
+    repeats=3,
+) -> gym.Env:
+    assert render in ["rgb_array", "none", "human"]
     env.seed(random_seed)
     env.action_space.seed(random_seed)
     env.observation_space.seed(random_seed)
@@ -50,11 +51,11 @@ def glance(env: gym.Env,
         t = 0
 
         while not s:
-            if render != 'none':
+            if render != "none":
                 env.render(mode=render)
                 sleep(1 / 60)
 
-            env.unwrapped.viewer.add_marker(pos=np.array([3.0, 2.0, 2.0]), label='goal')
+            # env.unwrapped.viewer.add_marker(pos=np.array([3.0, 2.0, 2.0]), label="goal")
             (_, rwd, stop, _) = env.step(env.action_space.sample())
             t += 1
 
@@ -66,8 +67,9 @@ def glance(env: gym.Env,
     return env
 
 
-def train(agent: Agent[O, S], train_env: gym.Env,
-          training_frames=int(1e6)) -> Agent[O, S]:
+def train(
+    agent: Agent[O, S], train_env: gym.Env, training_frames=int(1e6)
+) -> Agent[O, S]:
 
     with tqdm(total=training_frames) as pbar:
         frames = 0
@@ -81,9 +83,8 @@ def train(agent: Agent[O, S], train_env: gym.Env,
 
 
 def offline_train(
-    agent: OfflineAgent[O, S],
-    info: Info,
-    single_train_frames=int(1e6)) -> OfflineAgent[O, S]:
+    agent: OfflineAgent[O, S], info: Info, single_train_frames=int(1e6)
+) -> OfflineAgent[O, S]:
 
     with tqdm(total=single_train_frames) as pbar:
         frames = 0
@@ -97,14 +98,15 @@ def offline_train(
     return agent
 
 
-def eval(agent: AllAgent[O, S],
-         env: Union[gym.Env, List[gym.Env]],
-         repeats: int = 10,
-         env_weights: Optional[List[float]] = None) -> AllAgent[O, S]:
+def eval(
+    agent: AllAgent[O, S],
+    env: Union[gym.Env, List[gym.Env]],
+    repeats: int = 10,
+    env_weights: Optional[List[float]] = None,
+) -> AllAgent[O, S]:
 
     if isinstance(env, list):
-        weight = ([1 / len(env)] *
-                  len(env)) if env_weights is None else env_weights
+        weight = ([1 / len(env)] * len(env)) if env_weights is None else env_weights
         e_w = [repeats * w for w in weight]
         for w in e_w:
             assert w.is_integer()
@@ -119,8 +121,7 @@ def eval(agent: AllAgent[O, S],
     report_dict: Dict[str, Tuple[Any, int]] = dict()
     for i in tqdm(range(repeats)):
 
-        (report_info,
-         _) = agent.eval(env if not isinstance(env, list) else envs[i])
+        (report_info, _) = agent.eval(env if not isinstance(env, list) else envs[i])
 
         for (k, v) in report_info.items():
 
@@ -133,20 +134,21 @@ def eval(agent: AllAgent[O, S],
                 report_dict[k] = (old_v + (v - old_v) / n, n)
 
     for (k, (v, _)) in report_dict.items():
-        agent.report({f'eval/{k}': v})
+        agent.report({f"eval/{k}": v})
 
     return agent
 
 
 def train_and_eval(
-        agent: Agent[O, S],
-        train_env: gym.Env,
-        eval_env: Union[gym.Env, List[gym.Env]],
-        single_train_frames=int(1e4),
-        eval_repeats=10,
-        total_train_frames=int(1e6),
-        eval_per_train=1,
-        eval_env_weights: Optional[List[float]] = None) -> Agent[O, S]:
+    agent: Agent[O, S],
+    train_env: gym.Env,
+    eval_env: Union[gym.Env, List[gym.Env]],
+    single_train_frames=int(1e4),
+    eval_repeats=10,
+    total_train_frames=int(1e6),
+    eval_per_train=1,
+    eval_env_weights: Optional[List[float]] = None,
+) -> Agent[O, S]:
     s = math.ceil(total_train_frames / single_train_frames)
 
     t = 0
@@ -163,14 +165,15 @@ def train_and_eval(
 
 
 def offline_train_and_eval(
-        agent: OfflineAgent[O, S],
-        info: Info,
-        eval_env: Union[gym.Env, List[gym.Env]],
-        single_train_frames=int(1e4),
-        eval_repeats=10,
-        total_train_frames=int(1e6),
-        eval_per_train=1,
-        eval_env_weights: Optional[List[float]] = None) -> OfflineAgent[O, S]:
+    agent: OfflineAgent[O, S],
+    info: Info,
+    eval_env: Union[gym.Env, List[gym.Env]],
+    single_train_frames=int(1e4),
+    eval_repeats=10,
+    total_train_frames=int(1e6),
+    eval_per_train=1,
+    eval_env_weights: Optional[List[float]] = None,
+) -> OfflineAgent[O, S]:
 
     s = math.ceil(total_train_frames / single_train_frames)
     t = 0
@@ -186,9 +189,11 @@ def offline_train_and_eval(
     return agent
 
 
-def make_train_and_eval_env(envs: Union[str, Tuple[gym.Env, gym.Env]],
-                            wrappers: List[Callable[[gym.Env], gym.Env]] = [],
-                            seed: int = 0) -> Tuple[gym.Env, gym.Env]:
+def make_train_and_eval_env(
+    envs: Union[str, Tuple[gym.Env, gym.Env]],
+    wrappers: List[Callable[[gym.Env], gym.Env]] = [],
+    seed: int = 0,
+) -> Tuple[gym.Env, gym.Env]:
     train_env = gym.make(envs) if isinstance(envs, str) else envs[0]
     train_env.seed(seed)
     train_env.action_space.seed(seed)
@@ -212,9 +217,11 @@ def make_train_and_eval_env(envs: Union[str, Tuple[gym.Env, gym.Env]],
     return train_env, eval_env
 
 
-def make_envs(envs: Union[Tuple[str, int], List[gym.Env]],
-              wrappers: List[Callable[[gym.Env], gym.Env]] = [],
-              seed: int = 0) -> List[gym.Env]:
+def make_envs(
+    envs: Union[Tuple[str, int], List[gym.Env]],
+    wrappers: List[Callable[[gym.Env], gym.Env]] = [],
+    seed: int = 0,
+) -> List[gym.Env]:
     es = []
     if isinstance(envs, tuple):
         for _ in range(envs[1]):
@@ -231,14 +238,34 @@ def make_envs(envs: Union[Tuple[str, int], List[gym.Env]],
     return es
 
 
-def record_video(env: gym.Env,
-                 algo_name: str,
-                 activate_per_episode: int = 1,
-                 name_prefix: str = '') -> gym.Env:
+def record_video(
+    env: gym.Env, algo_name: str, activate_per_episode: int = 1, name_prefix: str = ""
+) -> gym.Env:
     return RecordVideo(
         env,
         f'vlog/{algo_name}_{datetime.now().strftime("%m-%d_%H-%M-%S")}',
-        episode_trigger=lambda episode_id: episode_id % activate_per_episode ==
-        0,
-        name_prefix=
-        f'{algo_name}{f"_{name_prefix}" if name_prefix != "" else ""}')
+        episode_trigger=lambda episode_id: episode_id % activate_per_episode == 0,
+        name_prefix=f'{algo_name}{f"_{name_prefix}" if name_prefix != "" else ""}',
+    )
+
+
+def expose_markers(
+    viewer,
+) -> Tuple[Callable[[Tuple[float, float, float], str,], None,], Callable[[], None],]:
+    def add_marker(
+        pos: Tuple[float, float, float],
+        label: str,
+    ):
+        viewer.add_marker(
+            pos=np.array(pos),
+            label=label,
+            type=2,
+            specular=0.8,
+            rgba=np.array([1.0, 0.0, 0.0, 0.8]),
+            size=np.array([0.5, 0.5, 0.5]),
+        )
+
+    def remove_marker():
+        del viewer._markers[:]
+
+    return (add_marker, remove_marker)
