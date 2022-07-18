@@ -84,3 +84,5 @@ def resolve_lazy_frames(lazy_frames: LazyFrames) -> torch.Tensor:
 
     assert rlt.size(0) == len(lazy_frames)
     return rlt
+
+ActionScale = Union[float, torch.Tensor]

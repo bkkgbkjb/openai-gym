@@ -26,10 +26,19 @@ class Episode(Generic[EPS]):
         assert lr is not None
 
         return [NotNoneStep.from_step(s) for s in self._steps[:-1]]
-    
+
     def __getitem__(self, idx: int) -> NotNoneStep:
-        assert 0 <= idx < len(self._steps) - 1
-        return NotNoneStep.from_step(self._steps[idx])
+        assert 1 - len(self._steps) <= idx < len(self._steps) - 1
+
+        return NotNoneStep.from_step(self._steps[idx if idx >= 0 else idx - 1])
+    
+    @property
+    def last_state(self) -> EPS:
+        return self._steps[-1].state
+
+    @property
+    def end(self) -> bool:
+        return self.end
 
     @property
     def len(self) -> int:
@@ -107,28 +116,33 @@ class Episode(Generic[EPS]):
 
         return b
 
+    @classmethod
     def cut(
-        self, length: int, allow_last_not_align: bool = False, start: int = 0
-    ) -> List[List[NotNoneStep[EPS]]]:
+        cls,
+        episode: Self,
+        length: int,
+        allow_last_not_align: bool = False,
+        start: int = 0,
+    ) -> List[Self]:
 
         assert length >= 1
 
         assert 0 <= start < length
 
-        rl: List[List[NotNoneStep[EPS]]] = []
-        l: List[NotNoneStep[EPS]] = []
+        re: List[Self] = []
+        e: Self = cls()
 
-        steps = self.steps[start:]
+        steps = episode.steps[start:]
         for s in steps:
-            l.append(s)
-            if len(l) == length:
-                rl.append(l)
-                l = []
+            e.append_step(s.to_step())
+            if e.len == length:
+                re.append(e)
+                e = cls()
 
-        if allow_last_not_align and len(l) != 0:
-            rl.append(l)
+        if allow_last_not_align and e.len != 0:
+            re.append(e)
 
-        return rl
+        return re
 
     def compute_returns(self, gamma: float = 0.99):
         if self.returns_computed:

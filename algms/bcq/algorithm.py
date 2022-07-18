@@ -1,5 +1,6 @@
 import setup
 from utils.algorithm import ActionInfo, Mode
+from utils.common import ActionScale
 from utils.step import NotNoneStep, Step
 from utils.transition import Transition, resolve_transitions
 from torch import nn
@@ -41,7 +42,7 @@ class Preprocess(PreprocessI[O, S]):
 
 
 class Actor(NeuralNetworks):
-    def __init__(self, state_dim: int, action_dim: int, phi=0.05):
+    def __init__(self, state_dim: int, action_dim: int, action_scale: ActionScale, phi=0.05):
         super(Actor, self).__init__()
         self.net = nn.Sequential(
             layer_init(nn.Linear(state_dim + action_dim, 400)),
@@ -52,10 +53,11 @@ class Actor(NeuralNetworks):
             nn.Tanh(),
         )
         self.phi = phi
+        self.action_scale = action_scale
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
-        pertub = self.phi * self.net(torch.cat([s, a], 1))
-        return (pertub + a).clamp(-1.0, 1.0)
+        pertub = self.action_scale * self.phi * self.net(torch.cat([s, a], 1))
+        return (pertub + a).clamp(-self.action_scale, self.action_scale)
 
 
 class Critic(NeuralNetworks):
@@ -75,7 +77,7 @@ class Critic(NeuralNetworks):
 
 
 class VAE(NeuralNetworks):
-    def __init__(self, state_dim: int, action_dim: int, latent_dim: int):
+    def __init__(self, state_dim: int, action_dim: int, latent_dim: int, action_scale: ActionScale):
         super(VAE, self).__init__()
         self.encoder = nn.Sequential(
             layer_init(nn.Linear(state_dim + action_dim, 750)),
@@ -97,6 +99,7 @@ class VAE(NeuralNetworks):
         )
 
         self.latent_dim = latent_dim
+        self.action_scale = action_scale
 
     def forward(self, s: torch.Tensor, a: torch.Tensor):
         l = self.encoder(torch.cat([s, a], dim=1))
@@ -113,24 +116,26 @@ class VAE(NeuralNetworks):
         if z is None:
             z = torch.randn((s.shape[0], self.latent_dim)).clamp(-0.5, 0.5).to(DEVICE)
 
-        a = self.decoder(torch.cat([s, z], 1))
+        a = self.action_scale * self.decoder(torch.cat([s, z], 1))
         return a
 
 
 class BCQ(Algorithm[S]):
-    def __init__(self, state_dim: int, action_dim: int):
+    def __init__(self, state_dim: int, action_dim: int, action_scale: ActionScale = 1.0):
         self.set_name("bcq")
         self.state_dim = state_dim
         self.action_dim = action_dim
+        self.action_scale = action_scale
 
         self.discount = 0.99
         self.tau = 5e-3
 
         self.lmbda = 0.75
         self.phi = 5e-2
+        self.batch_size = 128
 
         self.latent_dim = self.action_dim * 2
-        self.actor = Actor(self.state_dim, self.action_dim, self.phi).to(DEVICE)
+        self.actor = Actor(self.state_dim, self.action_dim, self.action_scale, self.phi).to(DEVICE)
         self.actor_target = self.actor.clone().no_grad()
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
 
@@ -146,7 +151,7 @@ class BCQ(Algorithm[S]):
         self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), lr=1e-3)
         self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), lr=1e-3)
 
-        self.vae = VAE(self.state_dim, self.action_dim, self.latent_dim).to(DEVICE)
+        self.vae = VAE(self.state_dim, self.action_dim, self.latent_dim, self.action_scale).to(DEVICE)
         self.recon_loss = nn.MSELoss()
 
         self.vae_optimizer = torch.optim.Adam(self.vae.parameters())
@@ -181,7 +186,7 @@ class BCQ(Algorithm[S]):
             self.transitions = transitions
 
         (states, actions, rewards, next_states, done, _) = resolve_transitions(
-            self.replay_buffer.sample(100), (self.state_dim,), (self.action_dim,)
+            self.replay_buffer.sample(self.batch_size), (self.state_dim,), (self.action_dim,)
         )
 
         recon, mean, std = self.vae(states, actions)
@@ -207,9 +212,9 @@ class BCQ(Algorithm[S]):
                 1.0 - self.lmbda
             ) * torch.max(q1_target, q2_target)
 
-            q_target = q_target.reshape(100, -1).max(1)[0].unsqueeze(1)
+            q_target = q_target.reshape(self.batch_size, -1).max(1)[0].unsqueeze(1)
 
-            assert q_target.shape == (100, 1)
+            assert q_target.shape == (self.batch_size, 1)
 
             q_target = (rewards + (1.0 - done) * self.discount * q_target).detach()
 
@@ -241,4 +246,4 @@ class BCQ(Algorithm[S]):
 
         self.report(dict(q_loss=q_loss, vae_loss=vae_loss, actor_loss=actor_loss))
 
-        return 100
+        return self.batch_size
