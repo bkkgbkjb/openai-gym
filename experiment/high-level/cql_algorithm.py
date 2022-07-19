@@ -20,7 +20,7 @@ from typing import List, Tuple, Any, Optional, Callable, Dict, cast
 import numpy as np
 
 from utils.replay_buffer import ReplayBuffer
-from algms.bcq.algorithm import BCQ
+from algms.cql.algorithm import CQL_SAC
 
 State = torch.Tensor
 O = torch.Tensor
@@ -184,7 +184,7 @@ class H(Algorithm):
                 )
 
         self.action_scale = torch.Tensor(action_scale).to(DEVICE)
-        self.high_level = BCQ(self.n_state + self.n_goals, self.n_state, self.action_scale)
+        self.high_level = CQL_SAC(self.n_state + self.n_goals, self.n_state, self.action_scale)
         self.high_level.set_reporter(self.reporter)
 
     def manual_train(self, info: Dict[str, Any]):

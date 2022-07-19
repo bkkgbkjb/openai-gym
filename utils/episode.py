@@ -132,13 +132,19 @@ class Episode(Generic[EPS]):
         re: List[Self] = []
         e: Self = cls()
 
-        steps = episode.steps[start:]
-        for s in steps:
-            del s.info['next']
-            e.append_step(s.to_step())
+        steps = episode._steps[start:]
+        i = 0
+        while i < len(steps):
+        # for s in steps:
+            s = steps[i]
+            if 'next' in s.info:
+                del s.info['next']
+            e.append_step(s)
             if e.len == length:
                 re.append(e)
                 e = cls()
+                i -= 1
+            i += 1
 
         if allow_last_not_align and e.len != 0:
             re.append(e)

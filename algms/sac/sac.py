@@ -41,22 +41,6 @@ class Preprocess(PreprocessI[Observation, State]):
         return torch.from_numpy(h[-1]).type(torch.float32).to(DEVICE)
 
 
-class VFunction(NeuralNetworks):
-
-    def __init__(self, n_state: int):
-        super().__init__()
-        self.net = nn.Sequential(
-            layer_init(nn.Linear(n_state, 256)),
-            nn.ReLU(),
-            layer_init(nn.Linear(256, 256)),
-            nn.ReLU(),
-            layer_init(nn.Linear(256, 1)),
-        ).to(DEVICE)
-
-    def forward(self, s: State) -> torch.Tensor:
-        return self.net(s.to(DEVICE))
-
-
 class QFunction(NeuralNetworks):
 
     def __init__(self, n_state: int, n_action: int):

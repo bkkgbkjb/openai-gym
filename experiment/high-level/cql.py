@@ -2,7 +2,7 @@ import setup
 import torch
 import numpy as np
 from utils.agent import Agent, OfflineAgent
-from algorithm import H, Preprocess
+from cql_algorithm import H, Preprocess
 import gym
 import d4rl
 from setup import RANDOM_SEED
@@ -58,6 +58,6 @@ offline_train_and_eval(
     env,
     single_train_frames=100 * 1024,
     eval_per_train=3,
-    eval_repeats=10,
+    eval_repeats=5,
     total_train_frames=999 * 6 * 100 * 1024,
 )

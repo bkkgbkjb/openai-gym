@@ -134,17 +134,17 @@ class BCQ(Algorithm[S]):
         self.action_dim = action_dim
         self.action_scale = action_scale
 
-        self.discount = 0.99
+        self.discount = 0.75
         self.tau = 5e-3
 
         self.lmbda = 0.75
         self.phi = 5e-2
-        self.batch_size = 128
+        self.batch_size = 256
 
         self.latent_dim = self.action_dim * 2
         self.actor = Actor(self.state_dim, self.action_dim, self.action_scale, self.phi).to(DEVICE)
         self.actor_target = self.actor.clone().no_grad()
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=1e-3)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
 
         self.q1 = Critic(self.state_dim, self.action_dim).to(DEVICE)
         self.q1_target = self.q1.clone().no_grad()
@@ -155,8 +155,8 @@ class BCQ(Algorithm[S]):
         self.q1_loss = nn.MSELoss()
         self.q2_loss = nn.MSELoss()
 
-        self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), lr=1e-3)
-        self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), lr=1e-3)
+        self.q1_optimizer = torch.optim.Adam(self.q1.parameters(), lr=3e-4)
+        self.q2_optimizer = torch.optim.Adam(self.q2.parameters(), lr=3e-4)
 
         self.vae = VAE(self.state_dim, self.action_dim, self.latent_dim, self.action_scale).to(DEVICE)
         self.recon_loss = nn.MSELoss()
