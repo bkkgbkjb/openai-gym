@@ -65,7 +65,7 @@ class H(Algorithm):
 
         self.high_level = None
 
-        self.c = 50
+        self.c = 35
 
         self.reset()
 
@@ -152,8 +152,8 @@ class H(Algorithm):
     def get_episodes(self, episodes: List[Episode]):
         action_scale = [-float("inf")] * self.n_state
 
-        for e in episodes:
-            for se in Episode.cut(e, self.c, start=np.random.choice(self.c), allow_last_not_align=True):
+        for i, e in enumerate(episodes):
+            for se in (Episode.cut if i % 2 == 0 else Episode.rcut)(e, self.c):
                 # assert se.len == self.c
                 se.compute_returns(self.gamma)
 

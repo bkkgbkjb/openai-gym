@@ -150,6 +150,39 @@ class Episode(Generic[EPS]):
             re.append(e)
 
         return re
+    
+    @classmethod
+    def rcut(
+        cls,
+        episode: Self,
+        length: int,
+    ) -> List[Self]:
+        assert 1 <= length 
+
+        re: List[Self] = []
+        e: Self = cls()
+
+        steps = episode._steps
+        j = len(steps) - 1 - length
+        assert j >= 0
+
+        while j >= 0:
+            i = j
+            while i <= j + length:
+            # for s in steps:
+                s = steps[i]
+                if 'next' in s.info:
+                    del s.info['next']
+                e.append_step(s)
+                i += 1
+
+            assert e.len == length
+            re.append(e)
+            e = cls()
+            j -= length
+
+        return re
+
 
     def compute_returns(self, gamma: float = 0.99):
         if self.returns_computed:
