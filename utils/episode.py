@@ -156,6 +156,7 @@ class Episode(Generic[EPS]):
         cls,
         episode: Self,
         length: int,
+        alllow_first_not_align: bool = False
     ) -> List[Self]:
         assert 1 <= length 
 
@@ -180,6 +181,15 @@ class Episode(Generic[EPS]):
             re.append(e)
             e = cls()
             j -= length
+        
+        if alllow_first_not_align and j + length > 0:
+            for i in range(j + length + 1):
+                s = steps[i]
+                if 'next' in s.info:
+                    del s.info['next']
+                e.append_step(s)
+
+            re.append(e)
 
         return re
 

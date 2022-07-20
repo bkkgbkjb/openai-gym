@@ -155,11 +155,12 @@ class H(Algorithm):
         action_scale = [-float("inf")] * self.n_state
 
         for i, e in enumerate(episodes):
-            for se in Episode.cut(
+            for se in Episode.rcut(
                 e,
                 self.c,
-                allow_last_not_align=int(self.c / 2),
-                start=np.random.choice(self.c),
+                alllow_first_not_align=True
+                # allow_last_not_align=int(self.c / 2),
+                # start=np.random.choice(self.c),
             ):
                 # assert se.len == self.c
                 se.compute_returns(self.gamma)
