@@ -7,7 +7,7 @@ import gym
 import d4rl
 from setup import RANDOM_SEED
 from utils.reporter import get_reporter
-from args import args
+from args import args, exp_name
 import h5py
 from utils.env_sb3 import flat_to_episode
 from utils.env import glance, make_envs, offline_train_and_eval, record_video
@@ -50,7 +50,7 @@ algm = H(
 )
 agent = OfflineAgent(algm, Preprocess())
 
-exp_name = args.exp_name or agent.name
+exp_name = exp_name or agent.name
 
 agent.set_algm_reporter(get_reporter(exp_name))
 
