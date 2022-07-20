@@ -15,8 +15,7 @@ from teleport import Teleport
 
 # %%
 # env = gym.make("antmaze-umaze-diverse-v2")
-# viewer = env.unwrapped._get_viewer('human')
-# viewer.add_marker(pos=np.array([3.0, 2.0, 2.0]), label='goal')
+
 
 [env] = make_envs(args.env)
 
@@ -48,14 +47,14 @@ algm = H(
     len(env.target_goal),
     env.action_space.shape[0],
     1,
-    c=args.c,
-    batch_size=args.batch_size
 )
 agent = OfflineAgent(algm, Preprocess())
 
-agent.set_algm_reporter(get_reporter(agent.name))
+exp_name = args.exp_name or agent.name
 
-env = record_video(env, algm.name, activate_per_episode=5, name_prefix=algm.name)
+agent.set_algm_reporter(get_reporter(exp_name))
+
+env = record_video(env, exp_name, activate_per_episode=5, name_prefix=exp_name)
 
 env = Teleport(env, np.array([-999] * 6))
 

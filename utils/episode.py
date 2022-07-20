@@ -1,4 +1,4 @@
-from typing import Union, TypeVar, List, Generic, cast, Tuple, List
+from typing import Optional, Union, TypeVar, List, Generic, cast, Tuple, List
 from utils.step import Step, NotNoneStep
 from utils.transition import Transition
 import numpy as np
@@ -121,7 +121,7 @@ class Episode(Generic[EPS]):
         cls,
         episode: Self,
         length: int,
-        allow_last_not_align: bool = False,
+        allow_last_not_align: Optional[int] = None,
         start: int = 0,
     ) -> List[Self]:
 
@@ -146,7 +146,7 @@ class Episode(Generic[EPS]):
                 i -= 1
             i += 1
 
-        if allow_last_not_align and e.len != 0:
+        if allow_last_not_align is not None and e.len != 0 and e.len >= allow_last_not_align:
             re.append(e)
 
         return re

@@ -55,21 +55,19 @@ class H(Algorithm):
         n_goals: int,
         n_actions: int,
         action_scale: ActionScale,
-        c: int = 35,
-        batch_size: int = 128,
     ):
         self.set_name("H")
         self.n_actions = n_actions
         self.n_state = n_state
-        self.n_goals = n_goals
-        self.batch_size = batch_size
+        # self.n_goals = n_goals
+        self.batch_size = args.batch_size
 
         self.gamma = 0.99
         self.action_scale = action_scale
 
         self.high_level = None
 
-        self.c = c
+        self.c = args.c
 
         self.reset()
 
@@ -107,9 +105,7 @@ class H(Algorithm):
         assert self.high_level is not None
 
         if self.inner_steps % self.c == 0:
-            self.sub_goal = (
-                self.high_level.take_action(mode, torch.cat([state, self.fg])) + state
-            )
+            self.sub_goal = self.high_level.take_action(mode, state) + state
 
             assert self.del_markers is not None
             self.del_markers()
@@ -159,7 +155,12 @@ class H(Algorithm):
         action_scale = [-float("inf")] * self.n_state
 
         for i, e in enumerate(episodes):
-            for se in (Episode.cut if i % 2 == 0 else Episode.rcut)(e, self.c):
+            for se in Episode.cut(
+                e,
+                self.c,
+                allow_last_not_align=int(self.c / 2),
+                start=np.random.choice(self.c),
+            ):
                 # assert se.len == self.c
                 se.compute_returns(self.gamma)
 
@@ -170,17 +171,19 @@ class H(Algorithm):
                     if a > action_scale[i]:
                         action_scale[i] = a
 
-                goal = torch.from_numpy(se[0].info["goal"]).type(torch.float32)
+                # goal = torch.from_numpy(se[0].info["goal"]).type(torch.float32)
                 self.high_replay_memory.append(
                     Transition(
                         (
                             NotNoneStep(
-                                torch.cat([se[0].state, goal]),
+                                # torch.cat([se[0].state, goal]),
+                                se[0].state,
                                 act,
                                 se[0].info["return"],
                             ),
                             Step(
-                                torch.cat([se.last_state, goal]),
+                                # torch.cat([se.last_state, goal]),
+                                se.last_state,
                                 None,
                                 None,
                                 dict(end=se.end),
@@ -191,11 +194,11 @@ class H(Algorithm):
 
         self.action_scale = torch.Tensor(action_scale).to(DEVICE)
         self.high_level = BCQ(
-            self.n_state + self.n_goals,
+            self.n_state,
             self.n_state,
             self.action_scale,
-            batch_size=256,
-            discount=0.75,
+            batch_size=self.batch_size,
+            discount=args.high_discount,
         )
         self.high_level.set_reporter(self.reporter)
 
@@ -208,4 +211,4 @@ class H(Algorithm):
 
         assert self.high_level is not None
         self.train()
-        return self.high_level.batch_size
+        return self.batch_size
