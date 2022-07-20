@@ -128,18 +128,18 @@ class VAE(NeuralNetworks):
 
 
 class BCQ(Algorithm[S]):
-    def __init__(self, state_dim: int, action_dim: int, action_scale: ActionScale = 1.0):
+    def __init__(self, state_dim: int, action_dim: int, action_scale: ActionScale = 1.0, discount: float = 0.99, batch_size: int = 128):
         self.set_name("bcq")
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.action_scale = action_scale
 
-        self.discount = 0.75
+        self.discount = discount
         self.tau = 5e-3
 
         self.lmbda = 0.75
         self.phi = 5e-2
-        self.batch_size = 256
+        self.batch_size = batch_size
 
         self.latent_dim = self.action_dim * 2
         self.actor = Actor(self.state_dim, self.action_dim, self.action_scale, self.phi).to(DEVICE)

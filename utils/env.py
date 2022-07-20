@@ -218,12 +218,15 @@ def make_train_and_eval_env(
 
 
 def make_envs(
-    envs: Union[Tuple[str, int], List[gym.Env]],
+    envs: Union[str, Tuple[str, int], List[gym.Env]],
     wrappers: List[Callable[[gym.Env], gym.Env]] = [],
     seed: int = 0,
 ) -> List[gym.Env]:
     es = []
-    if isinstance(envs, tuple):
+    if isinstance(envs, str):
+        es.append(gym.make(envs))
+
+    elif isinstance(envs, tuple):
         for _ in range(envs[1]):
             es.append(gym.make(envs[0]))
     else:

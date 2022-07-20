@@ -1,6 +1,7 @@
 import setup
 from utils.algorithm import ActionInfo, Mode, ReportInfo
 from utils.common import ActionScale, Info
+import math
 from utils.env import expose_markers
 from utils.episode import Episode
 from utils.step import NotNoneStep, Step
@@ -54,18 +55,21 @@ class H(Algorithm):
         n_goals: int,
         n_actions: int,
         action_scale: ActionScale,
+        c: int = 35,
+        batch_size: int = 128,
     ):
         self.set_name("H")
         self.n_actions = n_actions
         self.n_state = n_state
         self.n_goals = n_goals
+        self.batch_size = batch_size
 
         self.gamma = 0.99
         self.action_scale = action_scale
 
         self.high_level = None
 
-        self.c = 35
+        self.c = c
 
         self.reset()
 
@@ -103,7 +107,9 @@ class H(Algorithm):
         assert self.high_level is not None
 
         if self.inner_steps % self.c == 0:
-            self.sub_goal = self.high_level.take_action(mode, torch.cat([state, self.fg])) + state
+            self.sub_goal = (
+                self.high_level.take_action(mode, torch.cat([state, self.fg])) + state
+            )
 
             assert self.del_markers is not None
             self.del_markers()
@@ -116,19 +122,17 @@ class H(Algorithm):
 
         if self.inner_steps != 0 and self.inner_steps % self.c == self.c - 1:
             x, y = self.sub_goal.cpu().detach().numpy()[:2]
-            return torch.tensor([x, y] + [-999] * (self.n_actions -2 ))
+            return torch.tensor([x, y] + [-999] * (self.n_actions - 2))
 
         return torch.from_numpy(self.action_space.sample()).type(torch.float32) * 0.5
-    
+
     def transition_subgoal(self, s: torch.Tensor, sn: torch.Tensor):
         assert self.sub_goal is not None
         self.sub_goal = s + self.sub_goal - sn
 
-
     def after_step(self, mode: Mode, transition: TransitionTuple[S]):
         (s1, s2) = transition
         assert mode == "eval"
-
 
         self.transition_subgoal(s1.state, s2.state)
         self.inner_steps += 1
@@ -147,7 +151,9 @@ class H(Algorithm):
 
     def train(self):
         assert self.high_level is not None
-        self.high_level.manual_train(dict(transitions=self.high_replay_memory.as_list()))
+        self.high_level.manual_train(
+            dict(transitions=self.high_replay_memory.as_list())
+        )
 
     def get_episodes(self, episodes: List[Episode]):
         action_scale = [-float("inf")] * self.n_state
@@ -164,7 +170,7 @@ class H(Algorithm):
                     if a > action_scale[i]:
                         action_scale[i] = a
 
-                goal = torch.from_numpy(se[0].info['goal']).type(torch.float32)
+                goal = torch.from_numpy(se[0].info["goal"]).type(torch.float32)
                 self.high_replay_memory.append(
                     Transition(
                         (
@@ -184,7 +190,13 @@ class H(Algorithm):
                 )
 
         self.action_scale = torch.Tensor(action_scale).to(DEVICE)
-        self.high_level = BCQ(self.n_state + self.n_goals, self.n_state, self.action_scale)
+        self.high_level = BCQ(
+            self.n_state + self.n_goals,
+            self.n_state,
+            self.action_scale,
+            batch_size=256,
+            discount=0.75,
+        )
         self.high_level.set_reporter(self.reporter)
 
     def manual_train(self, info: Dict[str, Any]):

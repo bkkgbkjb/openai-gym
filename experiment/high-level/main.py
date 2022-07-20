@@ -10,13 +10,15 @@ from utils.reporter import get_reporter
 from args import args
 import h5py
 from utils.env_sb3 import flat_to_episode
-from utils.env import glance, offline_train_and_eval, record_video
+from utils.env import glance, make_envs, offline_train_and_eval, record_video
 from teleport import Teleport
 
 # %%
-env = gym.make("antmaze-umaze-diverse-v2")
+# env = gym.make("antmaze-umaze-diverse-v2")
 # viewer = env.unwrapped._get_viewer('human')
 # viewer.add_marker(pos=np.array([3.0, 2.0, 2.0]), label='goal')
+
+[env] = make_envs(args.env)
 
 # glance(env)
 
@@ -34,7 +36,7 @@ goals = ds["infos/goal"][:end_index]
 # rewards = [
 #     1.0 if (np.linalg.norm(p - goals[i]) <= 0.5) else 0.0 for i, p in enumerate(pos)
 # ]
-rewards = ds['rewards'][:end_index]
+rewards = ds["rewards"][:end_index]
 
 dones = ds["timeouts"][:end_index]
 infos = [dict(pos=pos[i], goal=goals[i]) for i in range(len(pos))]
@@ -42,7 +44,12 @@ infos = [dict(pos=pos[i], goal=goals[i]) for i in range(len(pos))]
 episodes = flat_to_episode(states, actions, rewards, dones, infos)
 
 algm = H(
-    env.observation_space.shape[0], len(env.target_goal), env.action_space.shape[0], 1
+    env.observation_space.shape[0],
+    len(env.target_goal),
+    env.action_space.shape[0],
+    1,
+    c=args.c,
+    batch_size=args.batch_size
 )
 agent = OfflineAgent(algm, Preprocess())
 
