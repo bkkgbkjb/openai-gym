@@ -268,7 +268,16 @@ def expose_markers(
             size=np.array([0.5, 0.5, 0.5]),
         )
 
+    def add_marker_dummy(*args, **kwargs):
+        pass
+
     def remove_marker():
         del viewer._markers[:]
 
-    return (add_marker, remove_marker)
+    def remote_marker_dummy(*args, **kwargs):
+        pass
+
+    return (
+        add_marker if viewer is not None else add_marker_dummy,
+        remove_marker if viewer is not None else remote_marker_dummy,
+    )
