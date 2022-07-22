@@ -54,7 +54,8 @@ exp_name = exp_name or agent.name
 
 agent.set_algm_reporter(get_reporter(exp_name))
 
-env = record_video(env, exp_name, activate_per_episode=5, name_prefix=exp_name)
+if args.log_video:
+    env = record_video(env, exp_name, activate_per_episode=5, name_prefix=exp_name)
 
 env = Teleport(env, np.array([-999] * 6))
 

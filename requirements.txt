@@ -4,6 +4,7 @@ asttokens==2.0.5
 AutoROM==0.4.2
 AutoROM.accept-rom-license==0.4.2
 backcall==0.2.0
+black==22.6.0
 box2d-py==2.3.5
 cachetools==5.1.0
 certifi==2021.10.8
@@ -56,6 +57,7 @@ mjrl @ git+https://github.com/aravindr93/mjrl@3871d93763d3b49c4741e6daeaebbc605f
 mujoco==2.2.0
 mujoco-maze==0.2.0
 mujoco-py==2.1.2.14
+mypy-extensions==0.4.3
 nest-asyncio==1.5.5
 numpy==1.22.3
 oauthlib==3.2.0
@@ -63,10 +65,12 @@ opencv-python==4.5.5.64
 packaging==21.3
 pandas==1.4.2
 parso==0.8.3
+pathspec==0.9.0
 pathtools==0.1.2
 pexpect==4.8.0
 pickleshare==0.7.5
 Pillow==9.1.1
+platformdirs==2.5.2
 plotly==5.9.0
 promise==2.3
 prompt-toolkit==3.0.29
@@ -106,6 +110,7 @@ tensorboard-plugin-wit==1.8.1
 tensorboardX==2.5.1
 termcolor==1.1.0
 threadpoolctl==3.1.0
+tomli==2.0.1
 torch==1.11.0
 torch-tb-profiler==0.4.0
 torchaudio==0.11.0
