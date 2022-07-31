@@ -73,8 +73,8 @@ class Agent(Generic[AO, AS]):
         assert isinstance(a, torch.Tensor)
         return (a.detach(), dict(end=False))
 
-    def get_action(self, state: AS, env: gym.Env, mode: Mode) -> ActionInfo:
-        actinfo = self.format_action(self.algm.take_action(mode, state))
+    def get_action(self, state: AS, env: gym.Env, mode: Mode, info: Info) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(mode, state, info))
         act = actinfo[0]
 
         action_space = env.action_space
@@ -135,7 +135,7 @@ class Agent(Generic[AO, AS]):
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env, mode)
+            actinfo = self.get_action(state_episode[-1], env, mode, dict(obs=observation_episode,states=state_episode,actions=action_episode,rewards=reward_episode,infos=info_episode))
 
             act, info = actinfo
             (obs, rwd, stop,
@@ -240,8 +240,8 @@ class OfflineAgent(Generic[OO, OS]):
         assert isinstance(a, torch.Tensor)
         return (a.detach(), dict(end=False))
 
-    def get_action(self, state: OS, env: gym.Env, mode: Mode) -> ActionInfo:
-        actinfo = self.format_action(self.algm.take_action(mode, state))
+    def get_action(self, state: OS, env: gym.Env, mode: Mode, info: Info) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(mode, state, info))
         act = actinfo[0]
 
         action_space = env.action_space
@@ -299,7 +299,7 @@ class OfflineAgent(Generic[OO, OS]):
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env, 'eval')
+            actinfo = self.get_action(state_episode[-1], env, 'eval', dict(obs=observation_episode, states=state_episode, actions=action_episode, rewards=reward_episode, infos=info_episode))
 
             act, info = actinfo
             (obs, rwd, stop,

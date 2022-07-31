@@ -26,7 +26,7 @@ class Algorithm(ABC, Generic[S]):
         pass
 
     @abstractmethod
-    def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
+    def take_action(self, mode: Mode, state: S, info: Info) -> Union[ActionInfo, Action]:
         raise NotImplementedError()
 
     @abstractmethod

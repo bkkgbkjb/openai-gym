@@ -1,10 +1,10 @@
 import setup
 from utils.algorithm import ActionInfo, Mode
-from utils.common import ActionScale
+from utils.common import ActionScale, Info
 import random
 from utils.episode import Episode
 from utils.step import NotNoneStep, Step
-from utils.transition import Transition, resolve_transitions
+from utils.transition import Transition, TransitionTuple, resolve_transitions
 from torch import nn
 from collections import deque
 import torch
@@ -52,12 +52,14 @@ class DT(Algorithm[S]):
         self,
         state_dim: int,
         action_dim: int,
+        rewards_to_go: float,
         action_scale: ActionScale = 1.0,
     ):
         self.set_name("decision-transformer")
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.action_scale = action_scale
+        self.rewards_to_go = rewards_to_go
 
         self.batch_size = 64
 
@@ -92,9 +94,32 @@ class DT(Algorithm[S]):
         self.replay_buffer = ReplayBuffer[Episode[S]](None)
 
     @torch.no_grad()
-    def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
+    def take_action(self, mode: Mode, state: S, info: Info) -> Union[ActionInfo, Action]:
+
+        states = torch.stack(info['states']).to(DEVICE)
+        actions = torch.stack(info['actions']).to(DEVICE)
+
+        assert states.shape[0] == actions.shape[0]
+        L = states.shape[0]
+
+        if L < self.k:
+            states, actions, masks = self.pad(states, actions)
 
         return torch.rand(self.action_dim).uniform_(-1, 1)
+    
+    def pad(self, states: torch.Tensor, acts: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        L = states.shape[0]
+        assert L < self.k
+        pad_len = self.k - L
+
+        new_states = torch.cat([torch.zeros_like(states).repeat_interleave(pad_len, dim = 0), states])
+        new_actions = torch.cat([torch.zeros_like(acts).repeat_interleave(pad_len, dim = 0), acts])
+
+        masks = torch.cat([torch.zeros(pad_len), torch.ones(L)] )
+        return (new_states, new_actions, masks)
+
+    def after_step(self, mode: Mode, transition: TransitionTuple[S]):
+        self.times += 1
 
     def get_data(self, episodes: List[Episode]):
 
