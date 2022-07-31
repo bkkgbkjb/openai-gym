@@ -47,9 +47,9 @@ class ReplayBuffer(Generic[E]):
     def len(self) -> int:
         return len(self.buffer)
 
-    def sample(self, size: int) -> List[E]:
+    def sample(self, size: int, p: Optional[List[float]] = None) -> List[E]:
         assert self.len > 0
-        idx = np.random.choice(len(self.buffer), size)
+        idx = np.random.choice(len(self.buffer), size, p=p)
 
         r: List[E] = []
         for i in idx:

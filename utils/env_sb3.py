@@ -32,6 +32,7 @@ from gym import error, logger
 from utils.episode import Episode
 from utils.step import NotNoneStep, Step
 from utils.transition import Transition
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 try:
     import cv2  # pytype:disable=import-error
@@ -991,7 +992,7 @@ def flat_to_episode(states: List[S],
         info.append(_i)
 
         if has_next_state and dones[i]:
-            s.append(infos[i]['next_state'])
+            s.append(torch.from_numpy(infos[i]['next_state']).type(torch.float32).to(DEVICE))
             info.append(dict(end=True))
 
             episodes.append(Episode.from_list((s, a, r, info)))

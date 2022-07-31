@@ -1,4 +1,5 @@
-from typing import Optional, Union, TypeVar, List, Generic, cast, Tuple, List
+import copy
+from typing import Callable, Optional, Union, TypeVar, List, Generic, cast, Tuple, List
 from utils.step import Step, NotNoneStep
 from utils.transition import Transition
 import numpy as np
@@ -18,6 +19,7 @@ class Episode(Generic[EPS]):
         self.returns_computed = False
         self.advantage_computed = False
         self._end = False
+        self.info: Info = dict()
 
     @property
     def steps(self) -> List[NotNoneStep[EPS]]:
@@ -78,11 +80,31 @@ class Episode(Generic[EPS]):
         inst.append_step(Step(s[-1], None, None, info[-1]))
 
         return inst
+    
+    def add_info(self, add_info: Callable[[List[Step[EPS]]], Info]) -> Info:
+        to_add_info = add_info(self._steps)
+
+        for k, v in to_add_info.items():
+            assert k not in self.info or self.info[k] == v
+            self.info[k] = v
+
+        return to_add_info
+    
+    def get_info(self, k: str):
+        return self.info[k]
 
     def get_steps(self, s_list: List[int]) -> List[NotNoneStep[EPS]]:
 
         steps = self.steps
         return [steps[i] for i in s_list]
+    
+    def del_laststep(self) -> Self:
+        last_step = copy.deepcopy( self._steps[-1])
+        last_step.r = None
+        last_step.a = None
+        self._steps[-1] = last_step
+        return self
+
 
     def append_transition(self, transition: Transition[EPS]) -> Self:
         assert not self.end, "cannot append transition into a ended episode"
@@ -131,6 +153,7 @@ class Episode(Generic[EPS]):
 
         re: List[Self] = []
         e: Self = cls()
+        e.add_info(lambda _: dict(is_sub = True, start = 0))
 
         steps = episode._steps[start:]
         i = 0
@@ -141,13 +164,17 @@ class Episode(Generic[EPS]):
                 del s.info['next']
             e.append_step(s)
             if e.len == length:
-                re.append(e)
+                e.add_info(lambda _: dict(end=i))
+                re.append(e.del_laststep())
+
                 e = cls()
+                e.add_info(lambda _: dict(is_sub = True, start = i))
+
                 i -= 1
             i += 1
 
         if allow_last_not_align is not None and e.len != 0 and e.len >= allow_last_not_align:
-            re.append(e)
+            re.append(e.del_laststep())
 
         return re
     
@@ -162,6 +189,7 @@ class Episode(Generic[EPS]):
 
         re: List[Self] = []
         e: Self = cls()
+        e.add_info(lambda _: dict(is_sub=True))
 
         steps = episode._steps
         j = len(steps) - 1 - length
@@ -169,6 +197,7 @@ class Episode(Generic[EPS]):
 
         while j >= 0:
             i = j
+            e.add_info(lambda _: dict(start = i))
             while i <= j + length:
             # for s in steps:
                 s = steps[i]
@@ -178,18 +207,24 @@ class Episode(Generic[EPS]):
                 i += 1
 
             assert e.len == length
-            re.append(e)
+            e.add_info(lambda _: dict(end=i))
+            re.append(e.del_laststep())
+
             e = cls()
+            e.add_info(lambda _: dict(is_sub=True))
+
             j -= length
         
         if alllow_first_not_align and j + length > 0:
+            e.add_info(lambda _: dict(start=0))
             for i in range(j + length + 1):
                 s = steps[i]
                 if 'next' in s.info:
                     del s.info['next']
                 e.append_step(s)
 
-            re.append(e)
+            e.add_info(lambda _: dict(end=i))
+            re.append(e.del_laststep())
 
         return re
 
@@ -200,10 +235,10 @@ class Episode(Generic[EPS]):
 
         steps = self.steps
 
-        rwd = 0
+        rwd = None
         for s in reversed(steps):
             assert "return" not in s.info
-            rwd = s.info["return"] = gamma * rwd + s.reward
+            rwd = s.info["return"] = gamma * (0 if rwd is None else rwd) + s.reward
 
         self.returns_computed = True
 
