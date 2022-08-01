@@ -28,7 +28,7 @@ from utils.common import LazyFrames, resolve_lazy_frames
 from utils.env_sb3 import RecordVideo
 
 O = TypeVar("O")
-S = TypeVar("S", bound=Union[torch.Tensor, LazyFrames])
+S = TypeVar("S")
 
 
 def glance(

@@ -6,7 +6,7 @@ from utils.common import Info, Action, Reward, AllAllowedStates, AllowedStates, 
 import numpy as np
 import torch
 
-S = TypeVar('S', bound=AllAllowedStates)
+S = TypeVar('S')
 A = TypeVar('A')
 R = TypeVar('R')
 
@@ -19,8 +19,6 @@ class BaseStep(ABC, Generic[S, A, R]):
         self.r = r
         self.i = i
 
-        assert isinstance(self.s, torch.Tensor) or isinstance(
-            self.s, LazyFrames)
         assert isinstance(i, dict)
         assert 'end' in self.i
         assert isinstance(self.i['end'], bool)
@@ -67,9 +65,9 @@ class BaseStep(ABC, Generic[S, A, R]):
         return False
 
 
-NNS = TypeVar('NNS', bound=AllowedStates)
+NNS = TypeVar('NNS')
 
-SS = TypeVar('SS', bound=AllowedStates)
+SS = TypeVar('SS')
 
 
 class Step(BaseStep[SS, Optional[Action], Optional[Reward]], Generic[SS]):

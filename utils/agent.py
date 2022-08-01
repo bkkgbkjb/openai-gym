@@ -18,7 +18,7 @@ from typing import (
     TypeVar,
 )
 from utils.algorithm import Algorithm, ActionInfo, Mode, ReportInfo
-from utils.preprocess import PreprocessI
+from utils.preprocess import AllInfo, PreprocessI
 from utils.common import Action, Info, Reward
 from torch.utils.data import DataLoader
 
@@ -26,7 +26,7 @@ from utils.step import NotNoneStep, Step
 
 R = Reward
 
-AS = TypeVar("AS", bound=Union[torch.Tensor, LazyFrames])
+AS = TypeVar("AS")
 AO = TypeVar("AO")
 
 
@@ -56,11 +56,8 @@ class Agent(Generic[AO, AS]):
         self.report = reporter
         self.algm.set_reporter(reporter)
 
-    def get_current_state(self, obs_episode: List[AO]) -> AS:
-        state = self.preprocess.get_current_state(obs_episode)
-        assert isinstance(state, torch.Tensor) or isinstance(
-            state,
-            LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
+    def get_current_state(self, all_info: AllInfo) -> AS:
+        state = self.preprocess.get_current_state(all_info)
         return state
 
     def format_action(self, a: Union[Action, ActionInfo]) -> ActionInfo:
@@ -73,8 +70,8 @@ class Agent(Generic[AO, AS]):
         assert isinstance(a, torch.Tensor)
         return (a.detach(), dict(end=False))
 
-    def get_action(self, state: AS, env: gym.Env, mode: Mode, info: Info) -> ActionInfo:
-        actinfo = self.format_action(self.algm.take_action(mode, state, info))
+    def get_action(self, state: AS, env: gym.Env, mode: Mode) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(mode, state))
         act = actinfo[0]
 
         action_space = env.action_space
@@ -88,14 +85,14 @@ class Agent(Generic[AO, AS]):
         if isinstance(action_space, gym.spaces.Box):
             assert act.shape == action_space.shape
 
-        return actinfo
+        return (act.detach().cpu(), actinfo[1])
 
     def reset_env(self, env: gym.Env, mode: Mode) -> AO:
         o = env.reset()
 
         if not isinstance(o, tuple):
             self.algm.on_env_reset(mode, dict(env=env, mode=mode))
-            return o
+            return cast(AO, torch.from_numpy(o).float())
 
         assert len(o) == 2
         assert isinstance(o[1], dict)
@@ -106,7 +103,7 @@ class Agent(Generic[AO, AS]):
         o[1]['mode'] = mode
 
         self.algm.on_env_reset(mode, o[1])
-        return cast(AO, o[0])
+        return cast(AO, torch.from_numpy(o[0]).float())
 
     def train(self, env: gym.Env):
         return self.run(env, 'train')
@@ -129,13 +126,13 @@ class Agent(Generic[AO, AS]):
 
         o = self.reset_env(env, mode)
         observation_episode.append(o)
-        state_episode.append(self.get_current_state(observation_episode))
+        state_episode.append(self.get_current_state((observation_episode, state_episode, action_episode, reward_episode, info_episode)))
 
         stop = False
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env, mode, dict(obs=observation_episode,states=state_episode[:-1],actions=action_episode,rewards=reward_episode,infos=info_episode))
+            actinfo = self.get_action(state_episode[-1], env, mode)
 
             act, info = actinfo
             (obs, rwd, stop,
@@ -149,8 +146,8 @@ class Agent(Generic[AO, AS]):
             reward_episode.append(rwd)
 
             obs = cast(AO, obs)
-            observation_episode.append(obs)
-            state_episode.append(self.get_current_state(observation_episode))
+            observation_episode.append(cast(AO, torch.from_numpy(obs).float()))
+            state_episode.append(self.get_current_state((observation_episode, state_episode, action_episode, reward_episode, info_episode)))
 
             assert len(state_episode) == len(observation_episode)
 
@@ -194,7 +191,7 @@ class Agent(Generic[AO, AS]):
         )
 
 
-OS = TypeVar("OS", bound=Union[torch.Tensor, LazyFrames])
+OS = TypeVar("OS")
 OO = TypeVar("OO")
 
 
@@ -223,11 +220,8 @@ class OfflineAgent(Generic[OO, OS]):
         self.report = reporter
         self.algm.set_reporter(reporter)
 
-    def get_current_state(self, obs_episode: List[OO]) -> OS:
-        state = self.preprocess.get_current_state(obs_episode)
-        assert isinstance(state, torch.Tensor) or isinstance(
-            state,
-            LazyFrames), "preprocess.get_current_state应该返回tensor或lazyframes"
+    def get_current_state(self, all_info: AllInfo) -> OS:
+        state = self.preprocess.get_current_state(all_info)
         return state
 
     def format_action(self, a: Union[Action, ActionInfo]) -> ActionInfo:
@@ -240,8 +234,8 @@ class OfflineAgent(Generic[OO, OS]):
         assert isinstance(a, torch.Tensor)
         return (a.detach(), dict(end=False))
 
-    def get_action(self, state: OS, env: gym.Env, mode: Mode, info: Info) -> ActionInfo:
-        actinfo = self.format_action(self.algm.take_action(mode, state, info))
+    def get_action(self, state: OS, env: gym.Env, mode: Mode) -> ActionInfo:
+        actinfo = self.format_action(self.algm.take_action(mode, state))
         act = actinfo[0]
 
         action_space = env.action_space
@@ -255,14 +249,14 @@ class OfflineAgent(Generic[OO, OS]):
         if isinstance(action_space, gym.spaces.Box):
             assert act.shape == action_space.shape
 
-        return actinfo
+        return (act.detach().cpu(), actinfo[1])
 
     def reset_env(self, env: gym.Env, mode: Mode) -> OO:
         o = env.reset()
 
         if not isinstance(o, tuple):
             self.algm.on_env_reset(mode, dict(env=env, mode=mode))
-            return o
+            return cast(OO, torch.from_numpy(o).float())
 
         assert len(o) == 2
         assert isinstance(o[1], dict)
@@ -273,7 +267,7 @@ class OfflineAgent(Generic[OO, OS]):
         o[1]['mode'] = mode
 
         self.algm.on_env_reset(mode, o[1])
-        return o[0]
+        return cast(OO, torch.from_numpy(o[0]).float())
 
     def train(self, info: Info) -> int:
         self.toggleEval(False)
@@ -293,13 +287,13 @@ class OfflineAgent(Generic[OO, OS]):
 
         o = self.reset_env(env, 'eval')
         observation_episode.append(o)
-        state_episode.append(self.get_current_state(observation_episode))
+        state_episode.append(self.get_current_state((observation_episode, state_episode, action_episode, reward_episode, info_episode)))
 
         stop = False
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env, 'eval', dict(obs=observation_episode, states=state_episode[:-1], actions=action_episode, rewards=reward_episode, infos=info_episode))
+            actinfo = self.get_action(state_episode[-1], env, 'eval')
 
             act, info = actinfo
             (obs, rwd, stop,
@@ -313,8 +307,8 @@ class OfflineAgent(Generic[OO, OS]):
             reward_episode.append(rwd)
 
             obs = cast(OO, obs)
-            observation_episode.append(obs)
-            state_episode.append(self.get_current_state(observation_episode))
+            observation_episode.append(cast(OO, torch.from_numpy(obs).float()))
+            state_episode.append(self.get_current_state((observation_episode, state_episode, action_episode, reward_episode, info_episode)))
 
             assert len(state_episode) == len(observation_episode)
 
@@ -355,5 +349,5 @@ class OfflineAgent(Generic[OO, OS]):
 
 
 AAO = TypeVar("AAO")
-AAS = TypeVar("AAS", bound=Union[torch.Tensor, LazyFrames])
+AAS = TypeVar("AAS")
 AllAgent = Union[Agent[AAO, AAS], OfflineAgent[AAO, AAS]]

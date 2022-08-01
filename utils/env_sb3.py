@@ -1,6 +1,6 @@
 # following code is manually copied from stable-baseline3, as it depends on an older version of gym, but I don't want to solve this version conflict
 
-from utils.common import Info, Action, Reward, S, LazyFrames
+from utils.common import AllowedStates, Info, Action, Reward, S, LazyFrames
 import gym
 from torchvision import transforms as T
 import numpy as np
@@ -1047,7 +1047,7 @@ def flat_to_transitions(states: List[S],
 
         if has_next_state:
             # _info = infos[i]
-            sn: torch.Tensor = info[i]['next_state']
+            sn: torch.Tensor = infos[i]['next_state']
 
             transitions.append(Transition((NotNoneStep(s,a,r), Step(sn, None, None, dict(end=d.item() == 1)))))
             continue

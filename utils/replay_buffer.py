@@ -3,17 +3,12 @@ from typing import Deque, Generic, Optional, TypeVar, Tuple, List, cast, Union
 import numpy as np
 import torch
 
-from utils.transition import Transition
-from utils.common import LazyFrames, resolve_lazy_frames
-
-from utils.episode import Episode
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 SARSA = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
               torch.Tensor]
 
-E = TypeVar("E", bound=Union[Transition, Episode])
+E = TypeVar("E")
 
 
 class ReplayBuffer(Generic[E]):

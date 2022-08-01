@@ -7,10 +7,10 @@ import numpy as np
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-TTS = TypeVar('TTS', bound=AllowedStates)
+TTS = TypeVar('TTS')
 TransitionTuple = Tuple[NotNoneStep[TTS], Step[TTS]]
 
-TS = TypeVar("TS", bound=AllowedStates)
+TS = TypeVar("TS")
 
 
 class Transition(Generic[TS]):
@@ -24,8 +24,6 @@ class Transition(Generic[TS]):
             assert an is None
             assert rn is None
 
-        self.state_shape = s.shape
-        self.action_shape = a.shape
 
         self.s = s
         self.a = a
@@ -39,7 +37,6 @@ class Transition(Generic[TS]):
         self.step1 = step1
         self.step2 = step2
 
-        assert self.s.shape == self.sn.shape
         if isinstance(self.an, np.ndarray):
             assert self.a.shape == self.an.shape
 

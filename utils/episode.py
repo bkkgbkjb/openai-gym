@@ -7,10 +7,10 @@ from utils.common import AllowedStates, Action, Reward, Info
 import math
 from typing_extensions import Self
 
-ES = TypeVar("ES", bound=Union[Step, NotNoneStep])
+ES = TypeVar("ES")
 EpisodeGeneric = List[ES]
 
-EPS = TypeVar("EPS", bound=AllowedStates)
+EPS = TypeVar("EPS")
 
 
 class Episode(Generic[EPS]):
@@ -23,10 +23,6 @@ class Episode(Generic[EPS]):
 
     @property
     def steps(self) -> List[NotNoneStep[EPS]]:
-        (_, la, lr, _) = self._steps[-2].details
-        assert la is not None
-        assert lr is not None
-
         return [NotNoneStep.from_step(s) for s in self._steps[:-1]]
 
     def __getitem__(self, idx: int) -> NotNoneStep:
@@ -81,8 +77,8 @@ class Episode(Generic[EPS]):
 
         return inst
     
-    def add_info(self, add_info: Callable[[List[Step[EPS]]], Info]) -> Info:
-        to_add_info = add_info(self._steps)
+    def add_info(self, add_info: Callable[[List[NotNoneStep[EPS]]], Info]) -> Info:
+        to_add_info = add_info(self.steps)
 
         for k, v in to_add_info.items():
             assert k not in self.info or self.info[k] == v
@@ -98,14 +94,6 @@ class Episode(Generic[EPS]):
         steps = self.steps
         return [steps[i] for i in s_list]
     
-    def del_laststep(self) -> Self:
-        last_step = copy.deepcopy( self._steps[-1])
-        last_step.r = None
-        last_step.a = None
-        self._steps[-1] = last_step
-        return self
-
-
     def append_transition(self, transition: Transition[EPS]) -> Self:
         assert not self.end, "cannot append transition into a ended episode"
         (s1, s2) = transition.as_tuple()
@@ -165,7 +153,7 @@ class Episode(Generic[EPS]):
             e.append_step(s)
             if e.len == length:
                 e.add_info(lambda _: dict(end=i))
-                re.append(e.del_laststep())
+                re.append(e)
 
                 e = cls()
                 e.add_info(lambda _: dict(is_sub = True, start = i))
@@ -174,7 +162,7 @@ class Episode(Generic[EPS]):
             i += 1
 
         if allow_last_not_align is not None and e.len != 0 and e.len >= allow_last_not_align:
-            re.append(e.del_laststep())
+            re.append(e)
 
         return re
     
@@ -208,7 +196,7 @@ class Episode(Generic[EPS]):
 
             assert e.len == length
             e.add_info(lambda _: dict(end=i))
-            re.append(e.del_laststep())
+            re.append(e)
 
             e = cls()
             e.add_info(lambda _: dict(is_sub=True))
@@ -224,7 +212,7 @@ class Episode(Generic[EPS]):
                 e.append_step(s)
 
             e.add_info(lambda _: dict(end=i))
-            re.append(e.del_laststep())
+            re.append(e)
 
         return re
 

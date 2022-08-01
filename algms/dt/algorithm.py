@@ -8,7 +8,7 @@ from utils.transition import Transition, TransitionTuple, resolve_transitions
 from torch import nn
 from collections import deque
 import torch
-from utils.preprocess import PreprocessI
+from utils.preprocess import AllInfo, PreprocessI
 from utils.algorithm import Algorithm
 from torch.distributions import Categorical, Normal
 from typing import Union
@@ -24,27 +24,94 @@ from utils.replay_buffer import ReplayBuffer
 O = torch.Tensor
 Action = torch.Tensor
 
-S = O
+S = torch.Tensor
+RS = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 Reward = int
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class Preprocess(PreprocessI[O, S]):
-    def __init__(self, state_mean: torch.Tensor, state_std: torch.Tensor):
+class Preprocess(PreprocessI[O, RS]):
+    def __init__(
+        self,
+        state_mean: torch.Tensor,
+        state_std: torch.Tensor,
+        action_dim: int,
+        rtg: float,
+    ):
         self.state_mean = state_mean
         self.state_std = state_std
+        self.action_dim = action_dim
+        self.k = 20
+        self.rtg = rtg
 
-    def on_agent_reset(self):
-        pass
+    def get_current_state(self, all_info: AllInfo) -> RS:
+        (o, s, a, r, i) = all_info
+        assert len(o) == len(s) + 1
+        assert len(s) == len(a) == len(r) == len(i)
 
-    def get_current_state(self, h: List[O]) -> S:
-        assert len(h) > 0
+        s = self.pad(
+            (torch.stack(o) - self.state_mean) / self.state_std,
+            torch.stack(a + [torch.zeros(self.action_dim)]),
+            torch.tensor(self.rtg).float() - torch.as_tensor([0.0] + r).float(),
+        )
+        return s
 
+    def pad(
+        self, states: torch.Tensor, actions: torch.Tensor, rtgs: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        L = states.shape[0]
+
+        state_dim = states.shape[1]
+        action_dim = actions.shape[1]
+
+        pad_len = self.k - L
+        if pad_len <= 0:
+            masks = torch.ones(self.k).type(torch.int64)
+            timesteps = torch.arange(L - self.k, L).type(torch.int64)
+            return (
+                states[-self.k :].to(DEVICE),
+                actions[-self.k :].to(DEVICE),
+                masks.to(DEVICE),
+                timesteps.to(DEVICE),
+                rtgs[-self.k :].unsqueeze(1).to(DEVICE),
+            )
+
+        new_states = torch.cat(
+            [
+                torch.zeros(
+                    (
+                        pad_len,
+                        state_dim,
+                    )
+                ),
+                states,
+            ]
+        )
+        new_actions = torch.cat(
+            [
+                torch.zeros(
+                    (
+                        pad_len,
+                        action_dim,
+                    )
+                ),
+                actions,
+            ]
+        )
+
+        masks = torch.cat([torch.zeros(pad_len), torch.ones(L)]).type(torch.int64)
+        timesteps = torch.cat([torch.zeros(pad_len), torch.arange(0, L)]).type(
+            torch.int64
+        )
+        rtgs = torch.cat([torch.zeros(pad_len), rtgs])
         return (
-            (torch.from_numpy(h[-1]).type(torch.float32) - self.state_mean)
-            / self.state_std
-        ).to(DEVICE)
+            new_states.to(DEVICE),
+            new_actions.to(DEVICE),
+            masks.to(DEVICE),
+            timesteps.to(DEVICE),
+            rtgs.unsqueeze(1).to(DEVICE),
+        )
 
 
 class DT(Algorithm[S]):
@@ -52,14 +119,10 @@ class DT(Algorithm[S]):
         self,
         state_dim: int,
         action_dim: int,
-        rewards_to_go: float,
-        action_scale: ActionScale = 1.0,
     ):
         self.set_name("decision-transformer")
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.action_scale = action_scale
-        self.rewards_to_go = rewards_to_go / 1000
 
         self.batch_size = 64
 
@@ -89,23 +152,14 @@ class DT(Algorithm[S]):
 
     def reset(self):
         self.times = 0
-        self.rtgs = [self.rewards_to_go]
         self.episodes = None
         self.total_values: List[float] = []
         self.replay_buffer = ReplayBuffer[Episode[S]](None)
 
     @torch.no_grad()
-    def take_action(
-        self, mode: Mode, state: S, info: Info
-    ) -> Union[ActionInfo, Action]:
+    def take_action(self, mode: Mode, state: S) -> Union[ActionInfo, Action]:
 
-        states = torch.stack(info["states"] + [state]).to(DEVICE)
-        actions = torch.stack(
-            info["actions"] + [torch.zeros(self.action_dim).to(DEVICE)]
-        ).to(DEVICE)
-
-        assert states.shape[0] == actions.shape[0]
-        states, actions, masks, timesteps, rtgs = self.pad(states, actions)
+        states, actions, masks, timesteps, rtgs = state
 
         with torch.no_grad():
             _, actions, _ = self.dt.forward(
@@ -117,93 +171,26 @@ class DT(Algorithm[S]):
             )
         return actions[0, -1]
 
-    def pad(
-        self, states: torch.Tensor, actions: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        L = states.shape[0]
-        assert L == self.times + 1
-
-        rtgs = torch.tensor(self.rtgs).type(torch.float32).to(DEVICE)
-
-        pad_len = self.k - L
-        if pad_len <= 0:
-            masks = torch.ones(self.k).type(torch.float32).to(DEVICE)
-            timesteps = torch.arange(L - self.k, L).type(torch.int64).to(DEVICE)
-            return (
-                states[-self.k :],
-                actions[-self.k :],
-                masks,
-                timesteps,
-                rtgs[-self.k :].unsqueeze(1),
-            )
-
-        new_states = torch.cat(
-            [
-                torch.zeros(
-                    (
-                        1,
-                        self.state_dim,
-                    )
-                )
-                .to(DEVICE)
-                .repeat_interleave(pad_len, dim=0),
-                states,
-            ]
-        ).to(DEVICE)
-        new_actions = torch.cat(
-            [
-                torch.zeros(
-                    (
-                        1,
-                        self.action_dim,
-                    )
-                )
-                .to(DEVICE)
-                .repeat_interleave(pad_len, dim=0),
-                actions,
-            ]
-        ).to(DEVICE)
-
-        masks = (
-            torch.cat([torch.zeros(pad_len), torch.ones(L)])
-            .type(torch.float32)
-            .to(DEVICE)
-        )
-        timesteps = (
-            torch.cat([torch.zeros(pad_len), torch.arange(0, L)])
-            .type(torch.int64)
-            .to(DEVICE)
-        )
-        rtgs = torch.cat([torch.zeros(pad_len).to(DEVICE), rtgs]).to(DEVICE)
-        return (new_states, new_actions, masks, timesteps, rtgs.unsqueeze(1))
-
     def after_step(self, mode: Mode, transition: TransitionTuple[S]):
         (s1, _) = transition
         self.times += 1
-        self.rtgs.append(self.rtgs[-1] - s1.reward / 1000)
 
     def on_episode_termination(
         self, mode: Mode, sari: Tuple[List[S], List[Action], List[Reward], List[Info]]
     ):
         self.times = 0
-        self.rtgs = [self.rewards_to_go]
 
     def get_data(self, episodes: List[Episode]):
 
         for e in episodes:
-            # for se in Episode.cut(e, self.k, start = np.random.choice(self.k)):
-            #     se.add_info(lambda steps: dict(total_value=np.sum([s.reward if s.reward is not None else 0 for s in steps])))
             e.add_info(
                 lambda steps: dict(
-                    total_value=np.sum(
-                        [s.reward if s.reward is not None else 0 for s in steps]
-                    )
+                    total_value=np.sum([s.reward for s in steps])
                 )
             )
             e.compute_returns(1)
             self.total_values.append(e.get_info("total_value"))
             self.replay_buffer.append(e)
-        # self.total_values = self.total_values / np.sum(self.total_values)
         self.p_len = [episodes[i].len for i in np.argsort(self.total_values)]
         self.p = self.p_len / np.sum(self.p_len)
 
@@ -216,11 +203,6 @@ class DT(Algorithm[S]):
             self.episodes = episodes
 
         episodes = self.replay_buffer.sample(self.batch_size, self.p)
-        # sub_episodes: List[Episode[S]] = []
-        # for e in episodes:
-        #     all_se = Episode.cut(e, self.k, start=np.random.choice(self.k))
-        #     randint = np.random.choice(len(all_se))
-        #     sub_episodes.append(all_se[randint])
         sub_episodes = [
             random.choice(Episode.cut(e, self.k, start=np.random.choice(self.k)))
             for e in episodes

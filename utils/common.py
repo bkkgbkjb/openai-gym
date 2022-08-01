@@ -72,7 +72,7 @@ AllowedStates = Union[torch.Tensor, LazyFrames]
 EmptyStates = Union[Optional[torch.Tensor], Optional[LazyFrames]]
 AllAllowedStates = Union[AllowedStates, EmptyStates]
 
-S = TypeVar("S", bound=Union[torch.Tensor, LazyFrames])
+S = TypeVar("S")
 
 def resolve_lazy_frames(lazy_frames: LazyFrames) -> torch.Tensor:
 

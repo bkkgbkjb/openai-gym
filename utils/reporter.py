@@ -1,10 +1,15 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from os import path
 from torch.utils.tensorboard import SummaryWriter
 
-
-def get_reporter(name: str):
+def get_reporter(name: str, desc: Optional[str] = None):
     writer = SummaryWriter(comment='_' + name)
     times_counter: Dict[str, int] = dict()
+
+    if desc is not None:
+        assert writer.log_dir is not None
+        with open(path.join(writer.log_dir, 'desc.txt'), 'w') as f:
+            f.write(desc)
 
     def reporter(info: Dict[str, Any]):
         nonlocal times_counter
