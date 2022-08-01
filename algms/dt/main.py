@@ -26,7 +26,7 @@ episodes = flat_to_episode(
     dataset["actions"][:last_done],
     dataset["rewards"][:last_done].tolist(),
     np.logical_or(dataset["timeouts"][:last_done], dataset["terminals"][:last_done]),
-    [dict(next_state=ns) for ns in dataset["next_observations"][:last_done]],
+    [dict(next_state=(ns - state_mean) / state_std) for ns in dataset["next_observations"][:last_done]],
     True,
 )
 
@@ -34,7 +34,7 @@ episodes = flat_to_episode(
 # %%
 
 agent = OfflineAgent(
-    DT(env.observation_space.shape[0], env.action_space.shape[0]),
+    DT(env.observation_space.shape[0], env.action_space.shape[0], 5000),
     Preprocess(
         torch.from_numpy(state_mean).type(torch.float32),
         torch.from_numpy(state_std).type(torch.float32),

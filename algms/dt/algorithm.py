@@ -59,7 +59,7 @@ class DT(Algorithm[S]):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.action_scale = action_scale
-        self.rewards_to_go = rewards_to_go
+        self.rewards_to_go = rewards_to_go / 1000
 
         self.batch_size = 64
 
@@ -89,37 +89,104 @@ class DT(Algorithm[S]):
 
     def reset(self):
         self.times = 0
+        self.rtgs = [self.rewards_to_go]
         self.episodes = None
         self.total_values: List[float] = []
         self.replay_buffer = ReplayBuffer[Episode[S]](None)
 
     @torch.no_grad()
-    def take_action(self, mode: Mode, state: S, info: Info) -> Union[ActionInfo, Action]:
+    def take_action(
+        self, mode: Mode, state: S, info: Info
+    ) -> Union[ActionInfo, Action]:
 
-        states = torch.stack(info['states']).to(DEVICE)
-        actions = torch.stack(info['actions']).to(DEVICE)
+        states = torch.stack(info["states"] + [state]).to(DEVICE)
+        actions = torch.stack(
+            info["actions"] + [torch.zeros(self.action_dim).to(DEVICE)]
+        ).to(DEVICE)
 
         assert states.shape[0] == actions.shape[0]
-        L = states.shape[0]
+        states, actions, masks, timesteps, rtgs = self.pad(states, actions)
 
-        if L < self.k:
-            states, actions, masks = self.pad(states, actions)
+        with torch.no_grad():
+            _, actions, _ = self.dt.forward(
+                states.unsqueeze(0),
+                actions.unsqueeze(0),
+                rtgs.unsqueeze(0),
+                timesteps.unsqueeze(0),
+                masks.unsqueeze(0),
+            )
+        return actions[0, -1]
 
-        return torch.rand(self.action_dim).uniform_(-1, 1)
-    
-    def pad(self, states: torch.Tensor, acts: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def pad(
+        self, states: torch.Tensor, actions: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         L = states.shape[0]
-        assert L < self.k
+        assert L == self.times + 1
+
+        rtgs = torch.tensor(self.rtgs).type(torch.float32).to(DEVICE)
+
         pad_len = self.k - L
+        if pad_len <= 0:
+            masks = torch.ones(self.k).type(torch.float32).to(DEVICE)
+            timesteps = torch.arange(L - self.k, L).type(torch.int64).to(DEVICE)
+            return (
+                states[-self.k :],
+                actions[-self.k :],
+                masks,
+                timesteps,
+                rtgs[-self.k :].unsqueeze(1),
+            )
 
-        new_states = torch.cat([torch.zeros_like(states).repeat_interleave(pad_len, dim = 0), states])
-        new_actions = torch.cat([torch.zeros_like(acts).repeat_interleave(pad_len, dim = 0), acts])
+        new_states = torch.cat(
+            [
+                torch.zeros(
+                    (
+                        1,
+                        self.state_dim,
+                    )
+                )
+                .to(DEVICE)
+                .repeat_interleave(pad_len, dim=0),
+                states,
+            ]
+        ).to(DEVICE)
+        new_actions = torch.cat(
+            [
+                torch.zeros(
+                    (
+                        1,
+                        self.action_dim,
+                    )
+                )
+                .to(DEVICE)
+                .repeat_interleave(pad_len, dim=0),
+                actions,
+            ]
+        ).to(DEVICE)
 
-        masks = torch.cat([torch.zeros(pad_len), torch.ones(L)] )
-        return (new_states, new_actions, masks)
+        masks = (
+            torch.cat([torch.zeros(pad_len), torch.ones(L)])
+            .type(torch.float32)
+            .to(DEVICE)
+        )
+        timesteps = (
+            torch.cat([torch.zeros(pad_len), torch.arange(0, L)])
+            .type(torch.int64)
+            .to(DEVICE)
+        )
+        rtgs = torch.cat([torch.zeros(pad_len).to(DEVICE), rtgs]).to(DEVICE)
+        return (new_states, new_actions, masks, timesteps, rtgs.unsqueeze(1))
 
     def after_step(self, mode: Mode, transition: TransitionTuple[S]):
+        (s1, _) = transition
         self.times += 1
+        self.rtgs.append(self.rtgs[-1] - s1.reward / 1000)
+
+    def on_episode_termination(
+        self, mode: Mode, sari: Tuple[List[S], List[Action], List[Reward], List[Info]]
+    ):
+        self.times = 0
+        self.rtgs = [self.rewards_to_go]
 
     def get_data(self, episodes: List[Episode]):
 
@@ -163,18 +230,22 @@ class DT(Algorithm[S]):
             [torch.stack([s.state for s in se.steps]).to(DEVICE) for se in sub_episodes]
         ).to(DEVICE)
         actions = torch.stack(
-            [torch.stack([s.action for s in se.steps]).to(DEVICE) for se in sub_episodes]
+            [
+                torch.stack([s.action for s in se.steps]).to(DEVICE)
+                for se in sub_episodes
+            ]
         ).to(DEVICE)
 
-        # actions = torch.stack([s.action for se in sub_episodes for s in se.steps]).to(
-        #     DEVICE
-        # )
-        rtg = torch.stack(
-            [torch.tensor([s.info["return"] for s in se.steps]).to(DEVICE) for se in sub_episodes]
-        ).to(DEVICE).unsqueeze(2)
-        # rtg = torch.tensor(
-        #     [s.info["return"] for se in sub_episodes for s in se.steps]
-        # ).to(DEVICE)
+        rtg = (
+            torch.stack(
+                [
+                    torch.tensor([s.info["return"] for s in se.steps]).to(DEVICE)
+                    for se in sub_episodes
+                ]
+            )
+            .to(DEVICE)
+            .unsqueeze(2)
+        ) / 1000
 
         timesteps = torch.stack(
             [

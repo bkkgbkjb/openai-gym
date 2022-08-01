@@ -135,7 +135,7 @@ class Agent(Generic[AO, AS]):
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env, mode, dict(obs=observation_episode,states=state_episode,actions=action_episode,rewards=reward_episode,infos=info_episode))
+            actinfo = self.get_action(state_episode[-1], env, mode, dict(obs=observation_episode,states=state_episode[:-1],actions=action_episode,rewards=reward_episode,infos=info_episode))
 
             act, info = actinfo
             (obs, rwd, stop,
@@ -299,7 +299,7 @@ class OfflineAgent(Generic[OO, OS]):
 
         while not stop:
 
-            actinfo = self.get_action(state_episode[-1], env, 'eval', dict(obs=observation_episode, states=state_episode, actions=action_episode, rewards=reward_episode, infos=info_episode))
+            actinfo = self.get_action(state_episode[-1], env, 'eval', dict(obs=observation_episode, states=state_episode[:-1], actions=action_episode, rewards=reward_episode, infos=info_episode))
 
             act, info = actinfo
             (obs, rwd, stop,
