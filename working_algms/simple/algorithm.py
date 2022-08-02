@@ -20,6 +20,7 @@ from typing import List, Tuple, Any, Optional, Callable, Dict, cast
 import numpy as np
 
 from utils.replay_buffer import ReplayBuffer
+from args import args
 
 O = torch.Tensor
 Action = torch.Tensor
@@ -195,7 +196,7 @@ class Simple(Algorithm[S]):
         self.batch_size = 128
         self.latent_dim = 32
 
-        self.k = 40
+        self.k = args.k
         self.ae = AE(self.state_dim, self.action_dim, self.k, self.latent_dim).to(
             DEVICE
         )
@@ -207,9 +208,7 @@ class Simple(Algorithm[S]):
 
         self.z_star = torch.rand(self.latent_dim).uniform_(-1, 1).to(DEVICE)
         self.z_star.requires_grad = True
-        self.z_star_optimizer = torch.optim.Adam(
-            [self.z_star], lr=1e-4, weight_decay=1e-4
-        )
+        self.z_star_optimizer = torch.optim.Adam([self.z_star], lr=3e-4)
 
         self.z_star_loss = torch.nn.CrossEntropyLoss()
 
@@ -318,12 +317,23 @@ class Simple(Algorithm[S]):
         )
         assert dist1.shape == dist2.shape == (self.batch_size,)
 
+        c_dist = torch.cat([dist1.unsqueeze(1), dist2.unsqueeze(1)], dim=1)
+
+        max_dist = torch.max(c_dist, dim = 1).values
+        min_dist = torch.min(c_dist, dim = 1).values
+        diff = (max_dist - min_dist) / min_dist
+        far_idx = torch.argwhere(diff > 1/3).squeeze(1)
+        assert len(far_idx.shape) == 1
+        c_dist = c_dist[far_idx]
+        self.report(dict(ae_far_num = len(far_idx)))
+
         z_star_loss = self.z_star_loss(
-            torch.cat([dist1.unsqueeze(1), dist2.unsqueeze(1)], dim=1),
-            one_lt_two_target,
+            # torch.cat([dist1.unsqueeze(1), dist2.unsqueeze(1)], dim=1),
+            c_dist,
+            one_lt_two_target[far_idx],
         )
 
-        loss = z_star_loss + recon_loss
+        loss = recon_loss + args.z_loss_ratio * z_star_loss
 
         self.ae_optimizer.zero_grad()
         loss.backward()
@@ -341,9 +351,20 @@ class Simple(Algorithm[S]):
         )
         assert dist1_new.shape == dist2_new.shape == (self.batch_size,)
 
+        c_dist_new = torch.cat([dist1_new.unsqueeze(1), dist2_new.unsqueeze(1)], dim=1)
+
+        max_dist_new = torch.max(c_dist_new, dim = 1).values
+        min_dist_new = torch.min(c_dist_new, dim = 1).values
+        diff_new = (max_dist_new - min_dist_new) / min_dist_new
+        far_idx_new = torch.argwhere(diff_new > 1/3).squeeze(1)
+        assert len(far_idx_new.shape) == 1
+        c_dist_new = c_dist_new[far_idx_new]
+        self.report(dict(z_star_far_num = len(far_idx_new)))
+
         z_star_loss_new = self.z_star_loss(
-            torch.cat([dist1_new.unsqueeze(1), dist2_new.unsqueeze(1)], dim=1),
-            one_lt_two_target,
+            # torch.cat([dist1_new.unsqueeze(1), dist2_new.unsqueeze(1)], dim=1),
+            c_dist_new,
+            one_lt_two_target[far_idx_new],
         )
 
         self.z_star_optimizer.zero_grad()
