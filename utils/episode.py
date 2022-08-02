@@ -23,6 +23,11 @@ class Episode(Generic[EPS]):
 
     @property
     def steps(self) -> List[NotNoneStep[EPS]]:
+        if len(self._steps) >= 2:
+            (_, la, lr, _) = self._steps[-2].details
+            assert la is not None
+            assert lr is not None
+
         return [NotNoneStep.from_step(s) for s in self._steps[:-1]]
 
     def __getitem__(self, idx: int) -> NotNoneStep:
